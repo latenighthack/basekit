@@ -1,0 +1,37 @@
+[versions]
+kotlin = "2.1.21"
+agp = "8.7.3"
+coroutines = "1.9.0"
+skie = "0.10.9"
+# KSP release aligned to Kotlin 2.1.21. The processor uses the stable KSP API, so it
+# works under both the KSP1 and KSP2 backends.
+ksp = "2.1.21-2.0.1"
+maven-publish = "0.30.0"
+# kotlin-inject is declared now but wired in a later slice (DI integration).
+kotlin-inject = "0.7.1"
+
+[libraries]
+kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+
+# KSP processor authoring
+ksp-api = { module = "com.google.devtools.ksp:symbol-processing-api", version.ref = "ksp" }
+
+# kotlin-inject (declared for a future DI slice; not yet consumed)
+kotlin-inject-runtime = { module = "me.tatarka.inject:kotlin-inject-runtime", version.ref = "kotlin-inject" }
+kotlin-inject-ksp = { module = "me.tatarka.inject:kotlin-inject-compiler-ksp", version.ref = "kotlin-inject" }
+
+# Gradle plugin artifacts referenced from build-logic so the convention plugins can apply them by id.
+plugin-kotlin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+plugin-android = { module = "com.android.tools.build:gradle", version.ref = "agp" }
+plugin-ksp = { module = "com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin", version.ref = "ksp" }
+plugin-mavenPublish = { module = "com.vanniktech:gradle-maven-publish-plugin", version.ref = "maven-publish" }
+
+[plugins]
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+skie = { id = "co.touchlab.skie", version.ref = "skie" }
+maven-publish = { id = "com.vanniktech.maven.publish", version.ref = "maven-publish" }
