@@ -2,13 +2,15 @@ package com.latenighthack.basekit.demo
 
 import com.latenighthack.basekit.viewmodel.StatefulViewModel
 import com.latenighthack.basekit.viewmodel.ViewModel
+import com.latenighthack.basekit.viewmodel.annotations.ViewModel as ViewModelAnnotation
 import com.latenighthack.basekit.viewmodel.annotations.ViewModelList
+import com.latenighthack.basekit.viewmodel.tui.annotations.TuiScreen
 import com.latenighthack.deltalist.Delta
 import com.latenighthack.deltalist.mutableDeltaListOf
 import kotlinx.coroutines.flow.Flow
 
 /** A child ViewModel used as a row in [FeedViewModel]'s list. */
-@com.latenighthack.basekit.viewmodel.annotations.ViewModel
+@ViewModelAnnotation
 interface FeedItemViewModel : ViewModel<FeedItemViewModel.State> {
     data class State(val title: String, val subtitle: String, val id: String)
 
@@ -19,8 +21,8 @@ interface FeedItemViewModel : ViewModel<FeedItemViewModel.State> {
  * A list-bearing ViewModel: [items] is a deltalist stream of child ViewModels. Exercises the list
  * binding path (RecyclerView / UICollectionView / React list) of the generated wrappers.
  */
-@com.latenighthack.basekit.viewmodel.annotations.ViewModel
-@com.latenighthack.basekit.viewmodel.tui.annotations.TuiScreen(HomeScreen::class)
+@ViewModelAnnotation
+@TuiScreen(HomeScreen::class)
 interface FeedViewModel : ViewModel<FeedViewModel.State> {
     data class State(val title: String)
 
