@@ -42,6 +42,7 @@ kotlin {
                 api(project(":basekit-viewmodel"))
                 implementation(project(":basekit-annotations"))
                 implementation(project(":basekit-viewmodel-annotations"))
+                implementation(project(":basekit-tui-annotations"))
             }
         }
     }

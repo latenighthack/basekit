@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 /** A child ViewModel used as a row in [FeedViewModel]'s list. */
 @com.latenighthack.basekit.viewmodel.annotations.ViewModel
 interface FeedItemViewModel : ViewModel<FeedItemViewModel.State> {
-    data class State(val title: String, val subtitle: String)
+    data class State(val title: String, val subtitle: String, val id: String)
 
     suspend fun onSelected()
 }
@@ -20,9 +20,11 @@ interface FeedItemViewModel : ViewModel<FeedItemViewModel.State> {
  * binding path (RecyclerView / UICollectionView / React list) of the generated wrappers.
  */
 @com.latenighthack.basekit.viewmodel.annotations.ViewModel
+@com.latenighthack.basekit.viewmodel.tui.annotations.TuiScreen(HomeScreen::class)
 interface FeedViewModel : ViewModel<FeedViewModel.State> {
     data class State(val title: String)
 
+    // Selecting a row navigates to DetailScreen; inferred since HomeScreen has a single outbound edge.
     @ViewModelList(FeedItemViewModel::class)
     val items: Flow<Delta<FeedItemViewModel>>
 
@@ -31,7 +33,7 @@ interface FeedViewModel : ViewModel<FeedViewModel.State> {
 
 class RealFeedItemViewModel(title: String, subtitle: String) :
     FeedItemViewModel,
-    StatefulViewModel<FeedItemViewModel.State>(FeedItemViewModel.State(title, subtitle)) {
+    StatefulViewModel<FeedItemViewModel.State>(FeedItemViewModel.State(title, subtitle, id = title)) {
 
     override suspend fun onSelected() = withState { /* no-op selection in the demo */ }
 }

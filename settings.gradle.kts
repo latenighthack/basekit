@@ -14,6 +14,11 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // TamboUI (the `tui` slice's terminal-UI toolkit) is snapshot-only for now.
+        maven {
+            url = uri("https://central.sonatype.com/repository/maven-snapshots/")
+            mavenContent { snapshotsOnly() }
+        }
         // SKIE + KMP toolchains pull the JS/Node distribution from nodejs.org.
         exclusiveContent {
             forRepository {
@@ -47,4 +52,10 @@ include(":basekit-viewmodel-annotations") // viewmodel annotations (KMP)
 include(":basekit-viewmodel")             // viewmodel runtime + platform bindings (KMP, SKIE)
 include(":basekit-viewmodel-ksp")         // KSP processor + platform generators (JVM)
 
+// TUI slice — the third codegen slice: generates a TamboUI terminal UI from the ViewModels.
+include(":basekit-tui-annotations") // @TuiScreen / @TuiNavigatesTo link annotations (KMP)
+include(":basekit-tui")             // TUI runtime: TuiApp, runner, screen/nav abstractions (JVM)
+include(":basekit-tui-ksp")         // KSP processor generating TamboUI screens + component (JVM)
+
 include(":demo-core")           // sample consumer proving the codegen end-to-end
+include(":demo-jvm")            // runnable JVM app proving the TUI slice end-to-end

@@ -7,8 +7,10 @@ skie = "0.10.9"
 # works under both the KSP1 and KSP2 backends.
 ksp = "2.1.21-2.0.1"
 maven-publish = "0.30.0"
-# kotlin-inject is declared now but wired in a later slice (DI integration).
+# kotlin-inject wires the generated TUI component (the `tui` slice).
 kotlin-inject = "0.7.1"
+# TamboUI: the JVM terminal-UI toolkit the `tui` slice renders with. Snapshot-only for now.
+tamboui = "0.5.0-SNAPSHOT"
 # deltalist supplies the list system (Flow<Delta<T>>) and its platform bindings. Resolved from the
 # ../../deltalist composite build, so the version is nominal (Gradle substitutes by group:module).
 deltalist = "0.1.0"
@@ -28,6 +30,10 @@ ksp-api = { module = "com.google.devtools.ksp:symbol-processing-api", version.re
 # kotlin-inject (declared for a future DI slice; not yet consumed)
 kotlin-inject-runtime = { module = "me.tatarka.inject:kotlin-inject-runtime", version.ref = "kotlin-inject" }
 kotlin-inject-ksp = { module = "me.tatarka.inject:kotlin-inject-compiler-ksp", version.ref = "kotlin-inject" }
+
+# TamboUI terminal-UI toolkit + a runtime backend (the `tui` slice renders JVM screens with these)
+tamboui-toolkit = { module = "dev.tamboui:tamboui-toolkit", version.ref = "tamboui" }
+tamboui-jline3-backend = { module = "dev.tamboui:tamboui-jline3-backend", version.ref = "tamboui" }
 
 # deltalist list system (consumed from the ../../deltalist composite build)
 deltalist-core = { module = "com.latenighthack.deltalist:deltalist-core", version.ref = "deltalist" }

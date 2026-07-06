@@ -8,6 +8,7 @@ import com.latenighthack.basekit.viewmodel.ViewModel
  * state-binding path of every generated platform wrapper.
  */
 @com.latenighthack.basekit.viewmodel.annotations.ViewModel
+@com.latenighthack.basekit.viewmodel.tui.annotations.TuiScreen(DetailScreen::class)
 interface CounterViewModel : ViewModel<CounterViewModel.State> {
     data class State(val count: Int, val label: String)
 
