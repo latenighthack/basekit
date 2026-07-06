@@ -9,10 +9,17 @@ ksp = "2.1.21-2.0.1"
 maven-publish = "0.30.0"
 # kotlin-inject is declared now but wired in a later slice (DI integration).
 kotlin-inject = "0.7.1"
+# deltalist supplies the list system (Flow<Delta<T>>) and its platform bindings. Resolved from the
+# ../../deltalist composite build, so the version is nominal (Gradle substitutes by group:module).
+deltalist = "0.1.0"
+androidx-recyclerview = "1.3.2"
+androidx-activity = "1.9.3"
+androidx-lifecycle = "2.8.7"
 
 [libraries]
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 
 # KSP processor authoring
@@ -21,6 +28,16 @@ ksp-api = { module = "com.google.devtools.ksp:symbol-processing-api", version.re
 # kotlin-inject (declared for a future DI slice; not yet consumed)
 kotlin-inject-runtime = { module = "me.tatarka.inject:kotlin-inject-runtime", version.ref = "kotlin-inject" }
 kotlin-inject-ksp = { module = "me.tatarka.inject:kotlin-inject-compiler-ksp", version.ref = "kotlin-inject" }
+
+# deltalist list system (consumed from the ../../deltalist composite build)
+deltalist-core = { module = "com.latenighthack.deltalist:deltalist-core", version.ref = "deltalist" }
+deltalist-android-recyclerview = { module = "com.latenighthack.deltalist:deltalist-android-recyclerview", version.ref = "deltalist" }
+deltalist-react = { module = "com.latenighthack.deltalist:deltalist-react", version.ref = "deltalist" }
+
+# androidx (viewmodel runtime RecyclerView binding)
+androidx-recyclerview = { module = "androidx.recyclerview:recyclerview", version.ref = "androidx-recyclerview" }
+androidx-activity = { module = "androidx.activity:activity", version.ref = "androidx-activity" }
+androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidx-lifecycle" }
 
 # Gradle plugin artifacts referenced from build-logic so the convention plugins can apply them by id.
 plugin-kotlin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }

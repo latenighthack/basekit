@@ -5,6 +5,7 @@ import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 plugins {
     id("basekit.kmp-library")
     id("basekit.navigation")
+    id("basekit.viewmodel")
     alias(libs.plugins.ksp)
     alias(libs.plugins.skie)
 }
@@ -27,6 +28,10 @@ kotlin {
             isStatic = true
             xcf.add(this)
             export(project(":basekit-navigation"))
+            export(project(":basekit-viewmodel"))
+            // Re-export deltalist so Swift sees Delta and the collection-view data sources the
+            // generated Kvo wrappers use.
+            export(libs.deltalist.core)
         }
     }
 
@@ -34,7 +39,9 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 api(project(":basekit-navigation"))
+                api(project(":basekit-viewmodel"))
                 implementation(project(":basekit-annotations"))
+                implementation(project(":basekit-viewmodel-annotations"))
             }
         }
     }
