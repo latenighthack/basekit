@@ -6,8 +6,8 @@ import com.google.devtools.ksp.processing.Dependencies
 /**
  * Emits one `<Vm>Screen` per bound ViewModel: a [com.latenighthack.basekit.viewmodel.tui.TuiScreen]
  * that renders the state as a table, a `@ViewModelList` as a selectable list, and zero-arg actions as
- * key-bound buttons. Screens whose destination has outbound `@NavigateTo` edges also implement the
- * generated `…Navigator` interface (`close` -> pop, `navigateTo…` -> push the target's screen).
+ * key-bound buttons. The screen never navigates itself — Enter on a row invokes the selected element's
+ * selection action, and any navigation happens through the navigator injected into that ViewModel.
  */
 class TuiScreenGenerator(
     private val codeGenerator: CodeGenerator,
@@ -38,17 +38,11 @@ class TuiScreenGenerator(
         appendLine("import kotlinx.coroutines.launch")
         appendLine()
 
-        val supertypes = buildList {
-            add("TuiScreen")
-            screen.navigatorInterface?.let(::add)
-        }.joinToString(", ")
-
         appendLine("/** Generated TamboUI screen for [${screen.vmQualifiedName}]. */")
         appendLine("public class ${screen.screenClassName}(")
         appendLine("    private val viewModel: ${screen.vmQualifiedName},")
         appendLine("    private val nav: TuiNavigation,")
-        appendLine("    private val component: GeneratedTuiComponent,")
-        appendLine(") : $supertypes {")
+        appendLine(") : TuiScreen {")
         appendLine()
         appendLine("    private val stateHolder = StateHolder(nav.scope, viewModel.initialState, viewModel.state)")
         if (screen.list != null) {
@@ -61,14 +55,6 @@ class TuiScreenGenerator(
         appendLine(renderMethod(screen))
         appendLine()
         appendLine(onKeyMethod(screen))
-        if (screen.rowNav != null) {
-            appendLine()
-            appendLine(navigateSelectedMethod(screen.rowNav))
-        }
-        if (screen.navigatorInterface != null) {
-            appendLine()
-            appendLine(navigatorOverrides(screen))
-        }
         appendLine("}")
     }
 
@@ -76,7 +62,7 @@ class TuiScreenGenerator(
         val statePairs = screen.stateProps.joinToString(", ") { "\"${it.name}\" to state.${it.name}.toString()" }
         val hints = buildList {
             screen.actions.forEach { add("\"[${it.key}] ${it.name}\"") }
-            if (screen.rowNav != null) add("\"[Enter] Open\"")
+            if (screen.list?.selectionAction != null) add("\"[Enter] ${screen.list.selectionAction}\"")
         }.joinToString(", ")
 
         appendLine("    override fun render(): Element {")
@@ -106,47 +92,13 @@ class TuiScreenGenerator(
             appendLine("        if (event.isUp()) { if (selectedIndex > 0) selectedIndex--; return EventResult.HANDLED }")
             appendLine("        if (event.isDown()) { if (selectedIndex < listHolder.items.size - 1) selectedIndex++; return EventResult.HANDLED }")
         }
-        if (screen.rowNav != null) {
-            appendLine("        if (event.isKey(KeyCode.ENTER)) { navigateSelected(); return EventResult.HANDLED }")
+        if (screen.list?.selectionAction != null) {
+            appendLine("        if (event.isKey(KeyCode.ENTER)) { listHolder.items.getOrNull(selectedIndex)?.let { item -> nav.scope.launch { item.${screen.list.selectionAction}() } }; return EventResult.HANDLED }")
         }
         for (action in screen.actions) {
             appendLine("        if (event.isChar('${action.key}')) { nav.scope.launch { viewModel.${action.name}() }; return EventResult.HANDLED }")
         }
         appendLine("        return EventResult.UNHANDLED")
         append("    }")
-    }
-
-    private fun navigateSelectedMethod(rowNav: RowNav): String = buildString {
-        appendLine("    private fun navigateSelected() {")
-        appendLine("        val item = listHolder.items.getOrNull(selectedIndex) ?: return")
-        val callArgs = buildList {
-            if (rowNav.argsType != null) {
-                val assigns = rowNav.argAssignments.joinToString("; ") { "${it.first} = ${it.second}" }
-                add("${rowNav.argsType}().apply { $assigns }")
-            }
-            rowNav.sourceConstant?.let(::add)
-            add("null")
-        }.joinToString(", ")
-        appendLine("        ${rowNav.methodName}($callArgs)")
-        append("    }")
-    }
-
-    private fun navigatorOverrides(screen: ScreenInfo): String = buildString {
-        appendLine("    override fun close(context: Any?) {")
-        appendLine("        nav.pop()")
-        appendLine("    }")
-        for (method in screen.navMethods) {
-            appendLine()
-            val params = buildList {
-                method.argsType?.let { add("args: $it") }
-                method.sourceType?.let { add("source: $it") }
-                add("context: Any?")
-            }.joinToString(", ")
-            val argExpr = if (method.argsType != null) "args" else "null"
-            appendLine("    override fun ${method.methodName}($params) {")
-            appendLine("        nav.push(component.screenForDestination(${method.targetDestQualifiedName}::class, $argExpr, nav))")
-            append("    }")
-            appendLine()
-        }
     }
 }

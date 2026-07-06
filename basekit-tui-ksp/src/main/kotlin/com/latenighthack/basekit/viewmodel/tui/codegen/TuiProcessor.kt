@@ -20,7 +20,6 @@ private const val VIEWMODEL_ANNOTATION = "com.latenighthack.basekit.viewmodel.an
 private const val VIEWMODEL_LIST_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelList"
 private const val VIEWMODEL_INTERFACE = "com.latenighthack.basekit.viewmodel.ViewModel"
 private const val TUISCREEN_ANNOTATION = "com.latenighthack.basekit.viewmodel.tui.annotations.TuiScreen"
-private const val TUINAVIGATESTO_ANNOTATION = "com.latenighthack.basekit.viewmodel.tui.annotations.TuiNavigatesTo"
 private const val DESTINATION_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.Destination"
 private const val ROUTE_ARG_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.RouteArg"
 private const val NAVIGATE_TO_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.NavigateTo"
@@ -105,6 +104,7 @@ class TuiProcessor(
             generated = true
             val dependencies = Dependencies(aggregating = true)
             TuiScreenGenerator(codeGenerator, dependencies, rootPackage).generate(screens)
+            TuiNavigatorGenerator(codeGenerator, dependencies, rootPackage).generate(screens)
             TuiComponentGenerator(codeGenerator, dependencies, rootPackage).generate(screens)
         }
         return emptyList()
@@ -193,8 +193,6 @@ class TuiProcessor(
             )
         }
 
-        val rowNav = if (list != null) buildRowNav(vm, dest, list, destinations, hasSource, navPackage) else null
-
         return ScreenInfo(
             vmSimpleName = vmName,
             vmQualifiedName = vmQn,
@@ -211,7 +209,6 @@ class TuiProcessor(
             destQualifiedName = dest.qualifiedName,
             navigatorInterface = navigatorInterface,
             navMethods = navMethods,
-            rowNav = rowNav,
         )
     }
 
@@ -234,48 +231,21 @@ class TuiProcessor(
         val elementState = elementDecl.getAllSuperTypes()
             .firstOrNull { it.declaration.qualifiedName?.asString() == VIEWMODEL_INTERFACE }
             ?.arguments?.firstOrNull()?.type?.resolve()?.declaration as? KSClassDeclaration
+
+        // Enter on a row invokes the element's zero-arg suspend action (prefer one named `onSelected`).
+        // Whatever it does — including navigating via the element's injected navigator — is the
+        // element's concern, not the screen's.
+        val zeroArgActions = elementDecl.getDeclaredFunctions()
+            .filter { it.modifiers.contains(Modifier.SUSPEND) && it.parameters.isEmpty() && !it.simpleName.asString().startsWith("<") }
+            .map { it.simpleName.asString() }
+            .toList()
+        val selectionAction = zeroArgActions.firstOrNull { it == "onSelected" } ?: zeroArgActions.firstOrNull()
+
         return ListInfo(
             propertyName = prop.simpleName.asString(),
             elementQualifiedName = elementDecl.qualifiedName!!.asString(),
             elementStateProps = elementState?.stateProps().orEmpty(),
-        )
-    }
-
-    private fun buildRowNav(
-        vm: KSClassDeclaration,
-        dest: DestNode,
-        list: ListInfo,
-        destinations: Map<String, DestNode>,
-        hasSource: (String) -> Boolean,
-        navPackage: String,
-    ): RowNav? {
-        val listProp = vm.getDeclaredProperties().firstOrNull { it.hasAnnotation(VIEWMODEL_LIST_ANNOTATION) }
-        val explicitTarget = listProp?.classArgument(TUINAVIGATESTO_ANNOTATION, "destination")
-            ?.declaration?.qualifiedName?.asString()
-        val outbound = dest.edges.map { it.targetQualifiedName }.distinct()
-        val targetQn = explicitTarget ?: outbound.singleOrNull() ?: return null
-        val target = destinations[targetQn] ?: return null
-        val cap = target.navName.toUpperCamelCase()
-
-        val sourceConstant = if (hasSource(targetQn)) {
-            val explicitSource = listProp?.stringArgument(TUINAVIGATESTO_ANNOTATION, "source")?.takeIf { it.isNotEmpty() }
-            val constant = explicitSource ?: dest.edges.firstOrNull { it.targetQualifiedName == targetQn }
-                ?.let { "${dest.navName.uppercase()}_${it.methodName.toUpperSnakeCase()}" }
-            constant?.let { "$navPackage.${cap}NavigationTarget.${cap}Source.$it" }
-        } else {
-            null
-        }
-
-        val elementStateNames = list.elementStateProps.map { it.name }.toSet()
-        val argAssignments = target.routeArgs.map { arg ->
-            if (arg in elementStateNames) arg to "item.initialState.$arg" else arg to "\"\""
-        }
-
-        return RowNav(
-            methodName = "navigateTo$cap",
-            argsType = target.argsQualifiedName,
-            sourceConstant = sourceConstant,
-            argAssignments = argAssignments,
+            selectionAction = selectionAction,
         )
     }
 

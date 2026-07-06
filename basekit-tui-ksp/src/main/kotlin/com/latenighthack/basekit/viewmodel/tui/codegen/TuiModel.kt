@@ -6,28 +6,28 @@ data class StateProp(val name: String, val typeSimpleName: String)
 /** A zero-arg suspend action, with the key that triggers it in the TUI. */
 data class Action(val name: String, val key: Char)
 
-/** A `@ViewModelList` property: a `Flow<Delta<ElementVm>>` of child ViewModels rendered as a list. */
+/**
+ * A `@ViewModelList` property: a `Flow<Delta<ElementVm>>` of child ViewModels rendered as a list.
+ * [selectionAction] is the zero-arg suspend method invoked on the selected element when Enter is
+ * pressed (null when the element has no such action). The element decides what that does — navigation,
+ * if any, happens by the element calling its injected navigator, never here.
+ */
 data class ListInfo(
     val propertyName: String,
     val elementQualifiedName: String,
     val elementStateProps: List<StateProp>,
+    val selectionAction: String?,
 )
 
-/** A `navigateTo…` method the screen must override (one per distinct outbound destination). */
+/**
+ * A `navigateTo…` method the generated `…Navigator` implementation must provide (one per distinct
+ * outbound destination). The implementation delegates to the screen's [TuiNavigation] to push.
+ */
 data class NavMethod(
     val methodName: String,
     val targetDestQualifiedName: String,
     val argsType: String?,
     val sourceType: String?,
-)
-
-/** Concrete navigation performed when Enter activates a list row. */
-data class RowNav(
-    val methodName: String,
-    val argsType: String?,
-    val sourceConstant: String?,
-    /** (routeArgName, "item.initialState.<prop>") assignments; empty when the Args has no route args. */
-    val argAssignments: List<Pair<String, String>>,
 )
 
 /** Everything the generators need about one `@ViewModel` bound via `@TuiScreen`. */
@@ -42,7 +42,9 @@ data class ScreenInfo(
     val destQualifiedName: String,
     val navigatorInterface: String?,
     val navMethods: List<NavMethod>,
-    val rowNav: RowNav?,
 ) {
     val screenClassName: String get() = "${vmSimpleName}Screen"
+
+    /** The generated `…Navigator` implementation class injected into the ViewModel (null when the screen has no outbound edges). */
+    val navigatorClassName: String? get() = navigatorInterface?.let { "${vmSimpleName}TuiNavigator" }
 }

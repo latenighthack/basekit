@@ -26,28 +26,41 @@ interface FeedItemViewModel : ViewModel<FeedItemViewModel.State> {
 interface FeedViewModel : ViewModel<FeedViewModel.State> {
     data class State(val title: String)
 
-    // Selecting a row navigates to DetailScreen; inferred since HomeScreen has a single outbound edge.
     @ViewModelList(FeedItemViewModel::class)
     val items: Flow<Delta<FeedItemViewModel>>
 
     suspend fun onRefresh()
 }
 
-class RealFeedItemViewModel(title: String, subtitle: String) :
+// Each row is injected with the navigator for everywhere HomeScreen can go. Selecting it makes an
+// explicit navigateTo call — the TUI's generated navigator turns that into a screen push.
+class RealFeedItemViewModel(
+    title: String,
+    subtitle: String,
+    private val navigator: HomeNavigator,
+) :
     FeedItemViewModel,
     StatefulViewModel<FeedItemViewModel.State>(FeedItemViewModel.State(title, subtitle, id = title)) {
 
-    override suspend fun onSelected() = withState { /* no-op selection in the demo */ }
+    override suspend fun onSelected() = withState { state ->
+        navigator.navigateToDetail(
+            DetailScreen.Args().apply { id = state.id },
+            DetailNavigationTarget.DetailSource.HOME_ON_OPEN_DETAIL,
+        )
+    }
 }
 
-class RealFeedViewModel :
+// The screen ViewModel receives the navigator and hands it to each row it creates.
+class RealFeedViewModel(
+    private val navigator: HomeNavigator,
+) :
     FeedViewModel,
     StatefulViewModel<FeedViewModel.State>(FeedViewModel.State(title = "Feed")) {
 
     private val itemsList = mutableDeltaListOf<FeedItemViewModel>(
         listOf(
-            RealFeedItemViewModel("First", "one"),
-            RealFeedItemViewModel("Second", "two"),
+            RealFeedItemViewModel("First", "one", navigator),
+            RealFeedItemViewModel("Second", "two", navigator),
         )
     )
 
@@ -57,6 +70,6 @@ class RealFeedViewModel :
 
     override suspend fun onRefresh() {
         appended += 1
-        itemsList.append(RealFeedItemViewModel("Item $appended", "appended"))
+        itemsList.append(RealFeedItemViewModel("Item $appended", "appended", navigator))
     }
 }
