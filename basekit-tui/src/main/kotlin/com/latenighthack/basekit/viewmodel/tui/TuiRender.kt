@@ -12,7 +12,13 @@ public object TuiRender {
 
     /** Renders a `State` data class as a bordered two-column `Field | Value` table. */
     public fun stateTable(title: String, rows: List<Pair<String, String>>): Element {
-        val table = Toolkit.table().header("Field", "Value")
+        val keyWidth = (rows.maxOfOrNull { it.first.length } ?: 5).coerceAtLeast(5)
+        // TamboUI tables render empty without explicit column widths, so a fixed key column + a
+        // filling value column is required for anything to appear.
+        val table = Toolkit.table()
+            .header("Field", "Value")
+            .widths(Toolkit.length(keyWidth + 1), Toolkit.fill())
+            .columnSpacing(2)
         for ((name, value) in rows) {
             table.row(name, value)
         }
