@@ -30,4 +30,9 @@ interface HomeScreen :
 
     @NavigateTo(DetailScreen::class)
     suspend fun onOpenDetailFromBanner()
+
+    // Navigating to a responding destination: the generated navigateToPicker suspends and returns a
+    // PickResult?, so this action awaits the user's pick (or null if the picker is dismissed).
+    @NavigateTo(PickerScreen::class)
+    suspend fun onPickTapped()
 }

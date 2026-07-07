@@ -66,6 +66,12 @@ class NavigatorInterfaceGenerator(
             val argsType = target.argsQualifiedName
             val hasSource = callSites.size > 1
 
+            // A responding destination hands a value back: the call suspends and returns R? (null on
+            // dismiss/close). A plain destination is fire-and-forget.
+            val responseType = target.responseQualifiedName
+            val suspendModifier = if (responseType != null) "suspend " else ""
+            val returnType = if (responseType != null) ": $responseType?" else ""
+
             val params = buildList {
                 if (argsType != null) add("args: $argsType")
                 if (hasSource) add("source: ${cap}Source")
@@ -85,7 +91,7 @@ class NavigatorInterfaceGenerator(
             writeInterface("${cap}NavigationTarget") {
                 """
                 |interface ${cap}NavigationTarget {
-                |    fun $method($params)$enumBlock
+                |    ${suspendModifier}fun $method($params)$returnType$enumBlock
                 |}
                 """.trimMargin()
             }

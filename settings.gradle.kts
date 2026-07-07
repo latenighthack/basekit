@@ -46,6 +46,8 @@ includeBuild("../../deltalist")
 include(":basekit-annotations") // navigation annotations (KMP)
 include(":basekit-navigation")  // navigation runtime + routing (KMP, SKIE)
 include(":basekit-ksp")         // KSP processor + generators (JVM)
+// Test harness runtime for the generated TestClientNavigator + registry (KMP, commonMain).
+include(":basekit-navigation-test")
 
 // ViewModel binding slice — the second codegen slice.
 include(":basekit-viewmodel-annotations") // viewmodel annotations (KMP)

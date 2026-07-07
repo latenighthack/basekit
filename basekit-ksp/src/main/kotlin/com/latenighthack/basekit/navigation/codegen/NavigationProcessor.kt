@@ -19,7 +19,9 @@ private const val ROUTE_ANNOTATION = "com.latenighthack.basekit.navigation.annot
 private const val ROUTE_ARG_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.RouteArg"
 private const val NAVIGATE_TO_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.NavigateTo"
 private const val NAVIGATION_DESTINATION = "com.latenighthack.basekit.navigation.NavigationDestination"
+private const val RESPONDING_DESTINATION = "com.latenighthack.basekit.navigation.RespondingDestination"
 private const val NAVIGATION_PACKAGE_OPTION = "Basekit_NavigationPackage"
+private const val GENERATE_TEST_NAVIGATOR_OPTION = "Basekit_GenerateTestNavigator"
 
 /** A `@NavigateTo` edge from a source destination action to a target destination. */
 data class NavEdge(val methodName: String, val targetQualifiedName: String)
@@ -30,6 +32,7 @@ data class DestinationInfo(
     val qualifiedName: String,
     val navName: String,
     val argsQualifiedName: String?,
+    val responseQualifiedName: String?,
     val routePath: String?,
     val routeArgs: List<String>,
     val edges: List<NavEdge>,
@@ -67,10 +70,23 @@ class NavigationProcessor(
         val simpleName = declaration.simpleName.asString()
         val qualifiedName = declaration.qualifiedName!!.asString()
 
-        val argsDeclaration = declaration.getAllSuperTypes()
-            .firstOrNull { it.declaration.qualifiedName?.asString() == NAVIGATION_DESTINATION }
-            ?.arguments?.firstOrNull()
-            ?.type?.resolve()?.declaration as? KSClassDeclaration
+        val superTypes = declaration.getAllSuperTypes().toList()
+
+        // Reads the type argument at [index] of the [fqn] supertype as a concrete class, or null if it
+        // isn't there / is still an unsubstituted type parameter.
+        fun superTypeArgument(fqn: String, index: Int): KSClassDeclaration? =
+            superTypes.firstOrNull { it.declaration.qualifiedName?.asString() == fqn }
+                ?.arguments?.getOrNull(index)
+                ?.type?.resolve()?.declaration as? KSClassDeclaration
+
+        // Args comes from RespondingDestination<Args, R> when present (its args are concrete on the
+        // declaration), else from NavigationDestination<Args>. Going through the NavigationDestination
+        // supertype of a RespondingDestination would only yield the unsubstituted type parameter.
+        val argsDeclaration = superTypeArgument(RESPONDING_DESTINATION, 0)
+            ?: superTypeArgument(NAVIGATION_DESTINATION, 0)
+
+        // A RespondingDestination<Args, R> declares its response type R as its second type argument.
+        val responseDeclaration = superTypeArgument(RESPONDING_DESTINATION, 1)
 
         val routeFromArgs = argsDeclaration
             ?.stringArgument(ROUTE_ANNOTATION, "path")
@@ -100,6 +116,7 @@ class NavigationProcessor(
             qualifiedName = qualifiedName,
             navName = simpleName.toDestinationNavName(),
             argsQualifiedName = argsDeclaration?.qualifiedName?.asString(),
+            responseQualifiedName = responseDeclaration?.qualifiedName?.asString(),
             routePath = routePath,
             routeArgs = routeArgs,
             edges = edges,
@@ -120,6 +137,10 @@ class NavigationProcessor(
 
         NavigatorInterfaceGenerator(codeGenerator, logger, dependencies, navigationPackage).generate(destinations)
         RouteTableGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations)
+
+        if (options[GENERATE_TEST_NAVIGATOR_OPTION]?.toBoolean() == true) {
+            TestNavigatorGenerator(codeGenerator, logger, dependencies, navigationPackage).generate(destinations)
+        }
     }
 
     private fun resolveNavigationPackage(): String {

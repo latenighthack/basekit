@@ -28,6 +28,8 @@ data class NavMethod(
     val targetDestQualifiedName: String,
     val argsType: String?,
     val sourceType: String?,
+    // Non-null when the target is a RespondingDestination: the method is `suspend` and returns `R?`.
+    val responseType: String?,
 )
 
 /** Everything the generators need about one `@ViewModel` bound via `@TuiScreen`. */

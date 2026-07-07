@@ -13,6 +13,9 @@ plugins {
 ksp {
     // Package the generated navigator/route interfaces land in (co-located with the destinations).
     arg("Basekit_NavigationPackage", "com.latenighthack.basekit.demo")
+    // Also generate the ViewModel test harness (TestViewModelRegistry + TestClientNavigator) into
+    // com.latenighthack.basekit.demo.test — proves the harness codegen end-to-end.
+    arg("Basekit_GenerateTestNavigator", "true")
 }
 
 kotlin {
@@ -43,6 +46,16 @@ kotlin {
                 implementation(project(":basekit-annotations"))
                 implementation(project(":basekit-viewmodel-annotations"))
                 implementation(project(":basekit-tui-annotations"))
+                // Runtime backing the generated TestClientNavigator (lands in commonMain via the metadata pass).
+                implementation(project(":basekit-navigation-test"))
+            }
+        }
+        // The harness e2e tests exercise Bundle-backed NavigatorArgs, which only work with a real args
+        // store — the JVM in-memory actual. (Android needs instrumented tests; the stubbed android.jar in
+        // local unit tests throws on Bundle.) So they live in jvmTest, matching the plan's jvmTest run.
+        val jvmTest by getting {
+            dependencies {
+                implementation(libs.kotlinx.coroutines.test)
             }
         }
     }

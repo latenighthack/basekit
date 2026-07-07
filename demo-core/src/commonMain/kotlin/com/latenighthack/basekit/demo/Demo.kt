@@ -19,6 +19,10 @@ class DemoNavigator : HomeNavigator {
     ) {
         // no-op demo implementation
     }
+
+    // Responding destination: a real navigator would push the picker and suspend on its result; the demo
+    // just dismisses immediately (null). The generated signature is `suspend`, returning PickResult?.
+    override suspend fun navigateToPicker(args: PickerScreen.Args, context: Any?): PickResult? = null
 }
 
 /** Exercises the generated navigator method + source enum. */

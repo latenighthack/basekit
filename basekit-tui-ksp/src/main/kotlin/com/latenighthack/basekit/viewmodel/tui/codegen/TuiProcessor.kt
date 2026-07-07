@@ -24,6 +24,7 @@ private const val DESTINATION_ANNOTATION = "com.latenighthack.basekit.navigation
 private const val ROUTE_ARG_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.RouteArg"
 private const val NAVIGATE_TO_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.NavigateTo"
 private const val NAVIGATION_DESTINATION = "com.latenighthack.basekit.navigation.NavigationDestination"
+private const val RESPONDING_DESTINATION = "com.latenighthack.basekit.navigation.RespondingDestination"
 private const val PACKAGE_OPTION = "Basekit_TuiPackage"
 private const val NAV_PACKAGE_OPTION = "Basekit_NavigationPackage"
 
@@ -37,6 +38,7 @@ private data class DestNode(
     val packageName: String,
     val navName: String,
     val argsQualifiedName: String?,
+    val responseQualifiedName: String?,
     val routeArgs: List<String>,
     val edges: List<Edge>,
 )
@@ -111,9 +113,16 @@ class TuiProcessor(
     }
 
     private fun buildDestNode(decl: KSClassDeclaration): DestNode {
-        val argsDecl = decl.getAllSuperTypes()
-            .firstOrNull { it.declaration.qualifiedName?.asString() == NAVIGATION_DESTINATION }
-            ?.arguments?.firstOrNull()?.type?.resolve()?.declaration as? KSClassDeclaration
+        val superTypes = decl.getAllSuperTypes().toList()
+        fun superTypeArgument(fqn: String, index: Int): KSClassDeclaration? =
+            superTypes.firstOrNull { it.declaration.qualifiedName?.asString() == fqn }
+                ?.arguments?.getOrNull(index)?.type?.resolve()?.declaration as? KSClassDeclaration
+
+        // Args comes from RespondingDestination<Args, R> when present (concrete on the declaration), else
+        // from NavigationDestination<Args>; the RespondingDestination's second arg is the response type.
+        val argsDecl = superTypeArgument(RESPONDING_DESTINATION, 0)
+            ?: superTypeArgument(NAVIGATION_DESTINATION, 0)
+        val responseDecl = superTypeArgument(RESPONDING_DESTINATION, 1)
 
         val routeArgs = argsDecl?.getDeclaredProperties()
             ?.filter { it.hasAnnotation(ROUTE_ARG_ANNOTATION) }
@@ -133,6 +142,7 @@ class TuiProcessor(
             packageName = decl.packageName.asString(),
             navName = decl.simpleName.asString().toDestinationNavName(),
             argsQualifiedName = argsDecl?.qualifiedName?.asString(),
+            responseQualifiedName = responseDecl?.qualifiedName?.asString(),
             routeArgs = routeArgs,
             edges = edges,
         )
@@ -190,6 +200,7 @@ class TuiProcessor(
                 targetDestQualifiedName = targetQn,
                 argsType = target.argsQualifiedName,
                 sourceType = if (hasSource(targetQn)) "$navPackage.${cap}NavigationTarget.${cap}Source" else null,
+                responseType = target.responseQualifiedName,
             )
         }
 
