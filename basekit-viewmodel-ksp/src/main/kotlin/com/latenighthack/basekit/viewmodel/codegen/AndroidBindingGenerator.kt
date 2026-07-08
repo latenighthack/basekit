@@ -4,7 +4,7 @@ import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Dependencies
 
 /**
- * Emits, per `@ViewModel`, an `Abstract{Vm}Activity` extending the runtime `BaseActivity`. The
+ * Emits, per `@ViewModelSpec`, an `Abstract{Vm}Activity` extending the runtime `BaseActivity`. The
  * developer subclasses it, supplies the view, and overrides the typed `onStateChanged(state)`; each
  * `@ViewModelList` gets a `bind{ListProp}(recyclerView, ...)` helper wired to the deltalist adapter.
  */

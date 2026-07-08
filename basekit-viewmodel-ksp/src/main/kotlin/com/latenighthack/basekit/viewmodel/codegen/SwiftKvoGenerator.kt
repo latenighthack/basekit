@@ -4,7 +4,7 @@ import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Dependencies
 
 /**
- * Emits, per `@ViewModel`, a Swift `Kvo{Vm}` wrapper (`Kvo{Vm}.swift`). It exposes each State field
+ * Emits, per `@ViewModelSpec`, a Swift `Kvo{Vm}` wrapper (`Kvo{Vm}.swift`). It exposes each State field
  * as an `@objc dynamic` property (KVO-observable), seeds them from `initialState`, and keeps them
  * current by collecting the ViewModel's `state` sequence (SKIE bridges Kotlin `Flow` to Swift
  * `AsyncSequence`). Suspend actions become `async throws` methods; each `@ViewModelList` gets a

@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.Flow
 /**
  * The core contract every ViewModel implements. A ViewModel owns an immutable [State] snapshot
  * ([initialState]) and a [state] stream of subsequent snapshots. Platform bindings (generated per
- * `@ViewModel`) subscribe to [state] and map it onto native views.
+ * `@ViewModelSpec`) subscribe to [state] and map it onto native views.
  */
 public interface ViewModel<State> {
     /** The state a binding renders synchronously before the first [state] emission arrives. */

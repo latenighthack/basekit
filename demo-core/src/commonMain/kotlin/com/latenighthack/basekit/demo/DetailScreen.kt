@@ -6,11 +6,11 @@ import com.latenighthack.basekit.navigation.annotations.Destination
 import com.latenighthack.basekit.navigation.annotations.Route
 import com.latenighthack.basekit.navigation.annotations.RouteArg
 import com.latenighthack.basekit.viewmodel.ViewModel
-import com.latenighthack.basekit.viewmodel.annotations.ViewModel as ViewModelAnnotation
+import com.latenighthack.basekit.viewmodel.annotations.ViewModelSpec
 
 // Both a destination and a view model (see [HomeScreen] for the rationale).
 @Destination
-@ViewModelAnnotation
+@ViewModelSpec
 interface DetailScreen :
     NavigationDestination<DetailScreen.Args>,
     ViewModel<DetailScreen.State> {

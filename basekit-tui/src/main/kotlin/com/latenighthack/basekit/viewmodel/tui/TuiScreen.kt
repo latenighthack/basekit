@@ -6,7 +6,7 @@ import dev.tamboui.tui.event.KeyEvent
 import kotlinx.coroutines.CoroutineScope
 
 /**
- * One TUI screen — the unit the generated code produces per `@ViewModel`. The host renders the top
+ * One TUI screen — the unit the generated code produces per `@ViewModelSpec`. The host renders the top
  * screen of its back stack each frame and routes key events to it.
  */
 public interface TuiScreen {

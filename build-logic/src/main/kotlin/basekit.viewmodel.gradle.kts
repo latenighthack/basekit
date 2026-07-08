@@ -15,7 +15,19 @@ plugins {
 
 private val processorPath = ":basekit-viewmodel-ksp"
 
+// Also run the processor in the common metadata pass: the kotlin-inject bindings module
+// (GeneratedViewModelModule) generated from @ViewModelInject is platform-agnostic and belongs in
+// commonMain. (Navigation, when co-applied, already wires the generated commonMain srcDir; do it here
+// too so a viewmodel-only consumer is self-sufficient — srcDir registration is idempotent.)
+dependencies {
+    add("kspCommonMainMetadata", project(processorPath))
+}
+
 extensions.configure<KotlinMultiplatformExtension> {
+    sourceSets.named("commonMain") {
+        kotlin.srcDir(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/kotlin"))
+    }
+
     targets.configureEach {
         // The common metadata pass produces no platform binding; only add to real targets.
         if (name == "metadata") return@configureEach

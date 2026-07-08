@@ -16,8 +16,10 @@ import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.Modifier
 
-private const val VIEWMODEL_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModel"
+private const val VIEWMODEL_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelSpec"
 private const val VIEWMODEL_LIST_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelList"
+private const val VIEWMODEL_INJECT_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelInject"
+private const val VIEWMODEL_MODULE_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelModule"
 private const val VIEWMODEL_INTERFACE = "com.latenighthack.basekit.viewmodel.ViewModel"
 private const val TUISCREEN_ANNOTATION = "com.latenighthack.basekit.viewmodel.tui.annotations.TuiScreen"
 private const val DESTINATION_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.Destination"
@@ -44,7 +46,7 @@ private data class DestNode(
 )
 
 /**
- * Reads `@ViewModel`s bound with `@TuiScreen` (and the `@Destination` navigation graph) from the
+ * Reads `@ViewModelSpec`s bound with `@TuiScreen` (and the `@Destination` navigation graph) from the
  * configured `Basekit_TuiPackage` — which lives in a *dependency*, so it enumerates via
  * [Resolver.getDeclarationsFromPackage] rather than `getSymbolsWithAnnotation`. It then emits TamboUI
  * screens, a back-stack navigator wired to the navigation slice, and the kotlin-inject component.
@@ -100,6 +102,12 @@ class TuiProcessor(
             buildScreen(vm, declarations, destinations, hasSource, navPackage)?.let(screens::add)
         }
 
+        // App-supplied kotlin-inject provider interfaces the generated @Component should include, so
+        // dependencies of @ViewModelInject ViewModels resolve from the graph.
+        val moduleQualifiedNames = declarations
+            .filter { it.hasAnnotation(VIEWMODEL_MODULE_ANNOTATION) }
+            .mapNotNull { it.qualifiedName?.asString() }
+
         // Generate here (not in finish()): files emitted in finish() are terminal and would never be
         // handed to kotlin-inject's processor, so its `create()` for our @Component would never appear.
         if (!generated && screens.isNotEmpty()) {
@@ -107,7 +115,7 @@ class TuiProcessor(
             val dependencies = Dependencies(aggregating = true)
             TuiScreenGenerator(codeGenerator, dependencies, rootPackage).generate(screens)
             TuiNavigatorGenerator(codeGenerator, dependencies, rootPackage).generate(screens)
-            TuiComponentGenerator(codeGenerator, dependencies, rootPackage).generate(screens)
+            TuiComponentGenerator(codeGenerator, dependencies, rootPackage).generate(screens, moduleQualifiedNames)
         }
         return emptyList()
     }
@@ -174,11 +182,13 @@ class TuiProcessor(
             return null
         }
 
-        val implQn = resolveImplementation(vm, vmQn, declarations)
-        if (implQn == null) {
+        val implDecl = resolveImplementation(vm, vmQn, declarations)
+        if (implDecl == null) {
             logger.warn("@TuiScreen $vmName has no concrete implementation in the scanned package; skipping")
             return null
         }
+        val implQn = implDecl.qualifiedName?.asString() ?: return null
+        val injected = implDecl.hasAnnotation(VIEWMODEL_INJECT_ANNOTATION)
 
         val navPackage = navPackageOption ?: dest.packageName
 
@@ -208,6 +218,7 @@ class TuiProcessor(
             vmSimpleName = vmName,
             vmQualifiedName = vmQn,
             implQualifiedName = implQn,
+            injected = injected,
             stateQualifiedName = stateDecl.qualifiedName!!.asString(),
             stateProps = stateDecl.stateProps(),
             actions = assignKeys(
@@ -223,14 +234,14 @@ class TuiProcessor(
         )
     }
 
-    private fun resolveImplementation(vm: KSClassDeclaration, vmQn: String, declarations: List<KSClassDeclaration>): String? {
-        val override = vm.classArgument(TUISCREEN_ANNOTATION, "implementation")?.declaration?.qualifiedName?.asString()
-        if (override != null && override != "kotlin.Unit") return override
+    private fun resolveImplementation(vm: KSClassDeclaration, vmQn: String, declarations: List<KSClassDeclaration>): KSClassDeclaration? {
+        val override = vm.classArgument(TUISCREEN_ANNOTATION, "implementation")?.declaration as? KSClassDeclaration
+        if (override != null && override.qualifiedName?.asString() != "kotlin.Unit") return override
         return declarations.firstOrNull { candidate ->
             candidate.classKind == ClassKind.CLASS &&
                 !candidate.modifiers.contains(Modifier.ABSTRACT) &&
                 candidate.getAllSuperTypes().any { it.declaration.qualifiedName?.asString() == vmQn }
-        }?.qualifiedName?.asString()
+        }
     }
 
     private fun buildList(prop: KSPropertyDeclaration): ListInfo? {

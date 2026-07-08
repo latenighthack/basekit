@@ -4,7 +4,7 @@ import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Dependencies
 
 /**
- * Emits, per `@ViewModel`, a `@JsExport use{Vm}(viewModel)` React hook (Kotlin/JS). It maps the
+ * Emits, per `@ViewModelSpec`, a `@JsExport use{Vm}(viewModel)` React hook (Kotlin/JS). It maps the
  * ViewModel's `state` onto a `useState` box via a `useEffect`-scoped Flow collection, exposes each
  * suspend action as a `Promise`-returning callback, and each `@ViewModelList` as an items array kept
  * current from the deltalist stream. Returns a plain JS object for the component to consume.

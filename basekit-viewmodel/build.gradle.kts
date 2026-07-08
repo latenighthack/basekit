@@ -30,6 +30,9 @@ kotlin {
             dependencies {
                 api(project(":basekit-viewmodel-annotations"))
                 api(libs.deltalist.core)
+                // kotlin-inject annotations (@Inject/@Assisted/@Provides/@Component) are used by
+                // consumers on their ViewModels and by the generated GeneratedViewModelModule.
+                api(libs.kotlin.inject.runtime)
             }
         }
         val androidMain by getting {

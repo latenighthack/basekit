@@ -17,7 +17,7 @@ dependencies {
 }
 
 ksp {
-    // The package (in the demo-core dependency) the TUI processor scans for @ViewModel/@TuiScreen.
+    // The package (in the demo-core dependency) the TUI processor scans for @ViewModelSpec/@TuiScreen.
     arg("Basekit_TuiPackage", "com.latenighthack.basekit.demo")
     // The package the navigation slice emitted its navigator/route interfaces into.
     arg("Basekit_NavigationPackage", "com.latenighthack.basekit.demo")

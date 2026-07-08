@@ -26,7 +26,7 @@ data class VmChild(
     val typeQualifiedName: String,
 )
 
-/** Everything the platform generators need to know about one `@ViewModel`. */
+/** Everything the platform generators need to know about one `@ViewModelSpec`. */
 data class VmInfo(
     val simpleName: String,
     val qualifiedName: String,

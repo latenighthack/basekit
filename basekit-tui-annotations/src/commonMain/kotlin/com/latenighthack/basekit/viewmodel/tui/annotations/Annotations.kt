@@ -3,7 +3,7 @@ package com.latenighthack.basekit.viewmodel.tui.annotations
 import kotlin.reflect.KClass
 
 /**
- * Binds a `@ViewModel` to a navigation `@Destination`, making it a TUI screen. The `tui` processor
+ * Binds a `@ViewModelSpec` to a navigation `@Destination`, making it a TUI screen. The `tui` processor
  * generates a TamboUI screen for the ViewModel (state -> table, `@ViewModelList` -> list, zero-arg
  * actions -> key-bound buttons) plus a `…Navigator` implementation for the destination's generated
  * navigator interface, which it injects into the ViewModel so the ViewModel can navigate by calling

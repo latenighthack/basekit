@@ -32,11 +32,14 @@ data class NavMethod(
     val responseType: String?,
 )
 
-/** Everything the generators need about one `@ViewModel` bound via `@TuiScreen`. */
+/** Everything the generators need about one `@ViewModelSpec` bound via `@TuiScreen`. */
 data class ScreenInfo(
     val vmSimpleName: String,
     val vmQualifiedName: String,
     val implQualifiedName: String,
+    // True when the concrete impl is `@ViewModelInject`: the component builds it through the kotlin-inject
+    // graph (via GeneratedViewModelModule) rather than calling its constructor directly.
+    val injected: Boolean,
     val stateQualifiedName: String,
     val stateProps: List<StateProp>,
     val actions: List<Action>,

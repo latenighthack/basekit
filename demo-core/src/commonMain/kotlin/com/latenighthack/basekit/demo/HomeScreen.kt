@@ -6,14 +6,14 @@ import com.latenighthack.basekit.navigation.annotations.Destination
 import com.latenighthack.basekit.navigation.annotations.NavigateTo
 import com.latenighthack.basekit.navigation.annotations.Route
 import com.latenighthack.basekit.viewmodel.ViewModel
-import com.latenighthack.basekit.viewmodel.annotations.ViewModel as ViewModelAnnotation
+import com.latenighthack.basekit.viewmodel.annotations.ViewModelSpec
 
 // A screen is both a navigation destination AND a view model. The two annotations are independent
-// slices: `@Destination` drives navigator/route codegen, `@ViewModel` drives the platform binding
+// slices: `@Destination` drives navigator/route codegen, `@ViewModelSpec` drives the platform binding
 // codegen (Android activity / iOS Kvo / React hook). Marking the screen with both makes the same
 // screen participate in the view model generation on its own, not just the navigation graph.
 @Destination
-@ViewModelAnnotation
+@ViewModelSpec
 interface HomeScreen :
     NavigationDestination<HomeScreen.Args>,
     ViewModel<HomeScreen.State> {
