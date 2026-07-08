@@ -3,22 +3,76 @@ package com.latenighthack.basekit.demo
 import com.latenighthack.basekit.viewmodel.annotations.ViewModelModule
 import me.tatarka.inject.annotations.Provides
 
-/** An app dependency an injected ViewModel pulls from the kotlin-inject graph. */
-interface CounterRepository {
-    fun initialCount(): Int
+/** A feed row's data. */
+data class FeedItemData(val id: String, val title: String, val subtitle: String)
+
+/** A detail screen's data, keyed by feed item id. [count] is mutated by the detail actions. */
+data class DetailData(val id: String, val body: String, val count: Int)
+
+/** One choice the picker offers. */
+data class PickerOption(val id: Int, val label: String)
+
+/**
+ * The single in-memory backing store every ViewModel reads from, so navigating between screens shows
+ * consistent data: the feed list, each item's detail (with a mutable count), and the picker options.
+ */
+interface DemoStore {
+    fun feedItems(): List<FeedItemData>
+    fun addSeededItem(): FeedItemData
+    fun addOptionItem(option: PickerOption): FeedItemData
+    fun detail(id: String): DetailData
+    fun incrementCount(id: String): Int
+    fun resetCount(id: String)
+    fun pickerOptions(): List<PickerOption>
 }
 
-private class RealCounterRepository : CounterRepository {
-    override fun initialCount(): Int = 42
+class InMemoryDemoStore : DemoStore {
+    private val items = mutableListOf(
+        FeedItemData("first", "First", "one"),
+        FeedItemData("second", "Second", "two"),
+    )
+    private val counts = mutableMapOf<String, Int>()
+    private var seeded = 0
+    private val options = listOf(
+        PickerOption(1, "Apples"),
+        PickerOption(2, "Bananas"),
+        PickerOption(3, "Cherries"),
+    )
+
+    override fun feedItems(): List<FeedItemData> = items.toList()
+
+    override fun addSeededItem(): FeedItemData {
+        seeded += 1
+        return FeedItemData("seed-$seeded", "Item $seeded", "seeded").also { items.add(it) }
+    }
+
+    override fun addOptionItem(option: PickerOption): FeedItemData =
+        FeedItemData("option-${option.id}", option.label, "picked").also { items.add(it) }
+
+    override fun detail(id: String): DetailData {
+        val title = items.firstOrNull { it.id == id }?.title ?: id
+        return DetailData(id, "Body for $title", counts[id] ?: 0)
+    }
+
+    override fun incrementCount(id: String): Int = ((counts[id] ?: 0) + 1).also { counts[id] = it }
+
+    override fun resetCount(id: String) {
+        counts[id] = 0
+    }
+
+    override fun pickerOptions(): List<PickerOption> = options
 }
+
+// A single shared store instance so every injected ViewModel sees the same data across navigations.
+private val sharedDemoStore: DemoStore = InMemoryDemoStore()
 
 /**
  * App-supplied kotlin-inject bindings. `@ViewModelModule` makes the generated `GeneratedTuiComponent`
- * include this interface, so `@ViewModelInject` ViewModels can depend on [CounterRepository] without
- * anyone hand-writing the component.
+ * include this interface, so `@ViewModelInject` ViewModels can depend on [DemoStore] without anyone
+ * hand-writing the component.
  */
 @ViewModelModule
 interface DemoModule {
     @Provides
-    fun counterRepository(): CounterRepository = RealCounterRepository()
+    fun demoStore(): DemoStore = sharedDemoStore
 }

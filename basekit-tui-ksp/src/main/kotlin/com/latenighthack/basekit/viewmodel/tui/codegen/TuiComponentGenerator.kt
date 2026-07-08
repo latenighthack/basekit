@@ -29,27 +29,46 @@ class TuiComponentGenerator(
 
     private fun prop(screen: ScreenInfo): String = screen.vmSimpleName.replaceFirstChar { it.lowercase() }
 
-    /** How the component obtains a fresh ViewModel for [screen], wrapped in its generated screen. */
-    private fun buildExpr(screen: ScreenInfo): String = when {
+    /** The argument the component passes to the screen's assisted factory, by kind. */
+    private fun assistedArg(screen: ScreenInfo): String = when (screen.assistedKind) {
+        AssistedKind.NAVIGATOR -> "${screen.navigatorClassName}(nav, this)"
+        AssistedKind.ARGS -> "args as ${screen.assistedType}"
+        AssistedKind.RESPONDER -> "responder as ${screen.assistedType}"
+        AssistedKind.NONE -> ""
+    }
+
+    /** How the component builds [screen] when it is the root (via screenForViewModel). */
+    private fun buildForViewModel(screen: ScreenInfo): String = when (screen.assistedKind) {
+        // ARGS/RESPONDER screens can't be a root: there is no caller to supply the assisted value.
+        AssistedKind.ARGS, AssistedKind.RESPONDER ->
+            "error(\"${screen.vmSimpleName} cannot be a root screen; open it via navigation\")"
+        else -> buildScreenExpr(screen)
+    }
+
+    /** How the component builds [screen] when it is a push target (via screenForDestination). */
+    private fun buildForDestination(screen: ScreenInfo): String = buildScreenExpr(screen)
+
+    private fun buildScreenExpr(screen: ScreenInfo): String = when {
         !screen.injected ->
             "${screen.screenClassName}(${prop(screen)}(nav), nav)"
-        screen.navigatorClassName != null ->
-            "${screen.screenClassName}(${prop(screen)}Factory(${screen.navigatorClassName}(nav, this)), nav)"
+        screen.factoryName != null ->
+            "${screen.screenClassName}(${screen.factoryName}(${assistedArg(screen)}), nav)"
         else ->
             "${screen.screenClassName}(${prop(screen)}, nav)"
     }
 
     private fun render(screens: List<ScreenInfo>, modules: List<String>): String = buildString {
         val supertypes = buildList {
-            // GeneratedViewModelModule only exists when some injected screen is navigator-free (assisted
-            // screens are built from kotlin-inject's native impl factory and contribute no module binding).
-            if (screens.any { it.injected && it.navigatorInterface == null }) add("$rootPackage.GeneratedViewModelModule")
+            // GeneratedViewModelModule is only needed when some injected screen is built from a plain module
+            // binding (no assisted param). Assisted screens come from kotlin-inject's native impl factory.
+            if (screens.any { it.injected && it.factoryName == null }) add("$rootPackage.GeneratedViewModelModule")
             addAll(modules)
         }
         val supertypeClause = if (supertypes.isEmpty()) "" else " : " + supertypes.joinToString(", ")
 
         appendLine("package $rootPackage")
         appendLine()
+        appendLine("import com.latenighthack.basekit.navigation.NavigationResponder")
         appendLine("import com.latenighthack.basekit.viewmodel.tui.TuiAppBuilder")
         appendLine("import com.latenighthack.basekit.viewmodel.tui.TuiHost")
         appendLine("import com.latenighthack.basekit.viewmodel.tui.TuiNavigation")
@@ -60,17 +79,16 @@ class TuiComponentGenerator(
         appendLine("@Component")
         appendLine("public abstract class GeneratedTuiComponent$supertypeClause {")
 
-        // kotlin-inject injection points for graph-built ViewModels: a factory when the screen has a
-        // navigator, else the ViewModel directly. kotlin-inject satisfies these via GeneratedViewModelModule.
+        // kotlin-inject injection points for graph-built ViewModels: an `(Assisted) -> Impl` factory when
+        // the impl takes an assisted param (navigator/args/responder), else the ViewModel widened to its
+        // interface by GeneratedViewModelModule.
         val injected = screens.filter { it.injected }
         if (injected.isNotEmpty()) {
             appendLine()
             for (screen in injected) {
-                if (screen.navigatorInterface != null) {
-                    // Assisted: kotlin-inject provides the native `(Navigator) -> Impl` factory directly.
-                    appendLine("    public abstract val ${prop(screen)}Factory: (${screen.navigatorInterface}) -> ${screen.implQualifiedName}")
+                if (screen.factoryName != null) {
+                    appendLine("    public abstract val ${screen.factoryName}: (${screen.assistedType}) -> ${screen.implQualifiedName}")
                 } else {
-                    // Navigator-free: widened to its interface by GeneratedViewModelModule.
                     appendLine("    public abstract val ${prop(screen)}: ${screen.vmQualifiedName}")
                 }
             }
@@ -79,14 +97,15 @@ class TuiComponentGenerator(
         appendLine()
         appendLine("    public fun screenForViewModel(viewModel: KClass<*>, nav: TuiNavigation): TuiScreen = when (viewModel) {")
         for (screen in screens) {
-            appendLine("        ${screen.vmQualifiedName}::class -> ${buildExpr(screen)}")
+            appendLine("        ${screen.vmQualifiedName}::class -> ${buildForViewModel(screen)}")
         }
         appendLine("        else -> error(\"No TUI screen bound for ViewModel \" + viewModel)")
         appendLine("    }")
         appendLine()
-        appendLine("    public fun screenForDestination(destination: KClass<*>, args: Any?, nav: TuiNavigation): TuiScreen = when (destination) {")
+        appendLine("    @Suppress(\"UNCHECKED_CAST\")")
+        appendLine("    public fun screenForDestination(destination: KClass<*>, args: Any?, nav: TuiNavigation, responder: NavigationResponder<*>? = null): TuiScreen = when (destination) {")
         for (screen in screens) {
-            appendLine("        ${screen.destQualifiedName}::class -> ${buildExpr(screen)}")
+            appendLine("        ${screen.destQualifiedName}::class -> ${buildForDestination(screen)}")
         }
         appendLine("        else -> error(\"No TUI screen bound for destination \" + destination)")
         appendLine("    }")

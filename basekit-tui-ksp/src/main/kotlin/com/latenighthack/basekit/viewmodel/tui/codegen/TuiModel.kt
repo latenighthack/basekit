@@ -32,19 +32,30 @@ data class NavMethod(
     val responseType: String?,
 )
 
+/**
+ * The single kotlin-inject `@Assisted` constructor parameter a screen's impl takes, supplied by the
+ * component at build time. Each screen has at most one: the per-screen [NAVIGATOR], the navigation
+ * [ARGS], or the [RESPONDER] for a responding destination. [NONE] means the impl is built straight from
+ * the graph (widened by GeneratedViewModelModule).
+ */
+enum class AssistedKind { NONE, NAVIGATOR, ARGS, RESPONDER }
+
 /** Everything the generators need about one `@ViewModelSpec` bound via `@TuiScreen`. */
 data class ScreenInfo(
     val vmSimpleName: String,
     val vmQualifiedName: String,
     val implQualifiedName: String,
     // True when the concrete impl is `@ViewModelInject`: the component builds it through the kotlin-inject
-    // graph (via GeneratedViewModelModule) rather than calling its constructor directly.
+    // graph rather than calling its constructor directly.
     val injected: Boolean,
     val stateQualifiedName: String,
     val stateProps: List<StateProp>,
     val actions: List<Action>,
     val list: ListInfo?,
     val destQualifiedName: String,
+    // The impl's single `@Assisted` parameter, if any, and the type the component's factory declares.
+    val assistedKind: AssistedKind,
+    val assistedType: String?,
     val navigatorInterface: String?,
     val navMethods: List<NavMethod>,
 ) {
@@ -52,4 +63,7 @@ data class ScreenInfo(
 
     /** The generated `…Navigator` implementation class injected into the ViewModel (null when the screen has no outbound edges). */
     val navigatorClassName: String? get() = navigatorInterface?.let { "${vmSimpleName}TuiNavigator" }
+
+    /** The kotlin-inject `(Assisted) -> Impl` factory accessor name on the component (null when [NONE]). */
+    val factoryName: String? get() = if (assistedKind == AssistedKind.NONE) null else "${vmSimpleName.replaceFirstChar { it.lowercase() }}Factory"
 }

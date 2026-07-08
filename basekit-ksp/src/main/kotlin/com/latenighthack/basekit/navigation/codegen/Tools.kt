@@ -23,15 +23,15 @@ fun String.toUpperSnakeCase(): String = camelWords()
 
 /**
  * Derives the snake_case navigation name of a destination from its simple name, dropping a leading
- * interface `I` and a trailing `Screen`/`Destination`/`Route` suffix. e.g. "HomeScreen" -> "home",
- * "UserProfileScreen" -> "user_profile".
+ * interface `I` and a trailing `Screen`/`Destination`/`Route`/`ViewModel` suffix. e.g. "HomeScreen" ->
+ * "home", "UserProfileScreen" -> "user_profile", "HomeViewModel" -> "home".
  */
 fun String.toDestinationNavName(): String {
     var str = this
     if (str.length > 1 && str[0] == 'I' && str[1].isUpperCase()) {
         str = str.substring(1)
     }
-    for (suffix in listOf("Screen", "Destination", "Route")) {
+    for (suffix in listOf("Screen", "Destination", "Route", "ViewModel")) {
         if (str.length > suffix.length && str.endsWith(suffix)) {
             str = str.substring(0, str.length - suffix.length)
             break

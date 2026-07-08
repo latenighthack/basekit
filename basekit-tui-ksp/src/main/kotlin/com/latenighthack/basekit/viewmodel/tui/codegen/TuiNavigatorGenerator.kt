@@ -50,13 +50,12 @@ class TuiNavigatorGenerator(
             val argExpr = if (method.argsType != null) "args" else "null"
             if (method.responseType != null) {
                 // Responding destination: the generated interface method is `suspend` and returns R?.
-                // Rounding a value back through push/pop (a NavigationResponder resolved on pop) is a
-                // consumer concern — see RespondingDestination's KDoc — so the TUI reference navigator
-                // pushes the screen and dismisses (null).
-                appendLine("    override suspend fun ${method.methodName}($params): ${method.responseType}? {")
-                appendLine("        nav.push(component.screenForDestination(${method.targetDestQualifiedName}::class, $argExpr, nav))")
-                appendLine("        return null")
-                appendLine("    }")
+                // pushForResult builds the screen with a NavigationResponder and suspends until the screen
+                // responds (a value) or is dismissed (null).
+                appendLine("    override suspend fun ${method.methodName}($params): ${method.responseType}? =")
+                appendLine("        nav.pushForResult<${method.responseType}> { responder ->")
+                appendLine("            component.screenForDestination(${method.targetDestQualifiedName}::class, $argExpr, nav, responder)")
+                appendLine("        }")
             } else {
                 appendLine("    override fun ${method.methodName}($params) {")
                 appendLine("        nav.push(component.screenForDestination(${method.targetDestQualifiedName}::class, $argExpr, nav))")

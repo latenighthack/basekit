@@ -1,73 +1,33 @@
 package com.latenighthack.basekit.demo.test
 
 import com.latenighthack.basekit.demo.CloseNavigationTarget
-import com.latenighthack.basekit.demo.DetailNavigationTarget
-import com.latenighthack.basekit.demo.DetailScreen
+import com.latenighthack.basekit.demo.DemoStore
+import com.latenighthack.basekit.demo.DetailViewModel
 import com.latenighthack.basekit.demo.HomeNavigator
-import com.latenighthack.basekit.demo.HomeScreen
+import com.latenighthack.basekit.demo.HomeViewModel
+import com.latenighthack.basekit.demo.InMemoryDemoStore
 import com.latenighthack.basekit.demo.PickResult
-import com.latenighthack.basekit.demo.PickerScreen
+import com.latenighthack.basekit.demo.PickerViewModel
+import com.latenighthack.basekit.demo.RealDetailViewModel
+import com.latenighthack.basekit.demo.RealHomeViewModel
+import com.latenighthack.basekit.demo.RealPickerViewModel
 import com.latenighthack.basekit.navigation.NavigationResponder
-import com.latenighthack.basekit.viewmodel.StatefulViewModel
-
-// Concrete ViewModels for the two demo destinations, wired with the generated navigator interfaces.
-// These stand in for a real consumer's DI-produced ViewModels; the registry below builds them.
-
-class RealHomeScreen(
-    private val navigator: HomeNavigator,
-) : HomeScreen, StatefulViewModel<HomeScreen.State>(HomeScreen.State(title = "Home", subtitle = "welcome")) {
-
-    // Records what came back from the responding picker flow, so tests can assert on it.
-    var lastPick: PickResult? = null
-    var pickCount: Int = 0
-
-    override suspend fun onOpenDetail() {
-        navigator.navigateToDetail(
-            DetailScreen.Args().apply { id = "detail-1" },
-            DetailNavigationTarget.DetailSource.HOME_ON_OPEN_DETAIL,
-        )
-    }
-
-    override suspend fun onOpenDetailFromBanner() {
-        navigator.navigateToDetail(
-            DetailScreen.Args().apply { id = "banner" },
-            DetailNavigationTarget.DetailSource.HOME_ON_OPEN_DETAIL_FROM_BANNER,
-        )
-    }
-
-    override suspend fun onPickTapped() {
-        lastPick = navigator.navigateToPicker(PickerScreen.Args())
-        pickCount += 1
-    }
-}
-
-class RealPickerScreen(
-    private val responder: NavigationResponder<PickResult>,
-) : PickerScreen {
-    override suspend fun onItemSelected(id: Int) {
-        responder.respond(PickResult(id))
-    }
-}
-
-class RealDetailScreen(
-    args: DetailScreen.Args,
-    @Suppress("unused") navigator: CloseNavigationTarget,
-) : DetailScreen, StatefulViewModel<DetailScreen.State>(DetailScreen.State(id = args.id, body = "body for ${args.id}"))
 
 /**
- * The one-line-per-destination bridge from the generated [TestViewModelRegistry] to the demo's concrete
- * ViewModels. This is the entire per-consumer cost of adopting the harness.
+ * The one-line-per-destination bridge from the generated [TestViewModelRegistry] to the demo's real,
+ * production ViewModels (the exact classes the TUI runs). A single [store] is shared across every
+ * ViewModel it builds, so a navigation journey sees consistent data — mirroring the running app.
  */
-class DemoRegistry : TestViewModelRegistry {
-    override fun createHomeScreen(args: HomeScreen.Args, navigator: HomeNavigator): HomeScreen =
-        RealHomeScreen(navigator)
+class DemoRegistry(val store: DemoStore = InMemoryDemoStore()) : TestViewModelRegistry {
+    override fun createHomeViewModel(args: HomeViewModel.Args, navigator: HomeNavigator): HomeViewModel =
+        RealHomeViewModel(store, navigator)
 
-    override fun createDetailScreen(args: DetailScreen.Args, navigator: CloseNavigationTarget): DetailScreen =
-        RealDetailScreen(args, navigator)
+    override fun createDetailViewModel(args: DetailViewModel.Args, navigator: CloseNavigationTarget): DetailViewModel =
+        RealDetailViewModel(store, args)
 
-    override fun createPickerScreen(
-        args: PickerScreen.Args,
+    override fun createPickerViewModel(
+        args: PickerViewModel.Args,
         navigator: CloseNavigationTarget,
         responder: NavigationResponder<PickResult>,
-    ): PickerScreen = RealPickerScreen(responder)
+    ): PickerViewModel = RealPickerViewModel(store, responder)
 }

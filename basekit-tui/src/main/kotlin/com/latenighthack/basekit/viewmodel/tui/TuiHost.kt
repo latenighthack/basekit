@@ -1,11 +1,13 @@
 package com.latenighthack.basekit.viewmodel.tui
 
+import com.latenighthack.basekit.navigation.NavigationResponder
 import dev.tamboui.toolkit.Toolkit
 import dev.tamboui.toolkit.app.ToolkitRunner
 import dev.tamboui.toolkit.element.Element
 import dev.tamboui.toolkit.event.EventResult
 import dev.tamboui.tui.event.KeyCode
 import dev.tamboui.tui.event.KeyEvent
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,6 +24,9 @@ public class TuiHost(private val rootFactory: (TuiNavigation) -> TuiScreen) : Tu
     override val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + job)
 
     private val stack = ArrayDeque<TuiScreen>()
+
+    // Screens pushed via pushForResult carry a deferred that resolves on respond-or-dismiss.
+    private val pending = HashMap<TuiScreen, CompletableDeferred<Any?>>()
     private var runner: ToolkitRunner? = null
 
     override fun push(screen: TuiScreen) {
@@ -30,10 +35,23 @@ public class TuiHost(private val rootFactory: (TuiNavigation) -> TuiScreen) : Tu
 
     override fun pop() {
         if (stack.size > 1) {
-            stack.removeLast()
+            val removed = stack.removeLast()
+            pending.remove(removed)?.complete(null)
         } else {
             runner?.quit()
         }
+    }
+
+    override suspend fun <R : Any> pushForResult(build: (NavigationResponder<R>) -> TuiScreen): R? {
+        val deferred = CompletableDeferred<Any?>()
+        val responder = NavigationResponder<R> { response ->
+            if (deferred.complete(response)) pop()
+        }
+        val screen = build(responder)
+        pending[screen] = deferred
+        push(screen)
+        @Suppress("UNCHECKED_CAST")
+        return deferred.await() as R?
     }
 
     /** Builds the app, opens the terminal, and blocks until the user quits. */

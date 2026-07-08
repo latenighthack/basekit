@@ -1,5 +1,6 @@
 package com.latenighthack.basekit.viewmodel.tui
 
+import com.latenighthack.basekit.navigation.NavigationResponder
 import dev.tamboui.toolkit.element.Element
 import dev.tamboui.toolkit.event.EventResult
 import dev.tamboui.tui.event.KeyEvent
@@ -33,4 +34,11 @@ public interface TuiNavigation {
 
     /** Pops the top screen; quits the app if it was the last one. */
     public fun pop()
+
+    /**
+     * Pushes a responding screen and suspends until it responds. [build] receives a
+     * [NavigationResponder] to hand to the pushed screen's ViewModel; calling `respond(value)` pops the
+     * screen and resumes here with `value`. Popping the screen another way (Esc/back) resumes with null.
+     */
+    public suspend fun <R : Any> pushForResult(build: (NavigationResponder<R>) -> TuiScreen): R?
 }

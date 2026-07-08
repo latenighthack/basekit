@@ -6,29 +6,29 @@ import com.latenighthack.basekit.navigation.RouteTable
 // GeneratedRoutes) that live in this same package. It compiling is the end-to-end proof that the
 // navigation processor emitted correct, usable Kotlin.
 
-/** A concrete navigator implementing the generated graph interface for HomeScreen. */
+/** A concrete navigator implementing the generated graph interface for [HomeViewModel]. */
 class DemoNavigator : HomeNavigator {
     override fun close(context: Any?) {
         // no-op demo implementation
     }
 
     override fun navigateToDetail(
-        args: DetailScreen.Args,
+        args: DetailViewModel.Args,
         source: DetailNavigationTarget.DetailSource,
         context: Any?,
     ) {
         // no-op demo implementation
     }
 
-    // Responding destination: a real navigator would push the picker and suspend on its result; the demo
-    // just dismisses immediately (null). The generated signature is `suspend`, returning PickResult?.
-    override suspend fun navigateToPicker(args: PickerScreen.Args, context: Any?): PickResult? = null
+    // Responding destination: a real navigator pushes the picker and suspends on its result; this no-op
+    // dismisses immediately (null). The generated signature is `suspend`, returning PickResult?.
+    override suspend fun navigateToPicker(args: PickerViewModel.Args, context: Any?): PickResult? = null
 }
 
 /** Exercises the generated navigator method + source enum. */
 fun openDetail(navigator: HomeNavigator) {
     navigator.navigateToDetail(
-        DetailScreen.Args().apply { id = "42" },
+        DetailViewModel.Args().apply { id = "42" },
         DetailNavigationTarget.DetailSource.HOME_ON_OPEN_DETAIL,
     )
 }

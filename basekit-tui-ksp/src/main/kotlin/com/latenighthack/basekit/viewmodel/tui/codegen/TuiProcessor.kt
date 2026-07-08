@@ -27,6 +27,8 @@ private const val ROUTE_ARG_ANNOTATION = "com.latenighthack.basekit.navigation.a
 private const val NAVIGATE_TO_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.NavigateTo"
 private const val NAVIGATION_DESTINATION = "com.latenighthack.basekit.navigation.NavigationDestination"
 private const val RESPONDING_DESTINATION = "com.latenighthack.basekit.navigation.RespondingDestination"
+private const val NAVIGATION_RESPONDER = "com.latenighthack.basekit.navigation.NavigationResponder"
+private const val ASSISTED_ANNOTATION = "me.tatarka.inject.annotations.Assisted"
 private const val PACKAGE_OPTION = "Basekit_TuiPackage"
 private const val NAV_PACKAGE_OPTION = "Basekit_NavigationPackage"
 
@@ -214,6 +216,18 @@ class TuiProcessor(
             )
         }
 
+        // The impl's single `@Assisted` param — supplied by the component per screen build. Classified by
+        // type so screenForDestination hands over the right value (navigator / navigation args / responder).
+        val assistedDeclQn = implDecl.primaryConstructor?.parameters.orEmpty()
+            .firstOrNull { p -> p.annotations.any { it.qualifiedName() == ASSISTED_ANNOTATION } }
+            ?.type?.resolve()?.declaration?.qualifiedName?.asString()
+        val (assistedKind, assistedType) = when {
+            assistedDeclQn == null -> AssistedKind.NONE to null
+            assistedDeclQn == NAVIGATION_RESPONDER -> AssistedKind.RESPONDER to "NavigationResponder<${dest.responseQualifiedName}>"
+            assistedDeclQn == dest.argsQualifiedName -> AssistedKind.ARGS to dest.argsQualifiedName
+            else -> AssistedKind.NAVIGATOR to navigatorInterface
+        }
+
         return ScreenInfo(
             vmSimpleName = vmName,
             vmQualifiedName = vmQn,
@@ -229,6 +243,8 @@ class TuiProcessor(
             ),
             list = list,
             destQualifiedName = dest.qualifiedName,
+            assistedKind = assistedKind,
+            assistedType = assistedType,
             navigatorInterface = navigatorInterface,
             navMethods = navMethods,
         )
