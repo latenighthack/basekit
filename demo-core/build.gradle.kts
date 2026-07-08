@@ -18,6 +18,12 @@ ksp {
     arg("Basekit_GenerateTestNavigator", "true")
 }
 
+dependencies {
+    // Run kotlin-inject's processor over the jvmTest DemoTestComponent so the harness builds ViewModels
+    // through DI (the same path the TUI uses), rather than calling their constructors directly.
+    add("kspJvmTest", libs.kotlin.inject.ksp)
+}
+
 kotlin {
     val xcf = XCFramework("DemoCore")
 

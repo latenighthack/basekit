@@ -8,26 +8,25 @@ import com.latenighthack.basekit.demo.HomeViewModel
 import com.latenighthack.basekit.demo.InMemoryDemoStore
 import com.latenighthack.basekit.demo.PickResult
 import com.latenighthack.basekit.demo.PickerViewModel
-import com.latenighthack.basekit.demo.RealDetailViewModel
-import com.latenighthack.basekit.demo.RealHomeViewModel
-import com.latenighthack.basekit.demo.RealPickerViewModel
 import com.latenighthack.basekit.navigation.NavigationResponder
 
 /**
  * The one-line-per-destination bridge from the generated [TestViewModelRegistry] to the demo's real,
- * production ViewModels (the exact classes the TUI runs). A single [store] is shared across every
- * ViewModel it builds, so a navigation journey sees consistent data — mirroring the running app.
+ * production ViewModels. Each ViewModel is built through kotlin-inject ([DemoTestComponent]) — the same
+ * DI path the TUI uses — with a single [store] shared across the journey so it sees consistent data.
  */
 class DemoRegistry(val store: DemoStore = InMemoryDemoStore()) : TestViewModelRegistry {
+    private val component = DemoTestComponent::class.create(store)
+
     override fun createHomeViewModel(args: HomeViewModel.Args, navigator: HomeNavigator): HomeViewModel =
-        RealHomeViewModel(store, navigator)
+        component.homeFactory(navigator)
 
     override fun createDetailViewModel(args: DetailViewModel.Args, navigator: CloseNavigationTarget): DetailViewModel =
-        RealDetailViewModel(store, args)
+        component.detailFactory(args)
 
     override fun createPickerViewModel(
         args: PickerViewModel.Args,
         navigator: CloseNavigationTarget,
         responder: NavigationResponder<PickResult>,
-    ): PickerViewModel = RealPickerViewModel(store, responder)
+    ): PickerViewModel = component.pickerFactory(responder)
 }
