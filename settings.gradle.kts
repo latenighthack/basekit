@@ -36,11 +36,15 @@ dependencyResolutionManagement {
 
 rootProject.name = "basekit"
 
-// deltalist is developed alongside basekit; consume it from source (composite build) so the list
-// bindings (core + android-recyclerview + react) resolve via dependency substitution without a
-// separate publish step. Must be a top-level includeBuild (not under pluginManagement) so it
-// participates in regular dependency substitution, not just plugin resolution.
-includeBuild("../../deltalist")
+// deltalist is developed alongside basekit; consume it from source (composite build) WHEN the
+// sibling checkout is present (local dev) so the list bindings (core + android-recyclerview +
+// react) resolve via dependency substitution without a separate publish step. Must be a top-level
+// includeBuild (not under pluginManagement) so it participates in regular dependency substitution.
+// In CI (single-repo checkout) the directory is absent and deltalist-core resolves from Maven
+// Central at the version pinned in gradle/libs.versions.toml — so publish deltalist first.
+if (file("../../deltalist").exists()) {
+    includeBuild("../../deltalist")
+}
 
 // Navigation slice — the first codegen slice of the framework.
 include(":basekit-annotations") // navigation annotations (KMP)

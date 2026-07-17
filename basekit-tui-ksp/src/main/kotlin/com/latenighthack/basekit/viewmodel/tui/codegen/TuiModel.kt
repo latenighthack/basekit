@@ -6,6 +6,16 @@ data class StateProp(val name: String, val typeSimpleName: String)
 /** A zero-arg suspend action, with the key that triggers it in the TUI. */
 data class Action(val name: String, val key: Char)
 
+/** The single argument a [Mutation] method takes, deciding how the TUI collects its value. */
+enum class MutationParamKind { BOOL, STRING }
+
+/**
+ * A single-argument suspend method exposed as a mutation. Pressing [key] opens a prompt that collects
+ * the argument — `true`/`false` for [MutationParamKind.BOOL], typed text for [MutationParamKind.STRING] —
+ * and then invokes the method with the collected value.
+ */
+data class Mutation(val name: String, val key: Char, val paramKind: MutationParamKind)
+
 /**
  * A `@ViewModelList` property: a `Flow<Delta<ElementVm>>` of child ViewModels rendered as a list.
  * [selectionAction] is the zero-arg suspend method invoked on the selected element when Enter is
@@ -40,6 +50,13 @@ data class NavMethod(
  */
 enum class AssistedKind { NONE, NAVIGATOR, ARGS, RESPONDER }
 
+/**
+ * One kotlin-inject `@Assisted` constructor parameter of a screen impl, in declaration order. A screen
+ * may take several (e.g. both navigation [ARGS] and its per-screen [NAVIGATOR]); the component supplies
+ * each from the matching source when it builds the screen. [type] is the factory parameter type.
+ */
+data class AssistedParam(val kind: AssistedKind, val type: String)
+
 /** Everything the generators need about one `@ViewModelSpec` bound via `@TuiScreen`. */
 data class ScreenInfo(
     val vmSimpleName: String,
@@ -51,11 +68,14 @@ data class ScreenInfo(
     val stateQualifiedName: String,
     val stateProps: List<StateProp>,
     val actions: List<Action>,
+    // Single-argument suspend methods, each opened by [Mutation.key] into a prompt that collects the
+    // argument (true/false, or typed text) before the method is called.
+    val mutations: List<Mutation>,
     val list: ListInfo?,
     val destQualifiedName: String,
-    // The impl's single `@Assisted` parameter, if any, and the type the component's factory declares.
-    val assistedKind: AssistedKind,
-    val assistedType: String?,
+    // The impl's `@Assisted` parameters in constructor order, each supplied by the component per screen
+    // build (navigator / navigation args / responder). Empty when the impl is built straight from the graph.
+    val assisted: List<AssistedParam>,
     val navigatorInterface: String?,
     val navMethods: List<NavMethod>,
 ) {
@@ -64,6 +84,6 @@ data class ScreenInfo(
     /** The generated `…Navigator` implementation class injected into the ViewModel (null when the screen has no outbound edges). */
     val navigatorClassName: String? get() = navigatorInterface?.let { "${vmSimpleName}TuiNavigator" }
 
-    /** The kotlin-inject `(Assisted) -> Impl` factory accessor name on the component (null when [NONE]). */
-    val factoryName: String? get() = if (assistedKind == AssistedKind.NONE) null else "${vmSimpleName.replaceFirstChar { it.lowercase() }}Factory"
+    /** The kotlin-inject `(Assisted...) -> Impl` factory accessor name on the component (null when none). */
+    val factoryName: String? get() = if (assisted.isEmpty()) null else "${vmSimpleName.replaceFirstChar { it.lowercase() }}Factory"
 }

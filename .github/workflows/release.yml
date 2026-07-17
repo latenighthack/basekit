@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish to Maven Central
+    # macOS is required so the KMP iOS targets + SKIE compile — an ubuntu run would silently
+    # skip them and publish an incomplete artifact set.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify tag matches project version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PROJECT_VERSION="$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2)"
+          echo "Tag version:     $TAG_VERSION"
+          echo "Project version: $PROJECT_VERSION"
+          if [ "$TAG_VERSION" != "$PROJECT_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match VERSION_NAME $PROJECT_VERSION in gradle.properties"
+            exit 1
+          fi
+
+      # Only the codegen/runtime library modules are released to Central. The `tui` slice
+      # (basekit-tui / -ksp / -annotations) depends on the snapshot-only TamboUI toolkit, and
+      # Maven Central rejects releases that depend on SNAPSHOTs — so the tui modules are
+      # intentionally excluded here. fullhouse consumes basekit-tui from mavenLocal / the Central
+      # snapshot repo until TamboUI cuts a release. The `demo-*` modules are not published.
+      # deltalist resolves from Central (see settings.gradle.kts) at the pinned version — publish
+      # deltalist first.
+      - name: Publish and release (library modules only)
+        run: >
+          ./gradlew --no-configuration-cache --stacktrace
+          :basekit-annotations:publishAndReleaseToMavenCentral
+          :basekit-navigation:publishAndReleaseToMavenCentral
+          :basekit-navigation-test:publishAndReleaseToMavenCentral
+          :basekit-ksp:publishAndReleaseToMavenCentral
+          :basekit-viewmodel-annotations:publishAndReleaseToMavenCentral
+          :basekit-viewmodel:publishAndReleaseToMavenCentral
+          :basekit-viewmodel-ksp:publishAndReleaseToMavenCentral
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}

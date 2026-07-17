@@ -2,6 +2,7 @@ package com.latenighthack.basekit.viewmodel.codegen
 
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSAnnotation
+import com.google.devtools.ksp.symbol.KSClassDeclaration
 import java.io.OutputStream
 
 fun OutputStream.writeln(s: String = "") {
@@ -20,6 +21,21 @@ fun KSAnnotated.stringArgument(annotationFqn: String, argumentName: String): Str
     annotations.firstOrNull { it.qualifiedName() == annotationFqn }
         ?.arguments?.firstOrNull { it.name?.asString() == argumentName }
         ?.value as? String
+
+/**
+ * The Objective-C/Swift name Kotlin/Native exports this class under: nested classes are flattened by
+ * prepending the enclosing class chain (e.g. `HomeViewModel.State` -> `HomeViewModelState`), while a
+ * top-level class keeps its own name.
+ */
+fun KSClassDeclaration.swiftExportName(): String {
+    val parts = mutableListOf(simpleName.asString())
+    var parent = parentDeclaration
+    while (parent is KSClassDeclaration) {
+        parts.add(0, parent.simpleName.asString())
+        parent = parent.parentDeclaration
+    }
+    return parts.joinToString("")
+}
 
 /** Splits an identifier into its words, e.g. "onOpenDetail" -> [on, Open, Detail]. */
 fun String.camelWords(): List<String> =

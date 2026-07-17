@@ -8,7 +8,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Collects a `Flow<State>` into a volatile [value] that a screen reads synchronously during
- * [TuiScreen.render]. The TamboUI tick loop repaints, so updates appear on the next frame.
+ * [TuiScreen.render]. TamboUI has no repaint clock of its own; the [TuiHost] repaint clock repaints,
+ * so updates collected here appear on the next frame.
  */
 public class StateHolder<S>(scope: CoroutineScope, initial: S, flow: Flow<S>) {
     @Volatile

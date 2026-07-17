@@ -1,11 +1,11 @@
 [versions]
-kotlin = "2.1.21"
+kotlin = "2.2.21"
 agp = "8.7.3"
 coroutines = "1.9.0"
-skie = "0.10.9"
-# KSP release aligned to Kotlin 2.1.21. The processor uses the stable KSP API, so it
+skie = "0.10.13"
+# KSP release aligned to Kotlin 2.2.21. The processor uses the stable KSP API, so it
 # works under both the KSP1 and KSP2 backends.
-ksp = "2.1.21-2.0.1"
+ksp = "2.2.21-2.0.5"
 maven-publish = "0.30.0"
 # kotlin-inject wires the generated TUI component (the `tui` slice).
 kotlin-inject = "0.7.1"
@@ -13,7 +13,7 @@ kotlin-inject = "0.7.1"
 tamboui = "0.5.0-SNAPSHOT"
 # deltalist supplies the list system (Flow<Delta<T>>) and its platform bindings. Resolved from the
 # ../../deltalist composite build, so the version is nominal (Gradle substitutes by group:module).
-deltalist = "0.1.0"
+deltalist = "0.1.2"
 androidx-recyclerview = "1.3.2"
 androidx-activity = "1.9.3"
 androidx-lifecycle = "2.8.7"

@@ -30,6 +30,7 @@ class TuiScreenGenerator(
         appendLine("import com.latenighthack.basekit.viewmodel.tui.TuiRender")
         appendLine("import com.latenighthack.basekit.viewmodel.tui.StateHolder")
         if (screen.list != null) appendLine("import com.latenighthack.basekit.viewmodel.tui.ListHolder")
+        if (screen.mutations.isNotEmpty()) appendLine("import com.latenighthack.basekit.viewmodel.tui.MutationPrompt")
         appendLine("import dev.tamboui.toolkit.Toolkit")
         appendLine("import dev.tamboui.toolkit.element.Element")
         appendLine("import dev.tamboui.toolkit.event.EventResult")
@@ -49,6 +50,8 @@ class TuiScreenGenerator(
             appendLine("    private val listHolder = ListHolder(nav.scope, viewModel.${screen.list.propertyName})")
             appendLine("    private var selectedIndex = 0")
         }
+        // Non-null while the user is entering a mutation's argument; consumes keys until submit/cancel.
+        if (screen.mutations.isNotEmpty()) appendLine("    private var prompt: MutationPrompt? = null")
         appendLine()
         appendLine("    override val title: String = \"${screen.vmSimpleName}\"")
         appendLine()
@@ -62,6 +65,7 @@ class TuiScreenGenerator(
         val statePairs = screen.stateProps.joinToString(", ") { "\"${it.name}\" to state.${it.name}.toString()" }
         val hints = buildList {
             screen.actions.forEach { add("\"[${it.key}] ${it.name}\"") }
+            screen.mutations.forEach { add("\"[${it.key}] ${it.name}\"") }
             if (screen.list?.selectionAction != null) add("\"[Enter] ${screen.list.selectionAction}\"")
         }.joinToString(", ")
 
@@ -73,6 +77,9 @@ class TuiScreenGenerator(
             appendLine("            TuiRender.selectableList(\"${screen.list.propertyName}\", ${rowMapper(screen.list)}, selectedIndex),")
         }
         appendLine("            TuiRender.actionsBar(listOf($hints)),")
+        if (screen.mutations.isNotEmpty()) {
+            appendLine("            prompt?.let { TuiRender.prompt(it.label, it.isBool, it.text) } ?: Toolkit.text(\"\"),")
+        }
         appendLine("        )")
         append("    }")
     }
@@ -88,6 +95,22 @@ class TuiScreenGenerator(
 
     private fun onKeyMethod(screen: ScreenInfo): String = buildString {
         appendLine("    override fun onKey(event: KeyEvent): EventResult {")
+        if (screen.mutations.isNotEmpty()) {
+            // While a prompt is open it owns every key: Esc cancels, t/f pick a boolean, typed characters
+            // build the text (Enter submits, Backspace deletes); everything else is swallowed.
+            appendLine("        prompt?.let { active ->")
+            appendLine("            if (event.isKey(KeyCode.ESCAPE)) { prompt = null; return EventResult.HANDLED }")
+            appendLine("            if (active.isBool) {")
+            appendLine("                if (event.isChar('t')) { active.submitBool(true); prompt = null; return EventResult.HANDLED }")
+            appendLine("                if (event.isChar('f')) { active.submitBool(false); prompt = null; return EventResult.HANDLED }")
+            appendLine("            } else {")
+            appendLine("                if (event.isKey(KeyCode.ENTER)) { active.submitText(); prompt = null; return EventResult.HANDLED }")
+            appendLine("                if (event.isKey(KeyCode.BACKSPACE)) { active.backspace(); return EventResult.HANDLED }")
+            appendLine("                if (event.isKey(KeyCode.CHAR)) { active.type(event.string()); return EventResult.HANDLED }")
+            appendLine("            }")
+            appendLine("            return EventResult.HANDLED")
+            appendLine("        }")
+        }
         if (screen.list != null) {
             appendLine("        if (event.isUp()) { if (selectedIndex > 0) selectedIndex--; return EventResult.HANDLED }")
             appendLine("        if (event.isDown()) { if (selectedIndex < listHolder.items.size - 1) selectedIndex++; return EventResult.HANDLED }")
@@ -97,6 +120,13 @@ class TuiScreenGenerator(
         }
         for (action in screen.actions) {
             appendLine("        if (event.isChar('${action.key}')) { nav.scope.launch { viewModel.${action.name}() }; return EventResult.HANDLED }")
+        }
+        for (mutation in screen.mutations) {
+            val factory = when (mutation.paramKind) {
+                MutationParamKind.BOOL -> "MutationPrompt.bool(\"${mutation.name}\") { value -> nav.scope.launch { viewModel.${mutation.name}(value) } }"
+                MutationParamKind.STRING -> "MutationPrompt.text(\"${mutation.name}\") { value -> nav.scope.launch { viewModel.${mutation.name}(value) } }"
+            }
+            appendLine("        if (event.isChar('${mutation.key}')) { prompt = $factory; return EventResult.HANDLED }")
         }
         appendLine("        return EventResult.UNHANDLED")
         append("    }")

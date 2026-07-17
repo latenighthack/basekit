@@ -37,4 +37,17 @@ public object TuiRender {
     /** Renders the footer of key-bound actions, e.g. `[i] onIncrement  [r] onReset`. */
     public fun actionsBar(hints: List<String>): Element =
         Toolkit.text(if (hints.isEmpty()) "" else hints.joinToString("  ")).dim()
+
+    /**
+     * Renders the overlay for an in-progress mutation prompt: a `true`/`false` chooser for boolean
+     * arguments, or the current text buffer for text entry, above a dim hint line of the accepted keys.
+     */
+    public fun prompt(label: String, isBool: Boolean, text: String): Element {
+        val body = if (isBool) "[t] true    [f] false" else "> $text"
+        val hint = if (isBool) "[t/f] choose   [Esc] cancel" else "[Enter] submit   [Esc] cancel"
+        return Toolkit.panel(
+            label,
+            Toolkit.column(Toolkit.text(body), Toolkit.text(hint).dim()),
+        ).rounded()
+    }
 }

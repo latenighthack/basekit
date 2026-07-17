@@ -31,11 +31,17 @@ interface DetailViewModel :
         var id: String by storedProperty()
     }
 
-    data class State(val id: String, val body: String, val count: Int)
+    data class State(val id: String, val body: String, val count: Int, val note: String, val flagged: Boolean)
 
     suspend fun onIncrement()
 
     suspend fun onReset()
+
+    /** Text-entry mutation: replace this item's note with typed text. */
+    suspend fun onSetNote(note: String)
+
+    /** Boolean mutation: flag or unflag this item. */
+    suspend fun onSetFlagged(flagged: Boolean)
 }
 
 @ViewModelInject
@@ -53,6 +59,16 @@ class RealDetailViewModel @Inject constructor(
         store.resetCount(args.id)
         update { store.detail(args.id).toState() }
     }
+
+    override suspend fun onSetNote(note: String) {
+        store.setNote(args.id, note)
+        update { store.detail(args.id).toState() }
+    }
+
+    override suspend fun onSetFlagged(flagged: Boolean) {
+        store.setFlagged(args.id, flagged)
+        update { store.detail(args.id).toState() }
+    }
 }
 
-private fun DetailData.toState() = DetailViewModel.State(id, body, count)
+private fun DetailData.toState() = DetailViewModel.State(id, body, count, note, flagged)

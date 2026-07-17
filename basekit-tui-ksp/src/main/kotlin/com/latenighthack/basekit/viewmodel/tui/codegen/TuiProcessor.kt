@@ -14,6 +14,7 @@ import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import com.google.devtools.ksp.symbol.KSType
+import com.google.devtools.ksp.symbol.KSValueParameter
 import com.google.devtools.ksp.symbol.Modifier
 
 private const val VIEWMODEL_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelSpec"
@@ -31,6 +32,9 @@ private const val NAVIGATION_RESPONDER = "com.latenighthack.basekit.navigation.N
 private const val ASSISTED_ANNOTATION = "me.tatarka.inject.annotations.Assisted"
 private const val PACKAGE_OPTION = "Basekit_TuiPackage"
 private const val NAV_PACKAGE_OPTION = "Basekit_NavigationPackage"
+// Optional FQN of an app DI root (e.g. a runtime-built Core) the generated component takes as a
+// @Component parent, so ViewModels whose deps are constructed at runtime can drive the TUI.
+private const val APP_COMPONENT_OPTION = "Basekit_TuiAppComponent"
 
 /** A `@NavigateTo` edge from a destination action to a target destination. */
 private data class Edge(val methodName: String, val targetQualifiedName: String)
@@ -117,7 +121,8 @@ class TuiProcessor(
             val dependencies = Dependencies(aggregating = true)
             TuiScreenGenerator(codeGenerator, dependencies, rootPackage).generate(screens)
             TuiNavigatorGenerator(codeGenerator, dependencies, rootPackage).generate(screens)
-            TuiComponentGenerator(codeGenerator, dependencies, rootPackage).generate(screens, moduleQualifiedNames)
+            val appComponent = options[APP_COMPONENT_OPTION]?.takeIf { it.isNotEmpty() }
+            TuiComponentGenerator(codeGenerator, dependencies, rootPackage, appComponent).generate(screens, moduleQualifiedNames)
         }
         return emptyList()
     }
@@ -216,17 +221,33 @@ class TuiProcessor(
             )
         }
 
-        // The impl's single `@Assisted` param — supplied by the component per screen build. Classified by
-        // type so screenForDestination hands over the right value (navigator / navigation args / responder).
-        val assistedDeclQn = implDecl.primaryConstructor?.parameters.orEmpty()
-            .firstOrNull { p -> p.annotations.any { it.qualifiedName() == ASSISTED_ANNOTATION } }
-            ?.type?.resolve()?.declaration?.qualifiedName?.asString()
-        val (assistedKind, assistedType) = when {
-            assistedDeclQn == null -> AssistedKind.NONE to null
-            assistedDeclQn == NAVIGATION_RESPONDER -> AssistedKind.RESPONDER to "NavigationResponder<${dest.responseQualifiedName}>"
-            assistedDeclQn == dest.argsQualifiedName -> AssistedKind.ARGS to dest.argsQualifiedName
-            else -> AssistedKind.NAVIGATOR to navigatorInterface
+        // Suspend methods split by arity: zero-arg ones become key-bound actions; single Bool/String-arg
+        // ones become mutations the TUI prompts for. Keys are assigned across both so they never collide.
+        val suspendFns = vm.getDeclaredFunctions()
+            .filter { it.modifiers.contains(Modifier.SUSPEND) && !it.simpleName.asString().startsWith("<") }
+            .toList()
+        val actionNames = suspendFns.filter { it.parameters.isEmpty() }.map { it.simpleName.asString() }
+        val mutationFns = suspendFns.mapNotNull { fn ->
+            fn.parameters.singleOrNull()?.mutationParamKind()?.let { fn.simpleName.asString() to it }
         }
+        val keys = assignKeys(actionNames + mutationFns.map { it.first })
+        val actions = actionNames.map { Action(it, keys.getValue(it)) }
+        val mutations = mutationFns.map { (name, kind) -> Mutation(name, keys.getValue(name), kind) }
+
+        // The impl's `@Assisted` params (in ctor order) — each supplied by the component per screen build.
+        // Classified by type so screenForDestination hands over the right value. A screen may take more
+        // than one (e.g. navigation args AND its per-screen navigator). A navigator param on a screen with
+        // no outbound edges resolves to the shared close target (declared type).
+        val assisted = implDecl.primaryConstructor?.parameters.orEmpty()
+            .filter { p -> p.annotations.any { it.qualifiedName() == ASSISTED_ANNOTATION } }
+            .map { p ->
+                val qn = p.type.resolve().declaration.qualifiedName?.asString()
+                when (qn) {
+                    NAVIGATION_RESPONDER -> AssistedParam(AssistedKind.RESPONDER, "NavigationResponder<${dest.responseQualifiedName}>")
+                    dest.argsQualifiedName -> AssistedParam(AssistedKind.ARGS, dest.argsQualifiedName!!)
+                    else -> AssistedParam(AssistedKind.NAVIGATOR, navigatorInterface ?: qn ?: "kotlin.Any")
+                }
+            }
 
         return ScreenInfo(
             vmSimpleName = vmName,
@@ -235,16 +256,11 @@ class TuiProcessor(
             injected = injected,
             stateQualifiedName = stateDecl.qualifiedName!!.asString(),
             stateProps = stateDecl.stateProps(),
-            actions = assignKeys(
-                vm.getDeclaredFunctions()
-                    .filter { it.modifiers.contains(Modifier.SUSPEND) && !it.simpleName.asString().startsWith("<") && it.parameters.isEmpty() }
-                    .map { it.simpleName.asString() }
-                    .toList()
-            ),
+            actions = actions,
+            mutations = mutations,
             list = list,
             destQualifiedName = dest.qualifiedName,
-            assistedKind = assistedKind,
-            assistedType = assistedType,
+            assisted = assisted,
             navigatorInterface = navigatorInterface,
             navMethods = navMethods,
         )
@@ -293,15 +309,27 @@ class TuiProcessor(
             StateProp(prop.simpleName.asString(), type.simpleName.asString())
         }.toList()
 
-    private fun assignKeys(names: List<String>): List<Action> {
-        val used = mutableSetOf<Char>()
-        return names.map { name ->
+    /** The Bool/String argument kind of a mutation parameter, or null for any other type (not exposed). */
+    private fun KSValueParameter.mutationParamKind(): MutationParamKind? =
+        when (type.resolve().declaration.qualifiedName?.asString()) {
+            "kotlin.Boolean" -> MutationParamKind.BOOL
+            "kotlin.String" -> MutationParamKind.STRING
+            else -> null
+        }
+
+    /**
+     * Assigns a distinct trigger key to each method name (preferring a letter of the name past the `on`
+     * prefix), returned as a name -> key map. `q` is pre-reserved so no binding shadows the quit key.
+     */
+    private fun assignKeys(names: List<String>): Map<String, Char> {
+        val used = mutableSetOf('q')
+        return names.associateWith { name ->
             val base = name.removePrefix("on")
             val ch = base.firstOrNull { it.isLetter() && it.lowercaseChar() !in used }?.lowercaseChar()
-                ?: name.firstOrNull { it.isLetter() }?.lowercaseChar()
+                ?: name.firstOrNull { it.isLetter() && it.lowercaseChar() !in used }?.lowercaseChar()
                 ?: '?'
             used.add(ch)
-            Action(name, ch)
+            ch
         }
     }
 

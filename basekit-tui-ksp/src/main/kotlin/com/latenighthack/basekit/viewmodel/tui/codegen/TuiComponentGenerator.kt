@@ -20,6 +20,11 @@ class TuiComponentGenerator(
     private val codeGenerator: CodeGenerator,
     private val dependencies: Dependencies,
     private val rootPackage: String,
+    // Fully-qualified app DI root (e.g. a runtime-built `Core`) whose `@Provides` back the ViewModels'
+    // dependencies. When set, the component takes it as a `@Component` parent and `TuiApp` requires it,
+    // so an app whose deps are constructed at runtime (not zero-arg) can drive the TUI. Null keeps the
+    // zero-arg `create()` path (deps come only from `@ViewModelModule` interfaces).
+    private val appComponent: String?,
 ) {
     fun generate(screens: List<ScreenInfo>, modules: List<String>) {
         codeGenerator.createNewFile(dependencies, rootPackage, "GeneratedTuiComponent", "kt").use { out ->
@@ -29,21 +34,25 @@ class TuiComponentGenerator(
 
     private fun prop(screen: ScreenInfo): String = screen.vmSimpleName.replaceFirstChar { it.lowercase() }
 
-    /** The argument the component passes to the screen's assisted factory, by kind. */
-    private fun assistedArg(screen: ScreenInfo): String = when (screen.assistedKind) {
-        AssistedKind.NAVIGATOR -> "${screen.navigatorClassName}(nav, this)"
-        AssistedKind.ARGS -> "args as ${screen.assistedType}"
-        AssistedKind.RESPONDER -> "responder as ${screen.assistedType}"
-        AssistedKind.NONE -> ""
+    /** The comma-joined arguments the component passes to the screen's assisted factory, in ctor order.
+     *  A navigator param on a screen with no outbound edges gets an inline close target backed by nav. */
+    private fun assistedArgs(screen: ScreenInfo): String = screen.assisted.joinToString(", ") { p ->
+        when (p.kind) {
+            AssistedKind.NAVIGATOR ->
+                screen.navigatorClassName?.let { "$it(nav, this)" }
+                    ?: "object : ${p.type} { override fun close(context: Any?) { nav.pop() } }"
+            AssistedKind.ARGS -> "args as ${p.type}"
+            AssistedKind.RESPONDER -> "responder as ${p.type}"
+            AssistedKind.NONE -> ""
+        }
     }
 
     /** How the component builds [screen] when it is the root (via screenForViewModel). */
-    private fun buildForViewModel(screen: ScreenInfo): String = when (screen.assistedKind) {
+    private fun buildForViewModel(screen: ScreenInfo): String =
         // ARGS/RESPONDER screens can't be a root: there is no caller to supply the assisted value.
-        AssistedKind.ARGS, AssistedKind.RESPONDER ->
+        if (screen.assisted.any { it.kind == AssistedKind.ARGS || it.kind == AssistedKind.RESPONDER })
             "error(\"${screen.vmSimpleName} cannot be a root screen; open it via navigation\")"
-        else -> buildScreenExpr(screen)
-    }
+        else buildScreenExpr(screen)
 
     /** How the component builds [screen] when it is a push target (via screenForDestination). */
     private fun buildForDestination(screen: ScreenInfo): String = buildScreenExpr(screen)
@@ -52,7 +61,7 @@ class TuiComponentGenerator(
         !screen.injected ->
             "${screen.screenClassName}(${prop(screen)}(nav), nav)"
         screen.factoryName != null ->
-            "${screen.screenClassName}(${screen.factoryName}(${assistedArg(screen)}), nav)"
+            "${screen.screenClassName}(${screen.factoryName}(${assistedArgs(screen)}), nav)"
         else ->
             "${screen.screenClassName}(${prop(screen)}, nav)"
     }
@@ -76,8 +85,9 @@ class TuiComponentGenerator(
         appendLine("import me.tatarka.inject.annotations.Component")
         appendLine("import kotlin.reflect.KClass")
         appendLine()
+        val ctorClause = if (appComponent != null) "(\n    @Component public val app: $appComponent,\n)" else ""
         appendLine("@Component")
-        appendLine("public abstract class GeneratedTuiComponent$supertypeClause {")
+        appendLine("public abstract class GeneratedTuiComponent$ctorClause$supertypeClause {")
 
         // kotlin-inject injection points for graph-built ViewModels: an `(Assisted) -> Impl` factory when
         // the impl takes an assisted param (navigator/args/responder), else the ViewModel widened to its
@@ -87,7 +97,7 @@ class TuiComponentGenerator(
             appendLine()
             for (screen in injected) {
                 if (screen.factoryName != null) {
-                    appendLine("    public abstract val ${screen.factoryName}: (${screen.assistedType}) -> ${screen.implQualifiedName}")
+                    appendLine("    public abstract val ${screen.factoryName}: (${screen.assisted.joinToString(", ") { it.type }}) -> ${screen.implQualifiedName}")
                 } else {
                     appendLine("    public abstract val ${prop(screen)}: ${screen.vmQualifiedName}")
                 }
@@ -125,10 +135,12 @@ class TuiComponentGenerator(
         appendLine(" * Entry point: `TuiApp { root<SomeViewModel>() }`. Builds the kotlin-inject component and runs the")
         appendLine(" * resolved root screen in a terminal until the user quits.")
         appendLine(" */")
-        appendLine("public fun TuiApp(configure: TuiAppBuilder.() -> Unit) {")
+        val appParam = if (appComponent != null) "app: $appComponent, " else ""
+        val createArg = if (appComponent != null) "app" else ""
+        appendLine("public fun TuiApp(${appParam}configure: TuiAppBuilder.() -> Unit) {")
         appendLine("    val builder = TuiAppBuilder().apply(configure)")
         appendLine("    val root = builder.requireRoot()")
-        appendLine("    val component = GeneratedTuiComponent::class.create()")
+        appendLine("    val component = GeneratedTuiComponent::class.create($createArg)")
         appendLine("    TuiHost { nav -> component.screenForViewModel(root, nav) }.run()")
         appendLine("}")
     }

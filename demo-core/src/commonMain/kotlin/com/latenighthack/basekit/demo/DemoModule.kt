@@ -6,8 +6,8 @@ import me.tatarka.inject.annotations.Provides
 /** A feed row's data. */
 data class FeedItemData(val id: String, val title: String, val subtitle: String)
 
-/** A detail screen's data, keyed by feed item id. [count] is mutated by the detail actions. */
-data class DetailData(val id: String, val body: String, val count: Int)
+/** A detail screen's data, keyed by feed item id. [count], [note] and [flagged] are mutated by the detail actions. */
+data class DetailData(val id: String, val body: String, val count: Int, val note: String, val flagged: Boolean)
 
 /** One choice the picker offers. */
 data class PickerOption(val id: Int, val label: String)
@@ -23,6 +23,8 @@ interface DemoStore {
     fun detail(id: String): DetailData
     fun incrementCount(id: String): Int
     fun resetCount(id: String)
+    fun setNote(id: String, note: String)
+    fun setFlagged(id: String, flagged: Boolean)
     fun pickerOptions(): List<PickerOption>
 }
 
@@ -32,6 +34,8 @@ class InMemoryDemoStore : DemoStore {
         FeedItemData("second", "Second", "two"),
     )
     private val counts = mutableMapOf<String, Int>()
+    private val notes = mutableMapOf<String, String>()
+    private val flags = mutableMapOf<String, Boolean>()
     private var seeded = 0
     private val options = listOf(
         PickerOption(1, "Apples"),
@@ -51,13 +55,21 @@ class InMemoryDemoStore : DemoStore {
 
     override fun detail(id: String): DetailData {
         val title = items.firstOrNull { it.id == id }?.title ?: id
-        return DetailData(id, "Body for $title", counts[id] ?: 0)
+        return DetailData(id, "Body for $title", counts[id] ?: 0, notes[id] ?: "", flags[id] ?: false)
     }
 
     override fun incrementCount(id: String): Int = ((counts[id] ?: 0) + 1).also { counts[id] = it }
 
     override fun resetCount(id: String) {
         counts[id] = 0
+    }
+
+    override fun setNote(id: String, note: String) {
+        notes[id] = note
+    }
+
+    override fun setFlagged(id: String, flagged: Boolean) {
+        flags[id] = flagged
     }
 
     override fun pickerOptions(): List<PickerOption> = options

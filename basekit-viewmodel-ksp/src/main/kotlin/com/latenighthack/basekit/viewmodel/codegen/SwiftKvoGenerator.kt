@@ -13,10 +13,18 @@ import com.google.devtools.ksp.processing.Dependencies
  *
  * Delivered as source (not compiled by Gradle); a consuming Xcode/SwiftPM target compiles it with the
  * `KvoViewModel` support base and links the exported KMP frameworks.
+ *
+ * When the exported KMP types live in their own framework/module (rather than the same Swift target that
+ * compiles the wrapper), [frameworkImports] names the modules to `import` at the top of each file.
+ *
+ * `initialState` and the `state` sequence's elements are read back as `Any?`/`Any`: Kotlin/Native erases
+ * the `ViewModel<State>` interface's type argument when exporting the protocol to Objective-C, so the
+ * wrapper casts them to the concrete `{Vm}State` before touching typed fields.
  */
 class SwiftKvoGenerator(
     private val codeGenerator: CodeGenerator,
     private val dependencies: Dependencies,
+    private val frameworkImports: List<String> = emptyList(),
 ) {
     private data class SwiftType(val type: String, val default: String)
 
@@ -64,7 +72,7 @@ class SwiftKvoGenerator(
                 |    #if canImport(UIKit)
                 |    @available(iOS 14.0, *)
                 |    @discardableResult
-                |    public func bind$cap(
+                |    @MainActor public func bind$cap(
                 |        _ collectionView: UICollectionView,
                 |        cellProvider: @escaping (UICollectionView, IndexPath, $childKvo) -> UICollectionViewCell
                 |    ) -> DeltaCollectionDataSource<${list.elementSimpleName}> {
@@ -81,6 +89,9 @@ class SwiftKvoGenerator(
             }
 
             val body = buildString {
+                for (framework in frameworkImports) {
+                    appendLine("import $framework")
+                }
                 appendLine("import Foundation")
                 appendLine("#if canImport(UIKit)")
                 appendLine("import UIKit")
@@ -102,12 +113,13 @@ class SwiftKvoGenerator(
                 appendLine("    public init(_ viewModel: ${vm.simpleName}) {")
                 appendLine("        self.viewModel = viewModel")
                 appendLine("        super.init()")
-                appendLine("        let initial = viewModel.initialState")
+                appendLine("        let initial = viewModel.initialState as! ${vm.stateSwiftName}")
                 if (seedAssigns.isNotEmpty()) appendLine(seedAssigns)
                 appendLine("        startObserving { [weak self] in")
                 appendLine("            guard let self = self else { return }")
                 appendLine("            do {")
-                appendLine("                for try await state in self.viewModel.state {")
+                appendLine("                for try await anyState in self.viewModel.state {")
+                appendLine("                    guard let state = anyState as? ${vm.stateSwiftName} else { continue }")
                 appendLine("                    await MainActor.run {")
                 if (updateAssigns.isNotEmpty()) appendLine(updateAssigns)
                 appendLine("                    }")

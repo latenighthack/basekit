@@ -34,6 +34,9 @@ data class VmInfo(
     val webPath: String,
     val stateSimpleName: String,
     val stateQualifiedName: String,
+    /** The state type's Objective-C/Swift export name: enclosing class chain flattened (e.g. a nested
+     * `HomeViewModel.State` exports as `HomeViewModelState`). Used for the Swift wrapper's casts. */
+    val stateSwiftName: String,
     val stateProperties: List<VmStateProperty>,
     val actions: List<VmAction>,
     val lists: List<VmList>,

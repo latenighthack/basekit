@@ -38,7 +38,13 @@ private const val ASSISTED_ANNOTATION = "me.tatarka.inject.annotations.Assisted"
 class ViewModelProcessor(
     private val codeGenerator: CodeGenerator,
     private val logger: KSPLogger,
+    private val options: Map<String, String> = emptyMap(),
 ) : SymbolProcessor {
+
+    // Frameworks the generated Swift wrappers must `import` (comma-separated KSP arg). Needed when the
+    // exported KMP types live in their own framework instead of the wrapper's own Swift target.
+    private val swiftFrameworkImports: List<String> =
+        options[SWIFT_FRAMEWORK_IMPORTS_OPTION]?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
 
     private val viewModels = mutableListOf<VmInfo>()
     private var sourceFiles: List<KSFile> = emptyList()
@@ -151,6 +157,7 @@ class ViewModelProcessor(
             webPath = declaration.stringArgument(VIEWMODEL_ANNOTATION, "webPath").orEmpty(),
             stateSimpleName = stateDecl.simpleName.asString(),
             stateQualifiedName = stateDecl.qualifiedName?.asString() ?: return null,
+            stateSwiftName = stateDecl.swiftExportName(),
             stateProperties = stateProperties,
             actions = actions,
             lists = lists,
@@ -205,7 +212,7 @@ class ViewModelProcessor(
         val dependencies = Dependencies(aggregating = true, *sourceFiles.toTypedArray())
         when (pass) {
             Pass.ANDROID -> AndroidBindingGenerator(codeGenerator, dependencies).generate(viewModels)
-            Pass.IOS -> SwiftKvoGenerator(codeGenerator, dependencies).generate(viewModels)
+            Pass.IOS -> SwiftKvoGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
             Pass.JS -> ReactHookGenerator(codeGenerator, dependencies).generate(viewModels)
             Pass.METADATA, Pass.OTHER -> Unit // jvm pass produces no platform binding
         }
@@ -215,6 +222,7 @@ class ViewModelProcessor(
 
     private companion object {
         const val MARKER_PACKAGE = "com.latenighthack.basekit.viewmodel.gen"
+        const val SWIFT_FRAMEWORK_IMPORTS_OPTION = "basekit.viewmodel.swiftFrameworkImports"
 
         fun File.pass(): Pass {
             val path = invariantSeparatorsPath.lowercase()
