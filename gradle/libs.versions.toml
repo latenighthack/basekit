@@ -1,11 +1,10 @@
 [versions]
-kotlin = "2.2.21"
-agp = "8.7.3"
+kotlin = "2.3.10"
+agp = "8.13.2"
 coroutines = "1.9.0"
-skie = "0.10.13"
-# KSP release aligned to Kotlin 2.2.21. The processor uses the stable KSP API, so it
-# works under both the KSP1 and KSP2 backends.
-ksp = "2.2.21-2.0.5"
+skie = "0.10.14"
+# KSP release aligned to Kotlin 2.3.10 (unified versioning tracks the Kotlin version).
+ksp = "2.3.10"
 maven-publish = "0.30.0"
 # kotlin-inject wires the generated TUI component (the `tui` slice).
 kotlin-inject = "0.7.1"
