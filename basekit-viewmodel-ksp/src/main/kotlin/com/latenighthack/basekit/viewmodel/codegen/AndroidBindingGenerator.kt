@@ -7,6 +7,7 @@ import com.google.devtools.ksp.processing.Dependencies
  * Emits, per `@ViewModelSpec`, an `Abstract{Vm}Activity` extending the runtime `BaseActivity`. The
  * developer subclasses it, supplies the view, and overrides the typed `onStateChanged(state)`; each
  * `@ViewModelList` gets a `bind{ListProp}(recyclerView, ...)` helper wired to the deltalist adapter.
+ * Each single-arg mutator gets a fire-and-forget helper that launches it on the Activity's lifecycle.
  */
 class AndroidBindingGenerator(
     private val codeGenerator: CodeGenerator,
@@ -15,6 +16,15 @@ class AndroidBindingGenerator(
     fun generate(viewModels: List<VmInfo>) {
         for (vm in viewModels) {
             val className = "Abstract${vm.simpleName}Activity"
+
+            val mutatorMethods = vm.mutators.joinToString("\n\n") { mutator ->
+                """
+                |    /** Runs the `${mutator.name}` mutator on this Activity's lifecycle scope. */
+                |    protected fun ${mutator.name}(${mutator.paramName}: ${mutator.paramTypeQualifiedName}) {
+                |        lifecycleScope.launch { viewModel.${mutator.name}(${mutator.paramName}) }
+                |    }
+                """.trimMargin()
+            }
 
             val listBinders = vm.lists.joinToString("\n\n") { list ->
                 val cap = list.propertyName.toUpperCamelCase()
@@ -43,6 +53,7 @@ class AndroidBindingGenerator(
                 writeln()
                 writeln("import androidx.lifecycle.lifecycleScope")
                 writeln("import com.latenighthack.basekit.viewmodel.bindViewModels")
+                writeln("import kotlinx.coroutines.launch")
                 writeln()
                 writeln(
                     """
@@ -58,6 +69,10 @@ class AndroidBindingGenerator(
                     |    }
                     """.trimMargin()
                 )
+                if (mutatorMethods.isNotEmpty()) {
+                    writeln()
+                    writeln(mutatorMethods)
+                }
                 if (listBinders.isNotEmpty()) {
                     writeln()
                     writeln(listBinders)

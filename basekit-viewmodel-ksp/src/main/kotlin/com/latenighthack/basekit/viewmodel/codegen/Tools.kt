@@ -41,6 +41,37 @@ fun KSClassDeclaration.swiftExportName(): String {
 fun String.camelWords(): List<String> =
     split(Regex("(?<!(^|[A-Z]))(?=[A-Z])|(?<!^)(?=[A-Z][a-z])"))
 
+/**
+ * The State noun a mutator targets: a leading `set` (followed by an uppercase letter) is stripped and
+ * the first letter lowercased, so `setName` -> `name`; a name without that prefix is returned with its
+ * first letter lowercased (`name` -> `name`). The Swift generator pairs a mutator with the State
+ * property whose name equals this noun to synthesize a two-way `Binding`.
+ */
+fun mutatorNoun(name: String): String {
+    val stripped = if (name.length > 3 && name.startsWith("set") && name[3].isUpperCase()) {
+        name.substring(3)
+    } else {
+        name
+    }
+    return stripped.replaceFirstChar { it.lowercase() }
+}
+
+/** How a Kotlin type surfaces in the generated Swift wrappers: its Swift name and a zero-value default. */
+data class SwiftType(val type: String, val default: String)
+
+/** Maps a Kotlin type's qualified name to its Swift wrapper representation (non-primitives erase to `AnyObject?`). */
+fun swiftType(qualifiedName: String): SwiftType = when (qualifiedName) {
+    "kotlin.Int" -> SwiftType("Int32", "0")
+    "kotlin.Long" -> SwiftType("Int64", "0")
+    "kotlin.Short" -> SwiftType("Int16", "0")
+    "kotlin.Byte" -> SwiftType("Int8", "0")
+    "kotlin.Boolean" -> SwiftType("Bool", "false")
+    "kotlin.Float" -> SwiftType("Float", "0")
+    "kotlin.Double" -> SwiftType("Double", "0")
+    "kotlin.String" -> SwiftType("String", "\"\"")
+    else -> SwiftType("AnyObject?", "nil")
+}
+
 /** "feed_item" -> "FeedItem"; also uppercases the first letter of an already-camel identifier. */
 fun String.toUpperCamelCase(): String {
     val parts = if (contains('_')) split("_") else listOf(this)

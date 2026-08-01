@@ -1,7 +1,19 @@
 package com.latenighthack.basekit.viewmodel.codegen
 
-/** A public suspend action on a ViewModel (zero-arg actions are currently supported). */
+/** A public zero-arg suspend action on a ViewModel. */
 data class VmAction(val name: String)
+
+/**
+ * A public single-arg suspend action on a ViewModel — a "mutator". Passed through as a callable on
+ * every platform; on SwiftUI it also backs a two-way `Binding` when [paramTypeQualifiedName] and the
+ * mutator's noun (see `mutatorNoun`) match a State property.
+ */
+data class VmMutator(
+    val name: String,
+    val paramName: String,
+    val paramTypeSimpleName: String,
+    val paramTypeQualifiedName: String,
+)
 
 /** One property of a ViewModel's State type. */
 data class VmStateProperty(
@@ -39,6 +51,7 @@ data class VmInfo(
     val stateSwiftName: String,
     val stateProperties: List<VmStateProperty>,
     val actions: List<VmAction>,
+    val mutators: List<VmMutator>,
     val lists: List<VmList>,
     val children: List<VmChild>,
 )

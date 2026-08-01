@@ -5,7 +5,10 @@ import kotlin.reflect.KClass
 /**
  * Marks an interface as a ViewModel. The processor derives the state type from its
  * `ViewModel<State>` supertype and generates a native binding wrapper per platform
- * (Android base activity, iOS `Kvo{ViewModel}` Swift wrapper, React `use{ViewModel}` hook).
+ * (Android base activity, iOS `Kvo{ViewModel}` and SwiftUI `Observable{ViewModel}` Swift wrappers,
+ * React `use{ViewModel}` hook). Zero-arg suspend functions are exposed as actions; single-arg suspend
+ * functions as mutators (which additionally back a two-way SwiftUI `Binding` when their noun matches a
+ * State property).
  *
  * Named `ViewModelSpec` (not `ViewModel`) so it does not collide with the `ViewModel<State>`
  * runtime interface that annotated types also implement — both can be imported without an alias.

@@ -120,21 +120,39 @@ class ViewModelProcessor(
             VmStateProperty(prop.simpleName.asString(), type.simpleName.asString(), typeQn)
         }.toList()
 
-        val actions = declaration.getDeclaredFunctions()
+        val boundFunctions = declaration.getDeclaredFunctions()
             .filter { fn ->
                 fn.modifiers.contains(Modifier.SUSPEND) &&
                     !fn.simpleName.asString().startsWith("<") &&
                     fn.annotations.none { it.qualifiedName() == CODEGEN_IGNORE_ANNOTATION }
             }
-            .mapNotNull { fn ->
-                if (fn.parameters.isNotEmpty()) {
-                    logger.warn("Action ${fn.simpleName.asString()} on $simpleName has parameters; only zero-arg actions are bound")
-                    null
-                } else {
-                    VmAction(fn.simpleName.asString())
-                }
-            }
             .toList()
+
+        // Zero-arg suspend functions are actions; single-arg ones are mutators (they set one State
+        // field and, on SwiftUI, back a two-way Binding). Anything with more parameters is unbound.
+        val actions = boundFunctions
+            .filter { it.parameters.isEmpty() }
+            .map { VmAction(it.simpleName.asString()) }
+
+        val mutators = boundFunctions
+            .filter { it.parameters.size == 1 }
+            .mapNotNull { fn ->
+                val param = fn.parameters.first()
+                val paramType = param.type.resolve().declaration
+                val paramQn = paramType.qualifiedName?.asString() ?: return@mapNotNull null
+                VmMutator(
+                    name = fn.simpleName.asString(),
+                    paramName = param.name?.asString() ?: "value",
+                    paramTypeSimpleName = paramType.simpleName.asString(),
+                    paramTypeQualifiedName = paramQn,
+                )
+            }
+
+        boundFunctions
+            .filter { it.parameters.size > 1 }
+            .forEach { fn ->
+                logger.warn("Action ${fn.simpleName.asString()} on $simpleName has multiple parameters; only zero-arg actions and single-arg mutators are bound")
+            }
 
         val properties = declaration.getDeclaredProperties().toList()
 
@@ -160,6 +178,7 @@ class ViewModelProcessor(
             stateSwiftName = stateDecl.swiftExportName(),
             stateProperties = stateProperties,
             actions = actions,
+            mutators = mutators,
             lists = lists,
             children = children,
         )
@@ -212,7 +231,10 @@ class ViewModelProcessor(
         val dependencies = Dependencies(aggregating = true, *sourceFiles.toTypedArray())
         when (pass) {
             Pass.ANDROID -> AndroidBindingGenerator(codeGenerator, dependencies).generate(viewModels)
-            Pass.IOS -> SwiftKvoGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
+            Pass.IOS -> {
+                SwiftKvoGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
+                SwiftUIObservableGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
+            }
             Pass.JS -> ReactHookGenerator(codeGenerator, dependencies).generate(viewModels)
             Pass.METADATA, Pass.OTHER -> Unit // jvm pass produces no platform binding
         }

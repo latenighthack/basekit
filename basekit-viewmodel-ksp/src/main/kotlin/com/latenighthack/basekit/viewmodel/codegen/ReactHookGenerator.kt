@@ -6,8 +6,9 @@ import com.google.devtools.ksp.processing.Dependencies
 /**
  * Emits, per `@ViewModelSpec`, a `@JsExport use{Vm}(viewModel)` React hook (Kotlin/JS). It maps the
  * ViewModel's `state` onto a `useState` box via a `useEffect`-scoped Flow collection, exposes each
- * suspend action as a `Promise`-returning callback, and each `@ViewModelList` as an items array kept
- * current from the deltalist stream. Returns a plain JS object for the component to consume.
+ * zero-arg action and single-arg mutator as a `Promise`-returning callback, and each `@ViewModelList`
+ * as an items array kept current from the deltalist stream. Returns a plain JS object for the component
+ * to consume.
  */
 class ReactHookGenerator(
     private val codeGenerator: CodeGenerator,
@@ -42,6 +43,23 @@ class ReactHookGenerator(
                 |            CoroutineScope(SupervisorJob()).launch {
                 |                try {
                 |                    viewModel.${action.name}()
+                |                    resolve(Unit)
+                |                } catch (t: Throwable) {
+                |                    reject(t)
+                |                }
+                |            }
+                |        }
+                |    }
+                """.trimMargin()
+            }
+
+            val mutatorAssigns = vm.mutators.joinToString("\n") { mutator ->
+                """
+                |    result.${mutator.name} = { ${mutator.paramName}: ${mutator.paramTypeQualifiedName} ->
+                |        Promise<Unit> { resolve, reject ->
+                |            CoroutineScope(SupervisorJob()).launch {
+                |                try {
+                |                    viewModel.${mutator.name}(${mutator.paramName})
                 |                    resolve(Unit)
                 |                } catch (t: Throwable) {
                 |                    reject(t)
@@ -98,6 +116,7 @@ class ReactHookGenerator(
                 writeln("    val result: dynamic = js(\"({})\")")
                 if (stateAssigns.isNotEmpty()) writeln(stateAssigns)
                 if (actionAssigns.isNotEmpty()) writeln(actionAssigns)
+                if (mutatorAssigns.isNotEmpty()) writeln(mutatorAssigns)
                 if (listAssigns.isNotEmpty()) writeln(listAssigns)
                 writeln("    return result")
                 writeln("}")

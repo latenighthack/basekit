@@ -20,26 +20,16 @@ import com.google.devtools.ksp.processing.Dependencies
  * `initialState` and the `state` sequence's elements are read back as `Any?`/`Any`: Kotlin/Native erases
  * the `ViewModel<State>` interface's type argument when exporting the protocol to Objective-C, so the
  * wrapper casts them to the concrete `{Vm}State` before touching typed fields.
+ *
+ * Zero-arg actions become `async throws` methods; single-arg mutators become `async throws` methods
+ * taking the argument. (The two-way binding a mutator can back is SwiftUI-only; UIKit call sites invoke
+ * the method directly — see [SwiftUIObservableGenerator].)
  */
 class SwiftKvoGenerator(
     private val codeGenerator: CodeGenerator,
     private val dependencies: Dependencies,
     private val frameworkImports: List<String> = emptyList(),
 ) {
-    private data class SwiftType(val type: String, val default: String)
-
-    private fun swiftType(qualifiedName: String): SwiftType = when (qualifiedName) {
-        "kotlin.Int" -> SwiftType("Int32", "0")
-        "kotlin.Long" -> SwiftType("Int64", "0")
-        "kotlin.Short" -> SwiftType("Int16", "0")
-        "kotlin.Byte" -> SwiftType("Int8", "0")
-        "kotlin.Boolean" -> SwiftType("Bool", "false")
-        "kotlin.Float" -> SwiftType("Float", "0")
-        "kotlin.Double" -> SwiftType("Double", "0")
-        "kotlin.String" -> SwiftType("String", "\"\"")
-        else -> SwiftType("AnyObject?", "nil")
-    }
-
     fun generate(viewModels: List<VmInfo>) {
         for (vm in viewModels) {
             val className = "Kvo${vm.simpleName}"
@@ -61,6 +51,15 @@ class SwiftKvoGenerator(
                 """
                 |    public func ${action.name}() async throws {
                 |        try await viewModel.${action.name}()
+                |    }
+                """.trimMargin()
+            }
+
+            val mutatorMethods = vm.mutators.joinToString("\n\n") { mutator ->
+                val st = swiftType(mutator.paramTypeQualifiedName)
+                """
+                |    public func ${mutator.name}(_ ${mutator.paramName}: ${st.type}) async throws {
+                |        try await viewModel.${mutator.name}(${mutator.paramName}: ${mutator.paramName})
                 |    }
                 """.trimMargin()
             }
@@ -131,6 +130,10 @@ class SwiftKvoGenerator(
                 if (actionMethods.isNotEmpty()) {
                     appendLine()
                     appendLine(actionMethods)
+                }
+                if (mutatorMethods.isNotEmpty()) {
+                    appendLine()
+                    appendLine(mutatorMethods)
                 }
                 if (listBinders.isNotEmpty()) {
                     appendLine()
