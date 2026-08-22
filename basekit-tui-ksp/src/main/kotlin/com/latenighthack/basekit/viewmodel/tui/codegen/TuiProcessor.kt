@@ -317,20 +317,21 @@ class TuiProcessor(
             else -> null
         }
 
-    /**
-     * Assigns a distinct trigger key to each method name (preferring a letter of the name past the `on`
-     * prefix), returned as a name -> key map. `q` is pre-reserved so no binding shadows the quit key.
-     */
-    private fun assignKeys(names: List<String>): Map<String, Char> {
-        val used = mutableSetOf('q')
-        return names.associateWith { name ->
-            val base = name.removePrefix("on")
-            val ch = base.firstOrNull { it.isLetter() && it.lowercaseChar() !in used }?.lowercaseChar()
-                ?: name.firstOrNull { it.isLetter() && it.lowercaseChar() !in used }?.lowercaseChar()
-                ?: '?'
-            used.add(ch)
-            ch
-        }
-    }
+}
 
+/**
+ * Assigns a distinct trigger key to each method name (preferring a letter of the name past the `on`
+ * prefix), returned as a name -> key map. `q` is pre-reserved so no binding shadows the quit key.
+ * A name with no free letter falls back to `'?'`. Top-level + `internal` so it is unit-testable.
+ */
+internal fun assignKeys(names: List<String>): Map<String, Char> {
+    val used = mutableSetOf('q')
+    return names.associateWith { name ->
+        val base = name.removePrefix("on")
+        val ch = base.firstOrNull { it.isLetter() && it.lowercaseChar() !in used }?.lowercaseChar()
+            ?: name.firstOrNull { it.isLetter() && it.lowercaseChar() !in used }?.lowercaseChar()
+            ?: '?'
+        used.add(ch)
+        ch
+    }
 }
