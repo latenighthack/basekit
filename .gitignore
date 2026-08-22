@@ -3,7 +3,6 @@ local.properties
 .DS_Store
 *.xcuserstate
 xcuserdata
-/kotlin-js-store
 .kotlin
 .idea
 .gradle
