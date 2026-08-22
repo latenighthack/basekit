@@ -116,9 +116,10 @@ class ViewModelProcessor(
         }
 
         val stateProperties = stateDecl.getDeclaredProperties().mapNotNull { prop ->
-            val type = prop.type.resolve().declaration
+            val resolved = prop.type.resolve()
+            val type = resolved.declaration
             val typeQn = type.qualifiedName?.asString() ?: return@mapNotNull null
-            VmStateProperty(prop.simpleName.asString(), type.simpleName.asString(), typeQn)
+            VmStateProperty(prop.simpleName.asString(), type.simpleName.asString(), typeQn, resolved.isMarkedNullable)
         }.toList()
 
         val boundFunctions = declaration.getDeclaredFunctions()
@@ -139,13 +140,15 @@ class ViewModelProcessor(
             .filter { it.parameters.size == 1 }
             .mapNotNull { fn ->
                 val param = fn.parameters.first()
-                val paramType = param.type.resolve().declaration
+                val resolvedParam = param.type.resolve()
+                val paramType = resolvedParam.declaration
                 val paramQn = paramType.qualifiedName?.asString() ?: return@mapNotNull null
                 VmMutator(
                     name = fn.simpleName.asString(),
                     paramName = param.name?.asString() ?: "value",
                     paramTypeSimpleName = paramType.simpleName.asString(),
                     paramTypeQualifiedName = paramQn,
+                    paramTypeNullable = resolvedParam.isMarkedNullable,
                 )
             }
 

@@ -39,4 +39,18 @@ class ToolsTest {
         assertEquals("AnyObject?", t.type)
         assertEquals("nil", t.default)
     }
+
+    @Test
+    fun swiftType_maps_a_nullable_string_to_an_optional() {
+        val t = swiftType("kotlin.String", nullable = true)
+        assertEquals("String?", t.type)
+        assertEquals("nil", t.default)
+    }
+
+    @Test
+    fun swiftType_boxes_nullable_primitives() {
+        assertEquals("KotlinInt?", swiftType("kotlin.Int", nullable = true).type)
+        assertEquals("KotlinBoolean?", swiftType("kotlin.Boolean", nullable = true).type)
+        assertEquals("nil", swiftType("kotlin.Int", nullable = true).default)
+    }
 }

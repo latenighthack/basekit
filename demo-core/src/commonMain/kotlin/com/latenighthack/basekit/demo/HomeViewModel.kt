@@ -32,7 +32,7 @@ interface HomeViewModel :
     @Route("/")
     class Args : NavigatorArgs()
 
-    data class State(val title: String)
+    data class State(val title: String, val subtitle: String?)
 
     @ViewModelList(FeedItemViewModel::class)
     val items: Flow<Delta<FeedItemViewModel>>
@@ -83,7 +83,7 @@ class RealFeedItemViewModel(
 class RealHomeViewModel @Inject constructor(
     private val store: DemoStore,
     @Assisted private val navigator: HomeNavigator,
-) : HomeViewModel, StatefulViewModel<HomeViewModel.State>(HomeViewModel.State(title = "Feed")) {
+) : HomeViewModel, StatefulViewModel<HomeViewModel.State>(HomeViewModel.State(title = "Feed", subtitle = null)) {
 
     private val itemsList = mutableDeltaListOf<FeedItemViewModel>(
         store.feedItems().map { RealFeedItemViewModel(it, navigator) },

@@ -35,7 +35,7 @@ class SwiftUIObservableGenerator(
             val className = "Observable${vm.simpleName}"
 
             val publishedProps = vm.stateProperties.joinToString("\n") {
-                val st = swiftType(it.typeQualifiedName)
+                val st = swiftType(it.typeQualifiedName, it.nullable)
                 "    @Published public private(set) var ${it.name}: ${st.type} = ${st.default}"
             }
 
@@ -56,7 +56,7 @@ class SwiftUIObservableGenerator(
             }
 
             val mutatorMethods = vm.mutators.joinToString("\n\n") { mutator ->
-                val st = swiftType(mutator.paramTypeQualifiedName)
+                val st = swiftType(mutator.paramTypeQualifiedName, mutator.paramTypeNullable)
                 """
                 |    public func ${mutator.name}(_ ${mutator.paramName}: ${st.type}) async throws {
                 |        try await viewModel.${mutator.name}(${mutator.paramName}: ${mutator.paramName})
@@ -64,14 +64,17 @@ class SwiftUIObservableGenerator(
                 """.trimMargin()
             }
 
-            // A mutator backs a two-way Binding when its noun matches a State property of the same type:
+            // A mutator backs a two-way Binding when its noun matches a State property of the same type
+            // AND the same nullability (else Binding<T?> and a T-taking mutator would not type-check):
             // read side = published state, write side = mutator (with an optimistic local echo).
             val bindings = vm.mutators.mapNotNull { mutator ->
                 val noun = mutatorNoun(mutator.name)
                 val prop = vm.stateProperties.firstOrNull {
-                    it.name == noun && it.typeQualifiedName == mutator.paramTypeQualifiedName
+                    it.name == noun &&
+                        it.typeQualifiedName == mutator.paramTypeQualifiedName &&
+                        it.nullable == mutator.paramTypeNullable
                 } ?: return@mapNotNull null
-                val st = swiftType(prop.typeQualifiedName)
+                val st = swiftType(prop.typeQualifiedName, prop.nullable)
                 """
                 |    /// Two-way binding for `${prop.name}`: reads the latest state, writes call `${mutator.name}`.
                 |    public var ${noun}Binding: Binding<${st.type}> {

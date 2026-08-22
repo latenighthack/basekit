@@ -50,7 +50,7 @@ class SwiftKvoGenerator(
             val className = "Kvo${vm.simpleName}"
 
             val dynamicProps = vm.stateProperties.joinToString("\n") {
-                val st = swiftType(it.typeQualifiedName)
+                val st = swiftType(it.typeQualifiedName, it.nullable)
                 "    @objc public dynamic var ${it.name}: ${st.type} = ${st.default}"
             }
 
@@ -71,7 +71,7 @@ class SwiftKvoGenerator(
             }
 
             val mutatorMethods = vm.mutators.joinToString("\n\n") { mutator ->
-                val st = swiftType(mutator.paramTypeQualifiedName)
+                val st = swiftType(mutator.paramTypeQualifiedName, mutator.paramTypeNullable)
                 """
                 |    public func ${mutator.name}(_ ${mutator.paramName}: ${st.type}) async throws {
                 |        try await viewModel.${mutator.name}(${mutator.paramName}: ${mutator.paramName})

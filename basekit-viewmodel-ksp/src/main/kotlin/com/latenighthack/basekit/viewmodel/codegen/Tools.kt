@@ -60,16 +60,35 @@ fun mutatorNoun(name: String): String {
 data class SwiftType(val type: String, val default: String)
 
 /** Maps a Kotlin type's qualified name to its Swift wrapper representation (non-primitives erase to `AnyObject?`). */
-fun swiftType(qualifiedName: String): SwiftType = when (qualifiedName) {
-    "kotlin.Int" -> SwiftType("Int32", "0")
-    "kotlin.Long" -> SwiftType("Int64", "0")
-    "kotlin.Short" -> SwiftType("Int16", "0")
-    "kotlin.Byte" -> SwiftType("Int8", "0")
-    "kotlin.Boolean" -> SwiftType("Bool", "false")
-    "kotlin.Float" -> SwiftType("Float", "0")
-    "kotlin.Double" -> SwiftType("Double", "0")
-    "kotlin.String" -> SwiftType("String", "\"\"")
-    else -> SwiftType("AnyObject?", "nil")
+fun swiftType(qualifiedName: String, nullable: Boolean = false): SwiftType {
+    // A nullable primitive cannot be a Swift value type on an @objc property, so it is boxed to the
+    // SKIE/Kotlin-Native NSNumber bridge (KotlinInt?, KotlinBoolean?, …); a nullable String becomes a
+    // Swift optional String?. Non-primitives already erase to AnyObject? (Kotlin/Native drops the
+    // exported generic), which is optional regardless.
+    if (nullable) {
+        return when (qualifiedName) {
+            "kotlin.Int" -> SwiftType("KotlinInt?", "nil")
+            "kotlin.Long" -> SwiftType("KotlinLong?", "nil")
+            "kotlin.Short" -> SwiftType("KotlinShort?", "nil")
+            "kotlin.Byte" -> SwiftType("KotlinByte?", "nil")
+            "kotlin.Boolean" -> SwiftType("KotlinBoolean?", "nil")
+            "kotlin.Float" -> SwiftType("KotlinFloat?", "nil")
+            "kotlin.Double" -> SwiftType("KotlinDouble?", "nil")
+            "kotlin.String" -> SwiftType("String?", "nil")
+            else -> SwiftType("AnyObject?", "nil")
+        }
+    }
+    return when (qualifiedName) {
+        "kotlin.Int" -> SwiftType("Int32", "0")
+        "kotlin.Long" -> SwiftType("Int64", "0")
+        "kotlin.Short" -> SwiftType("Int16", "0")
+        "kotlin.Byte" -> SwiftType("Int8", "0")
+        "kotlin.Boolean" -> SwiftType("Bool", "false")
+        "kotlin.Float" -> SwiftType("Float", "0")
+        "kotlin.Double" -> SwiftType("Double", "0")
+        "kotlin.String" -> SwiftType("String", "\"\"")
+        else -> SwiftType("AnyObject?", "nil")
+    }
 }
 
 /** "feed_item" -> "FeedItem"; also uppercases the first letter of an already-camel identifier. */

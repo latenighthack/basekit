@@ -13,6 +13,7 @@ data class VmMutator(
     val paramName: String,
     val paramTypeSimpleName: String,
     val paramTypeQualifiedName: String,
+    val paramTypeNullable: Boolean = false,
 )
 
 /** One property of a ViewModel's State type. */
@@ -20,6 +21,7 @@ data class VmStateProperty(
     val name: String,
     val typeSimpleName: String,
     val typeQualifiedName: String,
+    val nullable: Boolean = false,
 )
 
 /** A `@ViewModelList` property: a `Flow<Delta<ElementVm>>` of child ViewModels. */
