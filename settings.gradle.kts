@@ -14,6 +14,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // deltalist is published from its own repo; mavenLocal picks up a `publishToMavenLocal`
+        // there so basekit can build against an unreleased version (e.g. while adding a platform)
+        // before it reaches Central. Ordered after Central so a released version always wins.
+        mavenLocal()
         // TamboUI (the `tui` slice's terminal-UI toolkit) is snapshot-only for now.
         maven {
             url = uri("https://central.sonatype.com/repository/maven-snapshots/")
@@ -36,14 +40,23 @@ dependencyResolutionManagement {
 
 rootProject.name = "basekit"
 
-// deltalist is developed alongside basekit; consume it from source (composite build) WHEN the
-// sibling checkout is present (local dev) so the list bindings (core + android-recyclerview +
-// react) resolve via dependency substitution without a separate publish step. Must be a top-level
-// includeBuild (not under pluginManagement) so it participates in regular dependency substitution.
-// In CI (single-repo checkout) the directory is absent and deltalist-core resolves from Maven
-// Central at the version pinned in gradle/libs.versions.toml — so publish deltalist first.
-if (file("../../deltalist").exists()) {
-    includeBuild("../../deltalist")
+// deltalist is developed alongside basekit. It normally resolves as a published artifact at the
+// version pinned in gradle/libs.versions.toml — from mavenLocal while iterating, from Maven Central
+// in CI (single-repo checkout), so publish deltalist first.
+//
+// Optionally it can be consumed from source instead via a composite build, which substitutes
+// core + android-recyclerview + react by group:module with no publish step. That is opt-in
+// (`-PdeltalistComposite=true`) rather than automatic, because it currently fails: AGP refuses to
+// have two versions in one build and deltalist is on AGP 8.7.3 / Gradle 8.9 against basekit's
+// 8.13.2 / 9.5.1. Pure-Kotlin targets substitute fine; anything that resolves an Android variant
+// does not. Align deltalist's AGP and Gradle, then this can go back to being automatic.
+//
+// (The path is ../deltalist — both repos live under the same parent. It read ../../deltalist for a
+// long time, which never existed, so the substitution silently never happened and the pinned
+// version drifted behind deltalist's actual VERSION_NAME.)
+val useDeltalistComposite = providers.gradleProperty("deltalistComposite").orNull == "true"
+if (useDeltalistComposite && file("../deltalist").exists()) {
+    includeBuild("../deltalist")
 }
 
 // Navigation slice — the first codegen slice of the framework.

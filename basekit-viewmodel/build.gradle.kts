@@ -1,4 +1,4 @@
-import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
+import com.latenighthack.basekit.gradle.appleXcframework
 
 // ViewModel binding runtime. Unlike the navigation slice, this framework leaves SKIE's default
 // interop ENABLED (Flow -> AsyncSequence, suspend -> async) so the generated Swift Kvo wrappers can
@@ -10,19 +10,8 @@ plugins {
 }
 
 kotlin {
-    val xcf = XCFramework("BasekitViewModel")
-
-    listOf(
-        iosX64(),
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { target ->
-        target.binaries.framework {
-            baseName = "BasekitViewModel"
-            isStatic = false
-            xcf.add(this)
-            export(libs.deltalist.core)
-        }
+    appleXcframework("BasekitViewModel", isStatic = false) {
+        export(libs.deltalist.core)
     }
 
     sourceSets {

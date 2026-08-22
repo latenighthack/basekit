@@ -1,0 +1,96 @@
+name: Build
+
+# There was no PR-time build before this: release.yml only fires on a v* tag, so a broken target
+# first surfaced during a release. That matters most for the Apple codegen, which fails *silently* —
+# the ViewModel processor picks its generator from the KSP output path, so a target it doesn't
+# recognise emits no Swift at all and the build still succeeds. The generated-Swift steps below are
+# what turn that into a red build.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apple:
+    name: All targets + Apple frameworks + generated-Swift typecheck
+    # macOS is required so the Kotlin/Native Apple targets + SKIE compile; an ubuntu run would
+    # silently skip them. Matches release.yml.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build and test all targets
+        run: ./gradlew build --stacktrace
+
+      # `build` compiles klibs and runs tests but does NOT link frameworks — and linking is what
+      # compiles the Swift bundled under src/commonMain/swift (KvoViewModel, and deltalist's data
+      # sources re-emitted into any framework that exports it). Without this step the AppKit Swift
+      # is never type-checked.
+      - name: Link debug frameworks (compiles the bundled Swift)
+        run: >
+          ./gradlew --stacktrace
+          :basekit-navigation:linkDebugFrameworkMacosArm64
+          :basekit-navigation:linkDebugFrameworkIosArm64
+          :basekit-viewmodel:linkDebugFrameworkMacosArm64
+          :basekit-viewmodel:linkDebugFrameworkIosArm64
+          :demo-core:linkDebugFrameworkMacosArm64
+          :demo-core:linkDebugFrameworkIosSimulatorArm64
+
+      # Also runs verifyBasekitViewModelSwiftIsUniversal, which fails if any two Apple passes emit
+      # the same Swift file name with different bytes (the flatten below keeps only one copy, in
+      # unspecified walk order).
+      - name: Collect generated Swift and verify it is universal
+        run: ./gradlew :demo-core:collectBasekitViewModelSwift --stacktrace
+
+      - name: Fail if the Apple passes emitted no Swift
+        run: |
+          count=$(ls demo-core/build/generated/basekit-viewmodel/swift/*.swift 2>/dev/null | wc -l)
+          echo "collected $count generated Swift files"
+          if [ "$count" -eq 0 ]; then
+            echo "::error::No Swift was generated - the ViewModel processor did not recognise the Apple KSP passes"
+            exit 1
+          fi
+
+      - name: Typecheck generated Swift against the macOS framework
+        run: |
+          xcrun swiftc -typecheck \
+            -target arm64-apple-macos12.0 \
+            -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
+            -F demo-core/build/bin/macosArm64/debugFramework \
+            demo-core/build/generated/basekit-viewmodel/swift/*.swift
+
+      - name: Typecheck generated Swift against the iOS-simulator framework
+        run: |
+          xcrun swiftc -typecheck \
+            -target arm64-apple-ios15.0-simulator \
+            -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
+            -F demo-core/build/bin/iosSimulatorArm64/debugFramework \
+            demo-core/build/generated/basekit-viewmodel/swift/*.swift
+
+      - name: Assemble XCFrameworks
+        run: >
+          ./gradlew --stacktrace
+          :basekit-navigation:assembleBasekitNavigationDebugXCFramework
+          :basekit-viewmodel:assembleBasekitViewModelDebugXCFramework
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: '**/build/reports/tests/**'
+          if-no-files-found: ignore

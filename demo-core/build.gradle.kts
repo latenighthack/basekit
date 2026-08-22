@@ -1,7 +1,7 @@
-import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
+import com.latenighthack.basekit.gradle.appleXcframework
 
 // Sample consumer of the navigation codegen. Not published — it exists to prove the processor
-// generates compilable navigators/routes across every target (android/jvm/js/ios via SKIE).
+// generates compilable navigators/routes across every target (android/jvm/js/ios/macos via SKIE).
 plugins {
     id("basekit.kmp-library")
     id("basekit.navigation")
@@ -16,6 +16,11 @@ ksp {
     // Also generate the ViewModel test harness (TestViewModelRegistry + TestClientNavigator) into
     // com.latenighthack.basekit.demo.test — proves the harness codegen end-to-end.
     arg("Basekit_GenerateTestNavigator", "true")
+    // Frameworks the generated Swift wrappers must import. SKIE folds the exported KMP types AND the
+    // bundled Swift (KvoViewModel, DeltaList, the collection-view data sources) into DemoCore's own
+    // Swift module, so this one import makes the collected wrappers compile standalone — which is
+    // what lets CI run `swiftc -typecheck` over them.
+    arg("basekit.viewmodel.swiftFrameworkImports", "DemoCore")
 }
 
 dependencies {
@@ -25,23 +30,12 @@ dependencies {
 }
 
 kotlin {
-    val xcf = XCFramework("DemoCore")
-
-    listOf(
-        iosX64(),
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { target ->
-        target.binaries.framework {
-            baseName = "DemoCore"
-            isStatic = true
-            xcf.add(this)
-            export(project(":basekit-navigation"))
-            export(project(":basekit-viewmodel"))
-            // Re-export deltalist so Swift sees Delta and the collection-view data sources the
-            // generated Kvo wrappers use.
-            export(libs.deltalist.core)
-        }
+    appleXcframework("DemoCore", isStatic = true) {
+        export(project(":basekit-navigation"))
+        export(project(":basekit-viewmodel"))
+        // Re-export deltalist so Swift sees Delta and the collection-view data sources the
+        // generated Kvo wrappers use (UICollectionView on iOS, NSCollectionView on macOS).
+        export(libs.deltalist.core)
     }
 
     sourceSets {

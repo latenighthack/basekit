@@ -8,7 +8,7 @@ import kotlin.reflect.KProperty
  * Android backs navigation args with a [Bundle] so they survive the Activity/process serialization
  * boundary. The [bundle] can be attached to an Intent by the platform navigator.
  */
-public actual open class NavigatorArgs {
+public actual open class NavigatorArgs actual constructor() {
     private val internalBundle: Bundle = Bundle()
 
     public val bundle: Bundle

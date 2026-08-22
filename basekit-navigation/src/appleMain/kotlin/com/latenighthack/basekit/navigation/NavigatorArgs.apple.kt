@@ -3,10 +3,12 @@ package com.latenighthack.basekit.navigation
 import kotlin.reflect.KProperty
 
 /**
- * iOS has no serialization boundary between destinations, so navigation args are held in memory.
+ * Apple platforms have no serialization boundary between destinations, so navigation args are held
+ * in memory. This lives in `appleMain` rather than `iosMain` so the single actual covers iOS and
+ * macOS (and any future tvOS/watchOS target) — the implementation touches no platform API at all.
  */
 @Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
-public actual open class NavigatorArgs {
+public actual open class NavigatorArgs actual constructor() {
     protected class InMemoryStoredProperty<T> : StoredProperty<T> {
         private var storedValue: T? = null
 

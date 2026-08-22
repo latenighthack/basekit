@@ -8,11 +8,24 @@ import com.google.devtools.ksp.processing.Dependencies
  * as an `@objc dynamic` property (KVO-observable), seeds them from `initialState`, and keeps them
  * current by collecting the ViewModel's `state` sequence (SKIE bridges Kotlin `Flow` to Swift
  * `AsyncSequence`). Suspend actions become `async throws` methods; each `@ViewModelList` gets a
- * `bind{ListProp}(_:)` that drives a deltalist `DeltaCollectionDataSource`, vending `Kvo{ChildVm}`
- * wrappers to the cell provider.
+ * `bind{ListProp}(_:)` that drives a deltalist collection-view data source, vending `Kvo{ChildVm}`
+ * wrappers to the cell/item provider.
  *
- * Delivered as source (not compiled by Gradle); a consuming Xcode/SwiftPM target compiles it with the
- * `KvoViewModel` support base and links the exported KMP frameworks.
+ * This is the imperative binding for every Apple platform, not just iOS: `@objc dynamic` properties
+ * are what both UIKit KVO and AppKit's Cocoa Bindings consume. One universal file is emitted per
+ * ViewModel, identical from every Apple KSP pass, with the platform difference confined to
+ * `#if canImport(UIKit)` / `#elseif canImport(AppKit)` — the list binder takes a `UICollectionView`
+ * on UIKit and an `NSCollectionView` on AppKit (see [appleListBinder]). Emitting the same bytes from
+ * every pass is what keeps `collectBasekitViewModelSwift`'s flatten deterministic.
+ *
+ * Like iOS, no view-controller host is generated. Android's `Abstract{Vm}Activity` exists because
+ * Android mandates `Activity` as the entry point with a lifecycle that must be hooked; AppKit
+ * mandates nothing (a macOS screen may be `NSViewController`-, `NSWindowController`-, document- or
+ * SwiftUI-hosted), so a generated host would be wrong for most apps.
+ *
+ * Delivered as source; a consuming Xcode/SwiftPM target compiles it and links the exported KMP
+ * frameworks, which already carry the `KvoViewModel` support base (SKIE compiles the bundled Swift
+ * under `src/commonMain/swift` into each framework).
  *
  * When the exported KMP types live in their own framework/module (rather than the same Swift target that
  * compiles the wrapper), [frameworkImports] names the modules to `import` at the top of each file.
@@ -22,8 +35,10 @@ import com.google.devtools.ksp.processing.Dependencies
  * wrapper casts them to the concrete `{Vm}State` before touching typed fields.
  *
  * Zero-arg actions become `async throws` methods; single-arg mutators become `async throws` methods
- * taking the argument. (The two-way binding a mutator can back is SwiftUI-only; UIKit call sites invoke
- * the method directly — see [SwiftUIObservableGenerator].)
+ * taking the argument. (The two-way binding a mutator can back is SwiftUI-only — see
+ * [SwiftUIObservableGenerator].) Each zero-arg action additionally gets an `@objc` target-action
+ * thunk, `{action}Action(_:)`, because the `async throws` method is not reachable from a selector —
+ * see [targetActionThunks].
  */
 class SwiftKvoGenerator(
     private val codeGenerator: CodeGenerator,
@@ -64,39 +79,24 @@ class SwiftKvoGenerator(
                 """.trimMargin()
             }
 
-            val listBinders = vm.lists.joinToString("\n\n") { list ->
-                val cap = list.propertyName.toUpperCamelCase()
-                val childKvo = "Kvo${list.elementSimpleName}"
-                """
-                |    #if canImport(UIKit)
-                |    @available(iOS 14.0, *)
-                |    @discardableResult
-                |    @MainActor public func bind$cap(
-                |        _ collectionView: UICollectionView,
-                |        cellProvider: @escaping (UICollectionView, IndexPath, $childKvo) -> UICollectionViewCell
-                |    ) -> DeltaCollectionDataSource<${list.elementSimpleName}> {
-                |        let dataSource = DeltaCollectionDataSource<${list.elementSimpleName}>(
-                |            collectionView: collectionView
-                |        ) { cv, indexPath, item in
-                |            cellProvider(cv, indexPath, $childKvo(item))
-                |        }
-                |        dataSource.bind(erased: viewModel.${list.propertyName})
-                |        return dataSource
-                |    }
-                |    #endif
-                """.trimMargin()
-            }
+            val listBinders = vm.lists.joinToString("\n\n") { list -> appleListBinder(list) }
+
+            val actionThunks = targetActionThunks(vm)
 
             val body = buildString {
                 for (framework in frameworkImports) {
                     appendLine("import $framework")
                 }
                 appendLine("import Foundation")
+                // UIKit first: Mac Catalyst can import both, and there the UIKit binder is correct.
                 appendLine("#if canImport(UIKit)")
                 appendLine("import UIKit")
+                appendLine("#elseif canImport(AppKit)")
+                appendLine("import AppKit")
                 appendLine("#endif")
                 appendLine()
-                appendLine("// Generated KVO wrapper for ${vm.qualifiedName}.")
+                appendLine("// Generated KVO wrapper for ${vm.qualifiedName}. Universal across Apple platforms:")
+                appendLine("// UIKit and AppKit differ only inside the #if blocks below.")
                 appendLine("// The exported ViewModel type (${vm.simpleName}), its State, DeltaListCore and the")
                 appendLine("// KvoViewModel support base are linked/compiled by the consuming Swift target.")
                 appendLine()
@@ -134,6 +134,10 @@ class SwiftKvoGenerator(
                 if (mutatorMethods.isNotEmpty()) {
                     appendLine()
                     appendLine(mutatorMethods)
+                }
+                if (actionThunks.isNotEmpty()) {
+                    appendLine()
+                    appendLine(actionThunks)
                 }
                 if (listBinders.isNotEmpty()) {
                     appendLine()

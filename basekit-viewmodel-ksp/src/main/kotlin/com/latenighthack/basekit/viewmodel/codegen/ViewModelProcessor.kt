@@ -29,7 +29,8 @@ private const val ASSISTED_ANNOTATION = "me.tatarka.inject.annotations.Assisted"
  * Discovers `@ViewModelSpec` interfaces and emits native binding wrappers, one platform per KSP pass:
  *
  *  - **android** pass -> [AndroidBindingGenerator] (Kotlin into `androidMain`)
- *  - **ios** passes  -> [SwiftKvoGenerator] (`Kvo{Vm}.swift`)
+ *  - **apple** passes -> [SwiftKvoGenerator] (`Kvo{Vm}.swift`) + [SwiftUIObservableGenerator]
+ *    (`Observable{Vm}.swift`); ios/macos/tvos/watchos all take this branch and emit identical files
  *  - **js** pass     -> [ReactHookGenerator] (Kotlin/JS into `jsMain`)
  *
  * The active pass is inferred from the KSP output path (as the reference ViewModel processor does),
@@ -154,6 +155,18 @@ class ViewModelProcessor(
                 logger.warn("Action ${fn.simpleName.asString()} on $simpleName has multiple parameters; only zero-arg actions and single-arg mutators are bound")
             }
 
+        // The Swift wrapper adds an `@objc {action}Action(_:)` target-action thunk per zero-arg
+        // action (see targetActionThunks). If the ViewModel already declares a member with that
+        // name, the generated file would not compile — flag it here, where the source location is
+        // still known, rather than in the consumer's Xcode build.
+        val boundNames = (actions.map { it.name } + mutators.map { it.name }).toSet()
+        actions
+            .map { targetActionThunkName(it.name) }
+            .filter { it in boundNames }
+            .forEach { collision ->
+                logger.error("$simpleName declares `$collision`, which collides with the generated target-action thunk for the action it would shadow; rename one of them")
+            }
+
         val properties = declaration.getDeclaredProperties().toList()
 
         val lists = properties
@@ -231,7 +244,7 @@ class ViewModelProcessor(
         val dependencies = Dependencies(aggregating = true, *sourceFiles.toTypedArray())
         when (pass) {
             Pass.ANDROID -> AndroidBindingGenerator(codeGenerator, dependencies).generate(viewModels)
-            Pass.IOS -> {
+            Pass.APPLE -> {
                 SwiftKvoGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
                 SwiftUIObservableGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
             }
@@ -240,11 +253,20 @@ class ViewModelProcessor(
         }
     }
 
-    private enum class Pass { ANDROID, IOS, JS, METADATA, OTHER }
+    private enum class Pass { ANDROID, APPLE, JS, METADATA, OTHER }
 
     private companion object {
         const val MARKER_PACKAGE = "com.latenighthack.basekit.viewmodel.gen"
         const val SWIFT_FRAMEWORK_IMPORTS_OPTION = "basekit.viewmodel.swiftFrameworkImports"
+
+        // Every Apple target routes to the one Swift branch. Keeping this coarse is deliberate: the
+        // generated Swift already discriminates UIKit vs AppKit with `#if canImport(...)`, and the
+        // moment the Kotlin pass knew *which* Apple platform it was, sibling passes would emit
+        // different bytes for the same file name — which `collectBasekitViewModelSwift`'s
+        // DuplicatesStrategy.EXCLUDE resolves in unspecified walk order. It also means tvOS/watchOS
+        // need no processor change. Note "macosarm64" contains no "ios" substring, so before this
+        // list existed a macOS pass fell through to OTHER and silently emitted nothing.
+        val APPLE_MARKERS = listOf("ios", "macos", "tvos", "watchos")
 
         fun File.pass(): Pass {
             val path = invariantSeparatorsPath.lowercase()
@@ -252,7 +274,7 @@ class ViewModelProcessor(
             return when {
                 afterKsp.startsWith("metadata/") -> Pass.METADATA
                 afterKsp.contains("android") -> Pass.ANDROID
-                afterKsp.contains("ios") -> Pass.IOS
+                APPLE_MARKERS.any { afterKsp.contains(it) } -> Pass.APPLE
                 afterKsp.startsWith("js/") || afterKsp.contains("/js") || afterKsp.contains("jsmain") -> Pass.JS
                 else -> Pass.OTHER
             }

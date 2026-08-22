@@ -94,7 +94,7 @@ class SwiftUIObservableGenerator(
                 """
                 |    /// Collects `${list.propertyName}` into a SwiftUI `DeltaList`. Drive with
                 |    /// `.task { await model.observe$cap(into: list) }`; each row wraps its child in `Observable${list.elementSimpleName}`.
-                |    @available(iOS 15.0, *)
+                |    ${DeltaListAvailability.SWIFTUI}
                 |    public func observe$cap(into list: DeltaList<${list.elementSimpleName}>) async {
                 |        await list.collect(viewModel.${list.propertyName})
                 |    }

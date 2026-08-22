@@ -1,3 +1,4 @@
+import com.latenighthack.basekit.gradle.appleTargets
 import org.gradle.accessors.dm.LibrariesForLibs
 
 // Base convention for a Kotlin Multiplatform library published to Maven Central.
@@ -17,9 +18,9 @@ kotlin {
 
     jvm()
     androidTarget { publishLibraryVariants("release") }
-    iosArm64()
-    iosX64()
-    iosSimulatorArm64()
+    // ios* + macos* — see AppleTargets.kt. Modules that ship a framework re-use the same list
+    // through appleXcframework(), so targets and XCFramework slices can never drift apart.
+    appleTargets()
     js(IR) {
         browser()
         nodejs()

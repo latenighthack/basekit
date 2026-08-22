@@ -2,7 +2,7 @@ import co.touchlab.skie.configuration.EnumInterop
 import co.touchlab.skie.configuration.FlowInterop
 import co.touchlab.skie.configuration.SealedInterop
 import co.touchlab.skie.configuration.SuspendInterop
-import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
+import com.latenighthack.basekit.gradle.appleXcframework
 
 plugins {
     id("basekit.kmp-library")
@@ -21,19 +21,7 @@ skie {
 }
 
 kotlin {
-    val xcf = XCFramework("BasekitNavigation")
-
-    listOf(
-        iosX64(),
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { target ->
-        target.binaries.framework {
-            baseName = "BasekitNavigation"
-            isStatic = false
-            xcf.add(this)
-        }
-    }
+    appleXcframework("BasekitNavigation", isStatic = false)
 
     sourceSets {
         val commonMain by getting {
