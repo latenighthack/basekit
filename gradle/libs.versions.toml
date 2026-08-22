@@ -45,6 +45,8 @@ deltalist-react = { module = "com.latenighthack.deltalist:deltalist-react", vers
 androidx-recyclerview = { module = "androidx.recyclerview:recyclerview", version.ref = "androidx-recyclerview" }
 androidx-activity = { module = "androidx.activity:activity", version.ref = "androidx-activity" }
 androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidx-lifecycle" }
+# ViewModelProvider + androidx ViewModel: BaseActivity retains the framework ViewModel across config changes.
+androidx-lifecycle-viewmodel = { module = "androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidx-lifecycle" }
 
 # Gradle plugin artifacts referenced from build-logic so the convention plugins can apply them by id.
 plugin-kotlin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }

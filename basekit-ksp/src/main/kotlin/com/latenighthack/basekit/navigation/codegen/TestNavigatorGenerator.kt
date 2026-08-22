@@ -188,7 +188,9 @@ class TestNavigatorGenerator(
             |
             |    override fun close(context: Any?) {
             |        // Closing a still-pending responding destination dismisses it: the caller resumes with null.
-            |        (recorder.history.value.lastOrNull() as? NavigationEvent.NavigatedTo)?.responder?.respond(null)
+            |        // Keys off the pending-responder stack, not the last event, so it still resolves a picker
+            |        // that was navigated away from before the close.
+            |        recorder.dismissTopPending()
             |        recorder.record(NavigationEvent.Closed(context))
             |    }
             |

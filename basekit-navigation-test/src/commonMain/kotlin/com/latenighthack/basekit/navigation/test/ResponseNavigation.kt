@@ -25,11 +25,18 @@ public suspend fun <R : Any> NavigationRecorder.recordAndAwaitResponse(
     context: Any?,
 ): R? {
     val deferred = CompletableDeferred<R?>()
-    val responder = NavigationResponder<R> { response -> deferred.complete(response) }
+    lateinit var responder: NavigationResponder<R>
+    responder = NavigationResponder<R> { response ->
+        // Resolving removes it from the pending stack so a later close() dismisses the next one, not this.
+        removePending(responder)
+        deferred.complete(response)
+    }
+    addPending(responder)
     record(NavigationEvent.NavigatedTo(destination, args, source, context, responder))
     return try {
         deferred.await()
     } catch (cancellation: CancellationException) {
+        removePending(responder)
         deferred.cancel()
         throw cancellation
     }

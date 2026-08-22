@@ -24,6 +24,12 @@ kotlin {
                 api(libs.kotlin.inject.runtime)
             }
         }
+        val commonTest by getting {
+            dependencies {
+                // Virtual-time scheduler (runTest) for the StatefulViewModel update/serialization tests.
+                implementation(libs.kotlinx.coroutines.test)
+            }
+        }
         val androidMain by getting {
             dependencies {
                 implementation(libs.kotlinx.coroutines.android)
@@ -32,6 +38,8 @@ kotlin {
                 // Abstract{Vm}Activity, so consumers need them on their compile classpath: expose as api.
                 api(libs.androidx.activity)
                 api(libs.androidx.lifecycle.runtime.ktx)
+                // ViewModelProvider/androidx ViewModel back BaseActivity's config-change retention.
+                implementation(libs.androidx.lifecycle.viewmodel)
                 api(libs.androidx.recyclerview)
                 api(libs.deltalist.android.recyclerview)
             }

@@ -4,6 +4,7 @@ import com.latenighthack.basekit.navigation.NavigationResponder
 import com.latenighthack.basekit.navigation.NavigatorArgs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlin.reflect.KClass
 
 /**
@@ -40,9 +41,35 @@ public sealed class NavigationEvent {
 public class NavigationRecorder {
     private val events = MutableStateFlow<List<NavigationEvent>>(emptyList())
 
+    // Unresolved responders from responding navigations, most-recent last. `close()` dismisses the
+    // top one; a responder removes itself on resolve. This is what fixes the leak a naive
+    // "respond on the last history entry" close had: navigate to a picker, navigate elsewhere, then
+    // close — the picker is no longer the last event, but it is still the top pending responder.
+    private val pendingResponders = ArrayDeque<NavigationResponder<*>>()
+
     public val history: StateFlow<List<NavigationEvent>> = events
 
     public fun record(event: NavigationEvent) {
-        events.value = events.value + event
+        events.update { it + event }
+    }
+
+    /** Tracks a responder awaiting resolution. Internal: driven by [recordAndAwaitResponse]. */
+    internal fun addPending(responder: NavigationResponder<*>) {
+        pendingResponders.addLast(responder)
+    }
+
+    /** Drops a responder that resolved or whose caller was cancelled. Idempotent. */
+    internal fun removePending(responder: NavigationResponder<*>) {
+        pendingResponders.remove(responder)
+    }
+
+    /**
+     * Dismisses the most recent still-pending responding navigation by resolving its caller with
+     * null. A no-op when nothing is pending. The generated `close()` calls this so a back/close over
+     * a responding destination always resumes its suspended caller, even when later navigations have
+     * happened since.
+     */
+    public fun dismissTopPending() {
+        pendingResponders.removeLastOrNull()?.respond(null)
     }
 }

@@ -4,7 +4,10 @@ import android.content.Context
 import android.os.Bundle
 import android.view.View
 import androidx.activity.ComponentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
 
 /**
@@ -13,6 +16,12 @@ import kotlinx.coroutines.launch
  *
  * Being a [ComponentActivity] makes the Activity a `LifecycleOwner`, so state collection is scoped to
  * `lifecycleScope` and deltalist list adapters can bind against `this` — no manual teardown needed.
+ *
+ * The framework ViewModel is retained across configuration changes: it is held in an androidx
+ * [androidx.lifecycle.ViewModel] via [ViewModelProvider], so a rotation reuses the same instance
+ * (and its state) instead of rebuilding it. State collection runs under
+ * [repeatOnLifecycle]`(STARTED)`, so it stops while the Activity is stopped and restarts — replaying
+ * the latest conflated state — when it returns to the foreground.
  */
 public abstract class BaseActivity<VM : ViewModel<State>, State> : ComponentActivity() {
 
@@ -24,7 +33,7 @@ public abstract class BaseActivity<VM : ViewModel<State>, State> : ComponentActi
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        viewModel = createViewModel()
+        viewModel = retainedViewModel()
         rootView = createView(this, viewModel)
         setContentView(rootView)
 
@@ -33,8 +42,23 @@ public abstract class BaseActivity<VM : ViewModel<State>, State> : ComponentActi
         onStateChanged(viewModel, viewModel.initialState)
 
         lifecycleScope.launch {
-            viewModel.state.collect { state -> onStateChanged(viewModel, state) }
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.state.collect { state -> onStateChanged(viewModel, state) }
+            }
         }
+    }
+
+    /**
+     * Returns the retained framework ViewModel, constructing it via [createViewModel] only on first
+     * creation. On a configuration change the same instance is returned, so its state survives.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun retainedViewModel(): VM {
+        val factory = object : ViewModelProvider.Factory {
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
+                RetainedHolder(createViewModel()) as T
+        }
+        return ViewModelProvider(this, factory)[RetainedHolder::class.java].value as VM
     }
 
     protected abstract fun createViewModel(): VM
@@ -45,11 +69,16 @@ public abstract class BaseActivity<VM : ViewModel<State>, State> : ComponentActi
 
     protected open fun onStateChanged(viewModel: VM, state: State) {}
 
-    /** Binds a nested child ViewModel's state, scoped to this Activity's lifecycle. */
+    /** Binds a nested child ViewModel's state, scoped to this Activity's STARTED lifecycle. */
     protected fun <T : ViewModel<S>, S> bindChildViewModel(child: T, onState: (T, S) -> Unit) {
         onState(child, child.initialState)
         lifecycleScope.launch {
-            child.state.collect { onState(child, it) }
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                child.state.collect { onState(child, it) }
+            }
         }
     }
+
+    /** Config-change-retained holder for the framework ViewModel (which is not an androidx ViewModel). */
+    private class RetainedHolder(val value: Any?) : androidx.lifecycle.ViewModel()
 }
