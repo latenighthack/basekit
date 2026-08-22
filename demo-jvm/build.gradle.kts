@@ -3,7 +3,7 @@
 // kotlin-inject processors over the scanned package to generate the screens, component, and TuiApp.
 plugins {
     id("org.jetbrains.kotlin.jvm")
-    id("basekit.tui")
+    id("com.latenighthack.basekit.tui")
     application
 }
 

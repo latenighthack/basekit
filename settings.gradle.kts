@@ -1,7 +1,12 @@
 pluginManagement {
-    // Convention plugins (basekit.kmp-library / basekit.jvm-library / basekit.navigation)
-    // live in the build-logic included build.
+    // Internal build conventions (basekit.kmp-library / basekit.jvm-library) live in build-logic.
     includeBuild("build-logic")
+    // The published consumer plugins (com.latenighthack.basekit.{navigation,viewmodel,tui}) live in
+    // basekit-gradle-plugin. Including it here lets the in-repo demos apply them by id and dogfood the
+    // exact plugins that ship to Maven Central; the root gradle.properties sets
+    // basekit.useProjectDependencies=true so the demos resolve the processors via project() rather
+    // than the published coordinate.
+    includeBuild("basekit-gradle-plugin")
     repositories {
         google()
         mavenCentral()

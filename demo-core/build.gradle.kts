@@ -4,8 +4,8 @@ import com.latenighthack.basekit.gradle.appleXcframework
 // generates compilable navigators/routes across every target (android/jvm/js/ios/macos via SKIE).
 plugins {
     id("basekit.kmp-library")
-    id("basekit.navigation")
-    id("basekit.viewmodel")
+    id("com.latenighthack.basekit.navigation")
+    id("com.latenighthack.basekit.viewmodel")
     alias(libs.plugins.ksp)
     alias(libs.plugins.skie)
 }
