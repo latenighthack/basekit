@@ -38,15 +38,11 @@ jobs:
             exit 1
           fi
 
-      # Only the snapshot-free modules are released to Central. Of the `tui` slice, only
-      # basekit-tui (runtime) api-depends on the snapshot-only TamboUI toolkit, and Maven Central
-      # rejects releases with SNAPSHOT deps — so ONLY basekit-tui is excluded. Its annotations
-      # (kotlin-stdlib only) and ksp (ksp-api only) processors are snapshot-free and ARE published:
-      # fullhouse's :core consumes basekit-tui-annotations (@TuiScreen marker) and must resolve it
-      # from Central on CI. basekit-tui (runtime) is consumed only by fullhouse's JVM :tui module
-      # from mavenLocal / the Central snapshot repo until TamboUI cuts a release. `demo-*` are not
+      # Every basekit module is released to Central, including the whole `tui` slice. basekit-tui
+      # declares the snapshot-only TamboUI as `compileOnly`, so it never reaches the published POM
+      # (Central rejects SNAPSHOT deps) — consumers supply TamboUI themselves. `demo-*` are not
       # published. deltalist resolves from Central (see settings.gradle.kts) — publish it first.
-      - name: Publish and release (snapshot-free modules)
+      - name: Publish and release
         run: >
           ./gradlew --no-configuration-cache --stacktrace
           :basekit-annotations:publishAndReleaseToMavenCentral
@@ -57,6 +53,7 @@ jobs:
           :basekit-viewmodel:publishAndReleaseToMavenCentral
           :basekit-viewmodel-ksp:publishAndReleaseToMavenCentral
           :basekit-tui-annotations:publishAndReleaseToMavenCentral
+          :basekit-tui:publishAndReleaseToMavenCentral
           :basekit-tui-ksp:publishAndReleaseToMavenCentral
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}

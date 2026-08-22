@@ -14,6 +14,11 @@ kotlin {
 dependencies {
     implementation(project(":demo-core"))
     implementation(project(":basekit-tui"))
+    // basekit-tui declares TamboUI compileOnly, so the consuming app supplies it (and picks the
+    // version). The generated screens return TamboUI Elements, so the toolkit is a compile dep;
+    // a backend must be on the runtime classpath for its ServiceLoader to find a terminal.
+    implementation(libs.tamboui.toolkit)
+    runtimeOnly(libs.tamboui.jline3.backend)
 }
 
 ksp {
