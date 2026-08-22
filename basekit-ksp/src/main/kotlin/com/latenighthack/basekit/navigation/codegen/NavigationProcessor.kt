@@ -93,12 +93,26 @@ class NavigationProcessor(
         val webPath = declaration.stringArgument(DESTINATION_ANNOTATION, "webPath")
         val routePath = routeFromArgs?.takeIf { it.isNotEmpty() } ?: webPath?.takeIf { it.isNotEmpty() }
 
-        val routeArgs = argsDeclaration
+        val routeArgProperties = argsDeclaration
             ?.getDeclaredProperties()
             ?.filter { prop -> prop.annotations.any { it.qualifiedName() == ROUTE_ARG_ANNOTATION } }
-            ?.map { it.simpleName.asString() }
             ?.toList()
             .orEmpty()
+
+        // Route params are bound from the matched URL as raw Strings (RouteTableGenerator emits
+        // `x = params.getValue("x")`), so a non-String @RouteArg would produce a type error in code the
+        // consumer never wrote. Flag it here, where the property's source location is known.
+        routeArgProperties
+            .filter { it.type.resolve().declaration.qualifiedName?.asString() != "kotlin.String" }
+            .forEach { prop ->
+                logger.error(
+                    "@RouteArg ${simpleName}.${prop.simpleName.asString()} must be a String " +
+                        "(route params are bound from the URL as text); convert inside the ViewModel instead",
+                    prop,
+                )
+            }
+
+        val routeArgs = routeArgProperties.map { it.simpleName.asString() }
 
         val edges = declaration.getDeclaredFunctions().flatMap { function ->
             val methodName = function.simpleName.asString()
@@ -111,10 +125,13 @@ class NavigationProcessor(
                 }
         }.toList()
 
+        val navNameOverride = declaration.stringArgument(DESTINATION_ANNOTATION, "navName")
+            ?.takeIf { it.isNotEmpty() }
+
         return DestinationInfo(
             simpleName = simpleName,
             qualifiedName = qualifiedName,
-            navName = simpleName.toDestinationNavName(),
+            navName = navNameOverride ?: simpleName.toDestinationNavName(),
             argsQualifiedName = argsDeclaration?.qualifiedName?.asString(),
             responseQualifiedName = responseDeclaration?.qualifiedName?.asString(),
             routePath = routePath,
@@ -131,6 +148,21 @@ class NavigationProcessor(
         val marker = codeGenerator.generatedFile.firstOrNull() ?: return
         if (!marker.isMetadataPass()) return
         if (destinations.isEmpty()) return
+
+        // Every generated navigator/target type is named from the destination's navName, and they all
+        // land in one flattened package. Two destinations that derive the same navName would emit the
+        // same file twice — a FileAlreadyExistsException with no hint at the cause. Fail with a clear
+        // message (and point at @Destination(navName = ...)) instead.
+        val collisions = destinations.groupBy { it.navName }.filterValues { it.size > 1 }
+        if (collisions.isNotEmpty()) {
+            collisions.forEach { (navName, group) ->
+                logger.error(
+                    "Destinations ${group.map { it.qualifiedName }.sorted()} all derive the navigation " +
+                        "name \"$navName\"; disambiguate with @Destination(navName = \"...\") on all but one",
+                )
+            }
+            return
+        }
 
         val navigationPackage = resolveNavigationPackage()
         val dependencies = Dependencies(aggregating = true, *sourceFiles.toTypedArray())

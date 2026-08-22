@@ -114,6 +114,19 @@ class TuiProcessor(
             .filter { it.hasAnnotation(VIEWMODEL_MODULE_ANNOTATION) }
             .mapNotNull { it.qualifiedName?.asString() }
 
+        // Two ViewModels with the same simple name would emit the same `<Name>Screen` file twice — a
+        // FileAlreadyExistsException with no hint at the cause. Fail with a clear message instead.
+        val screenCollisions = screens.groupBy { it.screenClassName }.filterValues { it.size > 1 }
+        if (screenCollisions.isNotEmpty()) {
+            screenCollisions.forEach { (screenClass, group) ->
+                logger.error(
+                    "@TuiScreen ViewModels ${group.map { it.vmQualifiedName }.sorted()} both generate " +
+                        "`$screenClass`; give them distinct simple names",
+                )
+            }
+            return emptyList()
+        }
+
         // Generate here (not in finish()): files emitted in finish() are terminal and would never be
         // handed to kotlin-inject's processor, so its `create()` for our @Component would never appear.
         if (!generated && screens.isNotEmpty()) {

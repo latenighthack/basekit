@@ -7,9 +7,14 @@ import kotlin.reflect.KClass
  * type from its `NavigationDestination<Args>` supertype and adds it to the app navigation graph.
  *
  * @param webPath optional deep-link path; a `@Route` on the `Args` type takes precedence.
+ * @param navName overrides the generated navigation name (the basis for the `<X>NavigationTarget` /
+ *   `<X>Navigator` type names). Defaults to the simple name with a leading `I` and a trailing
+ *   `Screen`/`Destination`/`Route`/`ViewModel` suffix stripped. Set this to disambiguate two
+ *   destinations that would otherwise derive the same name (e.g. `home.HomeScreen` and
+ *   `admin.HomeScreen`), which is otherwise a build error.
  */
 @Target(AnnotationTarget.CLASS)
-public annotation class Destination(val webPath: String = "")
+public annotation class Destination(val webPath: String = "", val navName: String = "")
 
 /** Declares the deep-link path template for a destination's `Args` type, e.g. `/detail/{id}`. */
 @Target(AnnotationTarget.CLASS)
