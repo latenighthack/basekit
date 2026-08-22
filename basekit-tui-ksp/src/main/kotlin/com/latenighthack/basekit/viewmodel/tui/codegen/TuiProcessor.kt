@@ -23,6 +23,10 @@ private const val VIEWMODEL_INJECT_ANNOTATION = "com.latenighthack.basekit.viewm
 private const val VIEWMODEL_MODULE_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelModule"
 private const val VIEWMODEL_INTERFACE = "com.latenighthack.basekit.viewmodel.ViewModel"
 private const val TUISCREEN_ANNOTATION = "com.latenighthack.basekit.viewmodel.tui.annotations.TuiScreen"
+private const val TUIFIELD_ANNOTATION = "com.latenighthack.basekit.viewmodel.tui.annotations.TuiField"
+private const val TUIACTION_ANNOTATION = "com.latenighthack.basekit.viewmodel.tui.annotations.TuiAction"
+private const val TUITOGGLE_ANNOTATION = "com.latenighthack.basekit.viewmodel.tui.annotations.TuiToggle"
+private const val TUILIST_ANNOTATION = "com.latenighthack.basekit.viewmodel.tui.annotations.TuiList"
 private const val DESTINATION_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.Destination"
 private const val ROUTE_ARG_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.RouteArg"
 private const val NAVIGATE_TO_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.NavigateTo"
@@ -235,17 +239,75 @@ class TuiProcessor(
         }
 
         // Suspend methods split by arity: zero-arg ones become key-bound actions; single Bool/String-arg
-        // ones become mutations the TUI prompts for. Keys are assigned across both so they never collide.
+        // ones become mutations the TUI prompts for. `@TuiAction` tunes label/key/hidden; `@TuiToggle`
+        // turns a Boolean mutation into a state toggle. Keys are assigned across both — honoring pinned
+        // keys and skipping hidden ones — so they never collide.
         val suspendFns = vm.getDeclaredFunctions()
             .filter { it.modifiers.contains(Modifier.SUSPEND) && !it.simpleName.asString().startsWith("<") }
             .toList()
-        val actionNames = suspendFns.filter { it.parameters.isEmpty() }.map { it.simpleName.asString() }
+        val actionFns = suspendFns.filter { it.parameters.isEmpty() }
         val mutationFns = suspendFns.mapNotNull { fn ->
-            fn.parameters.singleOrNull()?.mutationParamKind()?.let { fn.simpleName.asString() to it }
+            fn.parameters.singleOrNull()?.mutationParamKind()?.let { fn to it }
         }
-        val keys = assignKeys(actionNames + mutationFns.map { it.first })
-        val actions = actionNames.map { Action(it, keys.getValue(it)) }
-        val mutations = mutationFns.map { (name, kind) -> Mutation(name, keys.getValue(name), kind) }
+
+        // Auto-assign keys only to the visible elements without a pinned key; pinned keys are reserved so
+        // auto-assignment never lands on them.
+        val visibleFns = (actionFns + mutationFns.map { it.first })
+            .filter { it.booleanArgument(TUIACTION_ANNOTATION, "hidden") != true }
+        val pinnedKeys = visibleFns.mapNotNull { fn ->
+            fn.charArgument(TUIACTION_ANNOTATION, "key")?.takeIf { it != ' ' }
+                ?.let { fn.simpleName.asString() to it }
+        }.toMap()
+        val keys = assignKeys(visibleFns.map { it.simpleName.asString() }, pinnedKeys)
+
+        val actions = actionFns.map { fn ->
+            val name = fn.simpleName.asString()
+            Action(
+                name = name,
+                key = keys[name] ?: ' ',
+                label = fn.stringArgument(TUIACTION_ANNOTATION, "label")?.takeIf { it.isNotEmpty() },
+                hidden = fn.booleanArgument(TUIACTION_ANNOTATION, "hidden") == true,
+            )
+        }
+        val mutations = mutationFns.map { (fn, kind) ->
+            val name = fn.simpleName.asString()
+            Mutation(
+                name = name,
+                key = keys[name] ?: ' ',
+                paramKind = kind,
+                label = fn.stringArgument(TUIACTION_ANNOTATION, "label")?.takeIf { it.isNotEmpty() },
+                hidden = fn.booleanArgument(TUIACTION_ANNOTATION, "hidden") == true,
+                toggleField = fn.stringArgument(TUITOGGLE_ANNOTATION, "field")?.takeIf { it.isNotEmpty() },
+            )
+        }
+
+        // Merge each `@TuiToggle` mutation with the Boolean State property it names: the property renders
+        // as a toggle whose flip is driven by the mutation. Misconfigurations are hard errors so the
+        // author sees them instead of silently getting the default t/f prompt.
+        val baseStateProps = stateDecl.stateProps()
+        val statePropsByName = baseStateProps.associateBy { it.name }
+        for (fn in suspendFns.filter { it.hasAnnotation(TUITOGGLE_ANNOTATION) }) {
+            val name = fn.simpleName.asString()
+            val kind = fn.parameters.singleOrNull()?.mutationParamKind()
+            val field = fn.stringArgument(TUITOGGLE_ANNOTATION, "field")?.takeIf { it.isNotEmpty() }
+            val target = field?.let { statePropsByName[it] }
+            when {
+                kind != MutationParamKind.BOOL ->
+                    logger.error("@TuiToggle on $vmName.$name must annotate a single-Boolean-argument suspend function")
+                field == null ->
+                    logger.error("@TuiToggle on $vmName.$name requires a non-empty field name")
+                target == null ->
+                    logger.error("@TuiToggle(field = \"$field\") on $vmName.$name names no State property of $vmName")
+                target.typeSimpleName != "Boolean" ->
+                    logger.error("@TuiToggle(field = \"$field\") on $vmName.$name must target a Boolean State property, but $field is ${target.typeSimpleName}")
+            }
+        }
+        val stateProps = baseStateProps.map { prop ->
+            val toggle = mutations.firstOrNull {
+                it.toggleField == prop.name && it.paramKind == MutationParamKind.BOOL && prop.typeSimpleName == "Boolean"
+            }
+            if (toggle != null) prop.copy(style = FieldStyle.TOGGLE, hidden = false, toggleMutation = toggle.name) else prop
+        }
 
         // The impl's `@Assisted` params (in ctor order) — each supplied by the component per screen build.
         // Classified by type so screenForDestination hands over the right value. A screen may take more
@@ -268,7 +330,7 @@ class TuiProcessor(
             implQualifiedName = implQn,
             injected = injected,
             stateQualifiedName = stateDecl.qualifiedName!!.asString(),
-            stateProps = stateDecl.stateProps(),
+            stateProps = stateProps,
             actions = actions,
             mutations = mutations,
             list = list,
@@ -313,13 +375,26 @@ class TuiProcessor(
             elementQualifiedName = elementDecl.qualifiedName!!.asString(),
             elementStateProps = elementState?.stateProps().orEmpty(),
             selectionAction = selectionAction,
+            label = prop.stringArgument(TUILIST_ANNOTATION, "label")?.takeIf { it.isNotEmpty() },
         )
     }
 
     private fun KSClassDeclaration.stateProps(): List<StateProp> =
         getDeclaredProperties().mapNotNull { prop ->
             val type = prop.type.resolve().declaration
-            StateProp(prop.simpleName.asString(), type.simpleName.asString())
+            val style = prop.enumArgument(TUIFIELD_ANNOTATION, "render")
+                ?.let { runCatching { FieldStyle.valueOf(it) }.getOrNull() } ?: FieldStyle.AUTO
+            val transform = prop.enumArgument(TUIFIELD_ANNOTATION, "transform")
+                ?.let { runCatching { Transform.valueOf(it) }.getOrNull() } ?: Transform.NONE
+            StateProp(
+                name = prop.simpleName.asString(),
+                typeSimpleName = type.simpleName.asString(),
+                label = prop.stringArgument(TUIFIELD_ANNOTATION, "label")?.takeIf { it.isNotEmpty() },
+                style = style,
+                transform = transform,
+                max = prop.intArgument(TUIFIELD_ANNOTATION, "max") ?: 0,
+                hidden = style == FieldStyle.HIDDEN,
+            )
         }.toList()
 
     /** The Bool/String argument kind of a mutation parameter, or null for any other type (not exposed). */
@@ -334,17 +409,26 @@ class TuiProcessor(
 
 /**
  * Assigns a distinct trigger key to each method name (preferring a letter of the name past the `on`
- * prefix), returned as a name -> key map. `q` is pre-reserved so no binding shadows the quit key.
- * A name with no free letter falls back to `'?'`. Top-level + `internal` so it is unit-testable.
+ * prefix), returned as a name -> key map. Any [pinned] keys (from `@TuiAction(key = …)`) are used verbatim
+ * and reserved so auto-assignment never lands on them. `q` is pre-reserved so no binding shadows the quit
+ * key. A name with no free letter falls back to `'?'`. Top-level + `internal` so it is unit-testable.
  */
-internal fun assignKeys(names: List<String>): Map<String, Char> {
+internal fun assignKeys(names: List<String>, pinned: Map<String, Char> = emptyMap()): Map<String, Char> {
     val used = mutableSetOf('q')
-    return names.associateWith { name ->
+    used.addAll(pinned.values.map { it.lowercaseChar() })
+    val result = LinkedHashMap<String, Char>()
+    for (name in names) {
+        val forced = pinned[name]
+        if (forced != null) {
+            result[name] = forced
+            continue
+        }
         val base = name.removePrefix("on")
         val ch = base.firstOrNull { it.isLetter() && it.lowercaseChar() !in used }?.lowercaseChar()
             ?: name.firstOrNull { it.isLetter() && it.lowercaseChar() !in used }?.lowercaseChar()
             ?: '?'
         used.add(ch)
-        ch
+        result[name] = ch
     }
+    return result
 }

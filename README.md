@@ -208,6 +208,10 @@ the convention plugins under [`basekit-gradle-plugin/`](basekit-gradle-plugin/sr
 | `@ViewModelInject` | viewmodel | class | Wires a concrete impl into the generated kotlin-inject module |
 | `@ViewModelModule` | viewmodel | interface | App-supplied kotlin-inject providers the component includes |
 | `@TuiScreen(destination, implementation)` | tui | interface | Binds a ViewModel to a destination as a terminal screen |
+| `@TuiField(label, render, transform, max)` | tui | `State` property | Render hint for a state row: rename, drop (`HIDDEN`), transform the text, or draw it as a `TOGGLE`/`BAR` |
+| `@TuiAction(label, key, hidden)` | tui | function | Render hint for an action/mutation: rename it, pin its trigger key, or hide it |
+| `@TuiToggle(field)` | tui | function | Merges a `Boolean` mutation with the `Boolean` state property it sets into one toggle whose key flips it |
+| `@TuiList(label)` | tui | property | Render hint for a `@ViewModelList`: overrides the list title |
 | `@CodegenIgnore` | all | element | Excludes an element from codegen |
 
 ## KSP options

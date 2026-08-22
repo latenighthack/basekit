@@ -2,6 +2,7 @@ package com.latenighthack.basekit.viewmodel.tui.codegen
 
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSAnnotation
+import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import java.io.OutputStream
 
@@ -27,6 +28,38 @@ fun KSAnnotated.stringArgument(annotationFqn: String, argumentName: String): Str
     annotations.firstOrNull { it.qualifiedName() == annotationFqn }
         ?.arguments?.firstOrNull { it.name?.asString() == argumentName }
         ?.value as? String
+
+/** Reads the raw `value` of an annotation argument, or null if the annotation/argument is absent. */
+private fun KSAnnotated.rawArgument(annotationFqn: String, argumentName: String): Any? =
+    annotations.firstOrNull { it.qualifiedName() == annotationFqn }
+        ?.arguments?.firstOrNull { it.name?.asString() == argumentName }
+        ?.value
+
+/** Reads a `Char`-valued annotation argument, or null if the annotation/argument is absent. */
+fun KSAnnotated.charArgument(annotationFqn: String, argumentName: String): Char? =
+    rawArgument(annotationFqn, argumentName) as? Char
+
+/** Reads an `Int`-valued annotation argument, or null if the annotation/argument is absent. */
+fun KSAnnotated.intArgument(annotationFqn: String, argumentName: String): Int? =
+    rawArgument(annotationFqn, argumentName) as? Int
+
+/** Reads a `Boolean`-valued annotation argument, or null if the annotation/argument is absent. */
+fun KSAnnotated.booleanArgument(annotationFqn: String, argumentName: String): Boolean? =
+    rawArgument(annotationFqn, argumentName) as? Boolean
+
+/**
+ * Reads an enum-valued annotation argument and returns the entry's simple name (e.g. "BAR"), or null if
+ * absent. KSP surfaces enum arguments differently across versions — as a [KSType], a [KSClassDeclaration],
+ * or a plain string like "TuiRenderAs.BAR" — so all forms are reduced to the trailing entry name; map it
+ * into a codegen enum with `enumValueOf`.
+ */
+fun KSAnnotated.enumArgument(annotationFqn: String, argumentName: String): String? =
+    when (val value = rawArgument(annotationFqn, argumentName)) {
+        null -> null
+        is KSType -> value.declaration.simpleName.asString()
+        is KSClassDeclaration -> value.simpleName.asString()
+        else -> value.toString().substringAfterLast('.')
+    }
 
 /** Splits an identifier into its words, e.g. "onOpenDetail" -> [on, Open, Detail]. */
 fun String.camelWords(): List<String> =

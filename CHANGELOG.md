@@ -7,6 +7,12 @@ All notable changes to basekit are documented here. The format follows
 ## [Unreleased] — 0.2.0
 
 ### Added
+- TUI render hints — `@TuiField`, `@TuiAction`, `@TuiToggle`, `@TuiList` — that steer how the tui
+  processor draws each element: relabel/pin-key/hide actions, rename or hide state rows, transform a
+  value's text, draw a number as a gauge (`BAR`) or a `Boolean` as a checkbox (`TOGGLE`), and merge a
+  `Boolean` mutation with the state property it sets into a single interactive toggle. Routed end-to-end
+  (annotation → `TuiProcessor` → generated `<Vm>Screen` → `TuiRender`); the TUI infers sensible defaults
+  when no hint is present.
 - macOS targets (`macosArm64`, `macosX64`) across the KMP modules; the Apple ViewModel codegen is
   now one universal Swift file per ViewModel (UIKit vs AppKit selected with `#if canImport`).
 - `build.yml` CI: builds every target, links the Apple frameworks, and type-checks the generated

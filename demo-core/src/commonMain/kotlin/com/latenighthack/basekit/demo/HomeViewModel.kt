@@ -10,6 +10,7 @@ import com.latenighthack.basekit.viewmodel.ViewModel
 import com.latenighthack.basekit.viewmodel.annotations.ViewModelInject
 import com.latenighthack.basekit.viewmodel.annotations.ViewModelList
 import com.latenighthack.basekit.viewmodel.annotations.ViewModelSpec
+import com.latenighthack.basekit.viewmodel.tui.annotations.TuiList
 import com.latenighthack.basekit.viewmodel.tui.annotations.TuiScreen
 import com.latenighthack.deltalist.Delta
 import com.latenighthack.deltalist.mutableDeltaListOf
@@ -35,6 +36,7 @@ interface HomeViewModel :
     data class State(val title: String, val subtitle: String?)
 
     @ViewModelList(FeedItemViewModel::class)
+    @TuiList(label = "Feed items")
     val items: Flow<Delta<FeedItemViewModel>>
 
     /** Append a new store-seeded row. */

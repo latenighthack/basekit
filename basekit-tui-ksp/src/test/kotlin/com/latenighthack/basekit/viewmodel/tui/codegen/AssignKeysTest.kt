@@ -34,4 +34,20 @@ class AssignKeysTest {
         // Both start with 'a'; the second has no other free letter, so it falls back.
         assertTrue(keys.values.contains('?') || keys.values.toSet().size == 2)
     }
+
+    @Test
+    fun uses_pinned_keys_verbatim() {
+        val keys = assignKeys(listOf("onIncrement", "onReset"), pinned = mapOf("onIncrement" to 'a'))
+        assertEquals('a', keys["onIncrement"])
+        assertEquals('r', keys["onReset"])
+    }
+
+    @Test
+    fun auto_assignment_avoids_pinned_keys() {
+        // "onReset" would prefer 'r'; pinning 'r' to onReload forces onReset onto another free letter.
+        val keys = assignKeys(listOf("onReload", "onReset"), pinned = mapOf("onReload" to 'r'))
+        assertEquals('r', keys["onReload"])
+        assertTrue(keys.getValue("onReset") != 'r')
+        assertEquals(2, keys.values.toSet().size, "each action still gets a unique key: $keys")
+    }
 }

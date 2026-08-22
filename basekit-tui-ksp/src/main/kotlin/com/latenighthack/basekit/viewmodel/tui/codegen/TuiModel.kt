@@ -1,10 +1,33 @@
 package com.latenighthack.basekit.viewmodel.tui.codegen
 
-/** One property of a ViewModel's `State` type (used to build the state table / list rows). */
-data class StateProp(val name: String, val typeSimpleName: String)
+/** How a state property is drawn — mirrors the `TuiRenderAs` annotation enum by name. */
+enum class FieldStyle { AUTO, TEXT, TOGGLE, BAR, HIDDEN }
 
-/** A zero-arg suspend action, with the key that triggers it in the TUI. */
-data class Action(val name: String, val key: Char)
+/** A text transform applied to a field's displayed value — mirrors the `TuiTransform` annotation enum by name. */
+enum class Transform { NONE, UPPERCASE, LOWERCASE, TITLE_CASE }
+
+/**
+ * One property of a ViewModel's `State` type (used to build the state table / list rows). The hint fields
+ * come from a `@TuiField` on the property (or, for [toggleMutation]/[style], from a `@TuiToggle` on the
+ * mutation that sets it); [label] is null when the row title should derive from [name].
+ */
+data class StateProp(
+    val name: String,
+    val typeSimpleName: String,
+    val label: String? = null,
+    val style: FieldStyle = FieldStyle.AUTO,
+    val transform: Transform = Transform.NONE,
+    val max: Int = 0,
+    val hidden: Boolean = false,
+    // Set when a `@TuiToggle` mutation binds to this property: the mutation method name whose key flips it.
+    val toggleMutation: String? = null,
+)
+
+/**
+ * A zero-arg suspend action, with the key that triggers it in the TUI. [label] is null when the actions
+ * bar should show the raw method [name]; [hidden] omits it from the bar (and binds no key).
+ */
+data class Action(val name: String, val key: Char, val label: String? = null, val hidden: Boolean = false)
 
 /** The single argument a [Mutation] method takes, deciding how the TUI collects its value. */
 enum class MutationParamKind { BOOL, STRING }
@@ -14,7 +37,16 @@ enum class MutationParamKind { BOOL, STRING }
  * the argument — `true`/`false` for [MutationParamKind.BOOL], typed text for [MutationParamKind.STRING] —
  * and then invokes the method with the collected value.
  */
-data class Mutation(val name: String, val key: Char, val paramKind: MutationParamKind)
+data class Mutation(
+    val name: String,
+    val key: Char,
+    val paramKind: MutationParamKind,
+    val label: String? = null,
+    val hidden: Boolean = false,
+    // Set from a `@TuiToggle` on the (Boolean) mutation: the State property name it toggles. When present
+    // the key flips the property via `mutation(!current)` instead of opening a true/false prompt.
+    val toggleField: String? = null,
+)
 
 /**
  * A `@ViewModelList` property: a `Flow<Delta<ElementVm>>` of child ViewModels rendered as a list.
@@ -27,6 +59,8 @@ data class ListInfo(
     val elementQualifiedName: String,
     val elementStateProps: List<StateProp>,
     val selectionAction: String?,
+    // From `@TuiList.label`; null means use [propertyName] as the list title.
+    val label: String? = null,
 )
 
 /**

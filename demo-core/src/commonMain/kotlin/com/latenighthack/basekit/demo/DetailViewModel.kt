@@ -9,7 +9,12 @@ import com.latenighthack.basekit.viewmodel.StatefulViewModel
 import com.latenighthack.basekit.viewmodel.ViewModel
 import com.latenighthack.basekit.viewmodel.annotations.ViewModelInject
 import com.latenighthack.basekit.viewmodel.annotations.ViewModelSpec
+import com.latenighthack.basekit.viewmodel.tui.annotations.TuiAction
+import com.latenighthack.basekit.viewmodel.tui.annotations.TuiField
+import com.latenighthack.basekit.viewmodel.tui.annotations.TuiRenderAs
 import com.latenighthack.basekit.viewmodel.tui.annotations.TuiScreen
+import com.latenighthack.basekit.viewmodel.tui.annotations.TuiToggle
+import com.latenighthack.basekit.viewmodel.tui.annotations.TuiTransform
 import me.tatarka.inject.annotations.Assisted
 import me.tatarka.inject.annotations.Inject
 
@@ -31,8 +36,18 @@ interface DetailViewModel :
         var id: String by storedProperty()
     }
 
-    data class State(val id: String, val body: String, val count: Int, val note: String, val flagged: Boolean)
+    data class State(
+        // Internal id: not worth a table row.
+        @TuiField(render = TuiRenderAs.HIDDEN) val id: String,
+        @TuiField(transform = TuiTransform.UPPERCASE) val body: String,
+        // Draw the count as a gauge out of 100 instead of a bare number.
+        @TuiField(render = TuiRenderAs.BAR, max = 100) val count: Int,
+        @TuiField(label = "Note") val note: String,
+        // Rendered as a toggle row driven by onSetFlagged (see @TuiToggle below).
+        val flagged: Boolean,
+    )
 
+    @TuiAction(label = "Add one", key = 'a')
     suspend fun onIncrement()
 
     suspend fun onReset()
@@ -40,7 +55,8 @@ interface DetailViewModel :
     /** Text-entry mutation: replace this item's note with typed text. */
     suspend fun onSetNote(note: String)
 
-    /** Boolean mutation: flag or unflag this item. */
+    /** Boolean mutation merged with the [State.flagged] row: its key flips the flag directly. */
+    @TuiToggle("flagged")
     suspend fun onSetFlagged(flagged: Boolean)
 }
 
