@@ -18,12 +18,13 @@ import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFrameworkConfig
  * convention plugin declare the targets and each module's XCFramework block re-accessorise them.
  */
 fun KotlinMultiplatformExtension.appleTargets(): List<KotlinNativeTarget> = listOf(
-    iosArm64(),
-    iosX64(),
-    iosSimulatorArm64(),
-    macosArm64(),
-    macosX64(),
-)
+    iosArm64(), iosX64(), iosSimulatorArm64(), macosArm64(), macosX64(),
+).onEach { target ->
+    target.binaries.configureEach {
+        freeCompilerArgs += "-Xoverride-konan-properties=minVersion.ios=18.0"
+        freeCompilerArgs += "-Xoverride-konan-properties=minVersion.macos=15.0"
+    }
+}
 
 /**
  * Declares one XCFramework named [frameworkName] spanning every target in [appleTargets].

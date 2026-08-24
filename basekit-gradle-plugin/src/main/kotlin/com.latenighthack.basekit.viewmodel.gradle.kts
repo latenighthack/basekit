@@ -7,7 +7,7 @@ import java.util.Locale
 // Wires the Basekit viewmodel binding codegen into a KMP module. This processor emits per-platform
 // code, so it is added to every per-target KSP configuration (kspAndroid / kspIosArm64 / … / kspJs)
 // plus the common metadata pass (for the platform-agnostic kotlin-inject bindings module). The
-// generated Apple `.swift` is collected by `collectBasekitViewModelSwift`.
+// generated Apple `.swift` is collected by `collectBasekitAppleSwift`.
 plugins {
     id("com.google.devtools.ksp")
 }
@@ -60,15 +60,40 @@ val verifyUniversalSwift = tasks.register("verifyBasekitViewModelSwiftIsUniversa
     }
 }
 
+val verifyAppleSwift = if ("verifyBasekitAppleSwiftIsUniversal" in tasks.names) {
+    tasks.named("verifyBasekitAppleSwiftIsUniversal")
+} else {
+    tasks.register("verifyBasekitAppleSwiftIsUniversal") {
+        dependsOn(verifyUniversalSwift)
+    }
+}
+verifyAppleSwift.configure { dependsOn(verifyUniversalSwift) }
+
+val collectAppleSwift = if ("collectBasekitAppleSwift" in tasks.names) {
+    tasks.named<Copy>("collectBasekitAppleSwift")
+} else {
+    tasks.register<Copy>("collectBasekitAppleSwift") {
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        includeEmptyDirs = false
+        into(layout.buildDirectory.dir("generated/basekit-apple/swift"))
+    }
+}
+collectAppleSwift.configure {
+    dependsOn(verifyAppleSwift, tasks.matching { it.name.startsWith("ksp") })
+    from(layout.buildDirectory.dir("generated/ksp")) {
+        include("**/*.swift")
+        eachFile { path = name }
+    }
+}
+
 // Flatten the per-Apple-target generated Swift into one stable directory a Swift package / Xcode
 // target can include. Opt-in (not part of `build`). It scans the whole generated/ksp tree, so it
 // must depend on every KSP task that writes there (Android/JS/Apple), not only the Apple ones.
 tasks.register<Copy>("collectBasekitViewModelSwift") {
-    dependsOn(verifyUniversalSwift)
-    dependsOn(tasks.matching { it.name.startsWith("ksp") })
+    dependsOn(collectAppleSwift)
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     includeEmptyDirs = false
-    from(layout.buildDirectory.dir("generated/ksp")) {
+    from(layout.buildDirectory.dir("generated/basekit-apple/swift")) {
         include("**/*.swift")
     }
     eachFile { path = name }

@@ -22,6 +22,7 @@ private const val NAVIGATION_DESTINATION = "com.latenighthack.basekit.navigation
 private const val RESPONDING_DESTINATION = "com.latenighthack.basekit.navigation.RespondingDestination"
 private const val NAVIGATION_PACKAGE_OPTION = "Basekit_NavigationPackage"
 private const val GENERATE_TEST_NAVIGATOR_OPTION = "Basekit_GenerateTestNavigator"
+private const val SWIFT_FRAMEWORK_IMPORTS_OPTION = "basekit.navigation.swiftFrameworkImports"
 
 /** A `@NavigateTo` edge from a source destination action to a target destination. */
 data class NavEdge(val methodName: String, val targetQualifiedName: String)
@@ -32,7 +33,9 @@ data class DestinationInfo(
     val qualifiedName: String,
     val navName: String,
     val argsQualifiedName: String?,
+    val argsSwiftName: String?,
     val responseQualifiedName: String?,
+    val responseSwiftName: String?,
     val routePath: String?,
     val routeArgs: List<String>,
     val edges: List<NavEdge>,
@@ -133,7 +136,9 @@ class NavigationProcessor(
             qualifiedName = qualifiedName,
             navName = navNameOverride ?: simpleName.toDestinationNavName(),
             argsQualifiedName = argsDeclaration?.qualifiedName?.asString(),
+            argsSwiftName = argsDeclaration?.swiftExportName(),
             responseQualifiedName = responseDeclaration?.qualifiedName?.asString(),
+            responseSwiftName = responseDeclaration?.swiftExportName(),
             routePath = routePath,
             routeArgs = routeArgs,
             edges = edges,
@@ -146,6 +151,17 @@ class NavigationProcessor(
         // and route interfaces are pure common types, so they are generated only in the metadata pass.
         codeGenerator.createNewFile(Dependencies(false), MARKER_PACKAGE, "basekit_nav_marker", "log").close()
         val marker = codeGenerator.generatedFile.firstOrNull() ?: return
+        if (marker.isApplePass()) {
+            if (destinations.isEmpty()) return
+            val imports = options[SWIFT_FRAMEWORK_IMPORTS_OPTION]
+                ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+                ?: options["basekit.viewmodel.swiftFrameworkImports"]
+                    ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+                    .orEmpty()
+            val dependencies = Dependencies(aggregating = true, *sourceFiles.toTypedArray())
+            AppleSwiftNavigationGenerator(codeGenerator, dependencies, imports).generate(destinations)
+            return
+        }
         if (!marker.isMetadataPass()) return
         if (destinations.isEmpty()) return
 
@@ -169,6 +185,7 @@ class NavigationProcessor(
 
         NavigatorInterfaceGenerator(codeGenerator, logger, dependencies, navigationPackage).generate(destinations)
         RouteTableGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations)
+        AppleHostedNavigatorGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations)
 
         if (options[GENERATE_TEST_NAVIGATOR_OPTION]?.toBoolean() == true) {
             TestNavigatorGenerator(codeGenerator, logger, dependencies, navigationPackage).generate(destinations)
@@ -194,6 +211,12 @@ class NavigationProcessor(
             val parts = invariantSeparatorsPath.split('/')
             val kspIndex = parts.indexOf("ksp")
             return kspIndex >= 0 && parts.getOrNull(kspIndex + 1) == "metadata"
+        }
+
+        fun File.isApplePass(): Boolean {
+            val path = invariantSeparatorsPath.lowercase()
+            val afterKsp = path.substringAfter("/ksp/", "")
+            return listOf("ios", "macos", "tvos", "watchos").any { afterKsp.contains(it) }
         }
     }
 }

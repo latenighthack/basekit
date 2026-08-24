@@ -7,6 +7,11 @@ All notable changes to basekit are documented here. The format follows
 ## [Unreleased] — 0.2.0
 
 ### Added
+- Generated Apple navigation bridge: scoped per-screen navigators, typed native routes and edge
+  identities, local interception, policy-driven SwiftUI presentation, an iOS `UINavigationController`
+  renderer, AppKit custom-presentation hooks, and deep-link args-to-route mapping.
+- Shared `awaitNavigationResult` lifecycle so Kotlin owns responding-destination completion,
+  dismissal, exactly-once behavior, and caller cancellation across native hosts.
 - TUI render hints — `@TuiField`, `@TuiAction`, `@TuiToggle`, `@TuiList` — that steer how the tui
   processor draws each element: relabel/pin-key/hide actions, rename or hide state rows, transform a
   value's text, draw a number as a gauge (`BAR`) or a `Boolean` as a checkbox (`TOGGLE`), and merge a
@@ -25,6 +30,8 @@ All notable changes to basekit are documented here. The format follows
 - Android `BaseActivity` retains its ViewModel across configuration changes.
 
 ### Changed
+- Apple artifacts now require iOS 18 or macOS 15. Generated Swift is collected through the unified
+  `collectBasekitAppleSwift` task; the previous viewmodel-named task remains compatible.
 - `StatefulViewModel.update` now serializes via a `Mutex`, so a suspending updater body runs exactly
   once (the previous `getAndUpdate` CAS loop could re-run it under contention).
 - `BaseActivity` collects state under `repeatOnLifecycle(STARTED)` instead of a bare `lifecycleScope`.

@@ -10,7 +10,7 @@ package com.latenighthack.basekit.viewmodel.codegen
  */
 internal object DeltaListAvailability {
     /** `DeltaList` / `SectionedDeltaList` — deltalist `DeltaList.swift`. */
-    const val SWIFTUI = "@available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)"
+    const val SWIFTUI = "@available(iOS 18.0, macOS 15.0, *)"
 
     /** `DeltaCollectionDataSource` — deltalist `DeltaDataSource.swift`, UIKit-only. */
     const val UIKIT = "@available(iOS 14.0, *)"

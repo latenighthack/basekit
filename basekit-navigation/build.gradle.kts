@@ -29,5 +29,10 @@ kotlin {
                 api(project(":basekit-annotations"))
             }
         }
+        val commonTest by getting {
+            dependencies {
+                implementation(libs.kotlinx.coroutines.test)
+            }
+        }
     }
 }

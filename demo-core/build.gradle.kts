@@ -21,6 +21,7 @@ ksp {
     // Swift module, so this one import makes the collected wrappers compile standalone — which is
     // what lets CI run `swiftc -typecheck` over them.
     arg("basekit.viewmodel.swiftFrameworkImports", "DemoCore")
+    arg("basekit.navigation.swiftFrameworkImports", "DemoCore")
 }
 
 dependencies {

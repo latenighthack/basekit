@@ -23,6 +23,8 @@ versions. Supported targets: `jvm`, `android`, `iosArm64`, `iosX64`, `iosSimulat
 `macosArm64`, `macosX64`, `js` (IR). The `tui` slice is a preview and depends on a snapshot build of
 TamboUI (see below).
 
+Apple frameworks require iOS 18 or macOS 15.
+
 ## Install
 
 Artifacts are published to Maven Central under `com.latenighthack.basekit`.
@@ -156,8 +158,48 @@ The viewmodel processor emits, per `@ViewModelSpec`:
   UIKit) and `Observable{Vm}.swift` (an `ObservableObject` with `@Published` state and two-way
   `Binding`s for mutators, for SwiftUI). Delivered as **source**; a consuming Xcode/SwiftPM target
   compiles them alongside the exported KMP framework. Collect them with the
-  `collectBasekitViewModelSwift` Gradle task.
+  `collectBasekitAppleSwift` Gradle task (`collectBasekitViewModelSwift` remains as a compatibility
+  alias).
 - **Web** — a `@JsExport use{Vm}(viewModel)` React hook.
+
+### Apple navigation
+
+The navigation processor also generates scoped `Apple{Destination}Navigator` implementations and a
+universal `BasekitAppleNavigation.swift`. Kotlin still owns the legal graph, typed arguments, and
+responding-destination suspension; Swift owns the native presentation:
+
+```swift
+let router = BasekitNavigationRouter(policy: AppNavigationPolicy())
+let root = router.root(.home(args: HomeViewModelArgs(), edge: nil))
+
+BasekitNavigationStackHost(router: router, rootEntry: root) { entry, namespace in
+    screen(for: entry, namespace: namespace, router: router)
+} destination: { entry, namespace in
+    screen(for: entry, namespace: namespace, router: router)
+}
+```
+
+The app supplies an exhaustive `@ViewBuilder` switch over `BasekitRoute`. Construct each Kotlin
+ViewModel with the entry's `ownerID` and generated scoped navigator, for example
+`AppleHomeNavigator(ownerId: entry.ownerID, host: router)`. A responding route also carries the
+`NavigationResponder` to inject into its ViewModel.
+
+`BasekitNavigationStackHost` is the SwiftUI renderer. On iOS,
+`BasekitNavigationControllerHost` owns a `UINavigationController` and its factory can return either a
+native `UIViewController` or a `UIHostingController`; animator and interaction providers can be set
+per edge. Use only one stack renderer per scene/tab/column. macOS uses `NavigationStack` and may route
+`.platformCustom` entries through `BasekitAppKitPresenter`; connect it with
+`router.use(appKitPresenter:)`. UIKit custom flows assign the router's `platformPresenter` and
+`platformDismisser` closures, so owner closure and responding destinations still reconcile through
+the same router even when presentation is fully custom.
+
+A screen gets first refusal with `.basekitNavigationHandler(router:ownerID:_:)`. It can toggle local
+UI, retain the transaction for a custom animation, finish a responding flow, or forward using
+`presentDefault()` / `present(using:)`. If it declines, `BasekitNavigationPolicy` chooses push, sheet,
+full-screen cover, or platform-custom presentation and automatic, zoom, or custom transition metadata.
+
+`NavigatorArgs` remain in-memory on Apple platforms, so a native path is intentionally not `Codable`
+or restorable. Deep links can still use `RouteTable.match` followed by `router.open(match:)`.
 
 ## Wiring KSP manually
 
@@ -223,6 +265,7 @@ the convention plugins under [`basekit-gradle-plugin/`](basekit-gradle-plugin/sr
 | `Basekit_TuiPackage` | tui | Package (in a dependency) the TUI processor scans |
 | `Basekit_TuiAppComponent` | tui | FQN of an app DI root the generated component takes as a parent |
 | `basekit.viewmodel.swiftFrameworkImports` | viewmodel | Comma-separated frameworks the generated Swift should `import` |
+| `basekit.navigation.swiftFrameworkImports` | navigation | Comma-separated frameworks the generated Apple navigation Swift should `import` |
 
 ## Testing navigation journeys
 
