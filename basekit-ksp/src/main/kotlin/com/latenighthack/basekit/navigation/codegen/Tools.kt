@@ -21,6 +21,9 @@ fun String.toUpperSnakeCase(): String = camelWords()
     .filter { it.isNotEmpty() }
     .joinToString("_") { it.uppercase() }
 
+/** The `NavigationScreen` enum entry for a destination, e.g. navName "user_profile" -> "USER_PROFILE". */
+val DestinationInfo.screenName: String get() = navName.uppercase()
+
 /**
  * Derives the snake_case navigation name of a destination from its simple name, dropping a leading
  * interface `I` and a trailing `Screen`/`Destination`/`Route`/`ViewModel` suffix. e.g. "HomeScreen" ->

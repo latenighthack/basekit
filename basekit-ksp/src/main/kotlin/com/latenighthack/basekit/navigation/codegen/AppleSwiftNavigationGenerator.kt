@@ -170,7 +170,9 @@ class AppleSwiftNavigationGenerator(
         appendLine()
 
         appendLine("@available(iOS 18.0, macOS 15.0, *)")
-        appendLine("@MainActor public final class BasekitNavigationRouter: NSObject, ObservableObject, @preconcurrency AppleNavigationHost {")
+        // Kotlin/Native protocols are imported as nonisolated. Keep the generated host's
+        // conformance on the main actor instead of suppressing the Swift 6 diagnostic.
+        appendLine("@MainActor public final class BasekitNavigationRouter: NSObject, ObservableObject, @MainActor AppleNavigationHost {")
         appendLine("    @Published public private(set) var path: [BasekitNavigationEntry] = []")
         appendLine("    @Published public private(set) var sheet: BasekitNavigationEntry?")
         appendLine("    @Published public private(set) var fullScreenCover: BasekitNavigationEntry?")
@@ -286,8 +288,8 @@ class AppleSwiftNavigationGenerator(
         }
         appendLine("        }")
         appendLine("    }")
+        appendLine("    private static func replacingResponder(in route: BasekitRoute, with responder: NavigationResponder) -> BasekitRoute {")
         if (destinations.any { it.responseQualifiedName != null }) {
-            appendLine("    private static func replacingResponder(in route: BasekitRoute, with responder: NavigationResponder) -> BasekitRoute {")
             appendLine("        switch route {")
             destinations.filter { it.responseQualifiedName != null }.forEach { destination ->
                 val routeName = destination.navName.toSwiftCase()
@@ -305,8 +307,10 @@ class AppleSwiftNavigationGenerator(
             }
             appendLine("        default: return route")
             appendLine("        }")
-            appendLine("    }")
+        } else {
+            appendLine("        return route")
         }
+        appendLine("    }")
         appendLine("}")
         appendLine()
 

@@ -49,9 +49,11 @@ class TuiComponentGenerator(
 
     /** How the component builds [screen] when it is the root (via screenForViewModel). */
     private fun buildForViewModel(screen: ScreenInfo): String =
-        // ARGS/RESPONDER screens can't be a root: there is no caller to supply the assisted value.
-        if (screen.assisted.any { it.kind == AssistedKind.ARGS || it.kind == AssistedKind.RESPONDER })
-            "error(\"${screen.vmSimpleName} cannot be a root screen; open it via navigation\")"
+        // A responding destination still requires a caller; ordinary args may be supplied by root<T>(args).
+        if (screen.assisted.any { it.kind == AssistedKind.RESPONDER })
+            "error(\"${screen.vmSimpleName} is a responding destination and cannot be a root screen\")"
+        else if (screen.assisted.any { it.kind == AssistedKind.ARGS })
+            "if (args == null) error(\"${screen.vmSimpleName} requires root arguments\") else ${buildScreenExpr(screen)}"
         else buildScreenExpr(screen)
 
     /** How the component builds [screen] when it is a push target (via screenForDestination). */
@@ -105,7 +107,7 @@ class TuiComponentGenerator(
         }
 
         appendLine()
-        appendLine("    public fun screenForViewModel(viewModel: KClass<*>, nav: TuiNavigation): TuiScreen = when (viewModel) {")
+        appendLine("    public fun screenForViewModel(viewModel: KClass<*>, args: Any?, nav: TuiNavigation): TuiScreen = when (viewModel) {")
         for (screen in screens) {
             appendLine("        ${screen.vmQualifiedName}::class -> ${buildForViewModel(screen)}")
         }
@@ -141,7 +143,7 @@ class TuiComponentGenerator(
         appendLine("    val builder = TuiAppBuilder().apply(configure)")
         appendLine("    val root = builder.requireRoot()")
         appendLine("    val component = GeneratedTuiComponent::class.create($createArg)")
-        appendLine("    TuiHost { nav -> component.screenForViewModel(root, nav) }.run()")
+        appendLine("    TuiHost { nav -> component.screenForViewModel(root, builder.configuredRootArgs(), nav) }.run()")
         appendLine("}")
     }
 }

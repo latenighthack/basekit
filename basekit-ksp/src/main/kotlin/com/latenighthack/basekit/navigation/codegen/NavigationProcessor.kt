@@ -11,6 +11,7 @@ import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFile
+import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import java.io.File
 
@@ -18,6 +19,8 @@ private const val DESTINATION_ANNOTATION = "com.latenighthack.basekit.navigation
 private const val ROUTE_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.Route"
 private const val ROUTE_ARG_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.RouteArg"
 private const val NAVIGATE_TO_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.NavigateTo"
+private const val CHILD_VIEWMODEL_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ChildViewModel"
+private const val VIEWMODEL_LIST_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelList"
 private const val NAVIGATION_DESTINATION = "com.latenighthack.basekit.navigation.NavigationDestination"
 private const val RESPONDING_DESTINATION = "com.latenighthack.basekit.navigation.RespondingDestination"
 private const val NAVIGATION_PACKAGE_OPTION = "Basekit_NavigationPackage"
@@ -117,16 +120,7 @@ class NavigationProcessor(
 
         val routeArgs = routeArgProperties.map { it.simpleName.asString() }
 
-        val edges = declaration.getDeclaredFunctions().flatMap { function ->
-            val methodName = function.simpleName.asString()
-            function.annotations
-                .filter { it.qualifiedName() == NAVIGATE_TO_ANNOTATION }
-                .mapNotNull { annotation ->
-                    val target = annotation.arguments
-                        .firstOrNull { it.name?.asString() == "target" }?.value as? KSType
-                    target?.declaration?.qualifiedName?.asString()?.let { NavEdge(methodName, it) }
-                }
-        }.toList()
+        val edges = collectEdges(declaration, visited = mutableSetOf())
 
         val navNameOverride = declaration.stringArgument(DESTINATION_ANNOTATION, "navName")
             ?.takeIf { it.isNotEmpty() }
@@ -143,6 +137,60 @@ class NavigationProcessor(
             routeArgs = routeArgs,
             edges = edges,
         )
+    }
+
+    /**
+     * Collects the `@NavigateTo` edges declared on [declaration] plus those on any viewmodel it
+     * embeds through `@ChildViewModel` / `@ViewModelList` properties, recursively. A list row or
+     * child pane may navigate on its own (it is handed its host's navigator), but only
+     * `@Destination`s own a navigator — so embedded edges roll up into the hosting destination's
+     * graph. [visited] guards against spec cycles.
+     */
+    private fun collectEdges(declaration: KSClassDeclaration, visited: MutableSet<String>): List<NavEdge> {
+        val qualifiedName = declaration.qualifiedName?.asString() ?: return emptyList()
+        if (!visited.add(qualifiedName)) return emptyList()
+
+        val own = declaration.getDeclaredFunctions().flatMap { function ->
+            val methodName = function.simpleName.asString()
+            function.annotations
+                .filter { it.qualifiedName() == NAVIGATE_TO_ANNOTATION }
+                .mapNotNull { annotation ->
+                    val target = annotation.arguments
+                        .firstOrNull { it.name?.asString() == "target" }?.value as? KSType
+                    target?.declaration?.qualifiedName?.asString()?.let { NavEdge(methodName, it) }
+                }
+        }.toList()
+
+        val embedded = declaration.getDeclaredProperties()
+            .flatMap { embeddedViewModelTypes(it) }
+            .flatMap { collectEdges(it, visited) }
+            .toList()
+
+        return (own + embedded).distinct()
+    }
+
+    /** The viewmodel specs a `@ChildViewModel` / `@ViewModelList` property embeds in its host. */
+    private fun embeddedViewModelTypes(property: KSPropertyDeclaration): List<KSClassDeclaration> {
+        val isChild = property.annotations.any { it.qualifiedName() == CHILD_VIEWMODEL_ANNOTATION }
+        val listAnnotation = property.annotations.firstOrNull { it.qualifiedName() == VIEWMODEL_LIST_ANNOTATION }
+        return when {
+            isChild -> listOfNotNull(property.type.resolve().declaration as? KSClassDeclaration)
+            listAnnotation != null -> {
+                val possibleTypes = (
+                    listAnnotation.arguments
+                        .firstOrNull { it.name?.asString() == "possibleTypes" }?.value as? List<*>
+                    ).orEmpty()
+                    .mapNotNull { (it as? KSType)?.declaration as? KSClassDeclaration }
+                // The property is Flow<Delta<X>>; X is the element spec for lists declared without
+                // explicit possibleTypes.
+                val element = property.type.resolve()
+                    .arguments.firstOrNull()?.type?.resolve()
+                    ?.arguments?.firstOrNull()?.type?.resolve()
+                    ?.declaration as? KSClassDeclaration
+                (possibleTypes + listOfNotNull(element)).distinctBy { it.qualifiedName?.asString() }
+            }
+            else -> emptyList()
+        }
     }
 
     override fun finish() {
@@ -184,6 +232,8 @@ class NavigationProcessor(
         val dependencies = Dependencies(aggregating = true, *sourceFiles.toTypedArray())
 
         NavigatorInterfaceGenerator(codeGenerator, logger, dependencies, navigationPackage).generate(destinations)
+        NavigationScreenGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations)
+        ObservingNavigatorGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations)
         RouteTableGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations)
         AppleHostedNavigatorGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations)
 

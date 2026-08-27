@@ -39,12 +39,17 @@ class SwiftUIObservableGenerator(
                 "    @Published public private(set) var ${it.name}: ${st.type} = ${st.default}"
             }
 
+            // Erased (AnyObject?) properties need an explicit bridge: Swift will not assign a
+            // value type ([String], a Kotlin enum bridged struct, …) to AnyObject implicitly.
+            fun VmStateProperty.assignSuffix(): String =
+                if (swiftType(typeQualifiedName, nullable).type == "AnyObject?") " as AnyObject" else ""
+
             val seedAssigns = vm.stateProperties.joinToString("\n") {
-                "        self.${it.name} = initial.${it.name}"
+                "        self.${it.name} = initial.${it.name}${it.assignSuffix()}"
             }
 
             val updateAssigns = vm.stateProperties.joinToString("\n") {
-                "                self.${it.name} = state.${it.name}"
+                "                self.${it.name} = state.${it.name}${it.assignSuffix()}"
             }
 
             val actionMethods = vm.actions.joinToString("\n\n") { action ->

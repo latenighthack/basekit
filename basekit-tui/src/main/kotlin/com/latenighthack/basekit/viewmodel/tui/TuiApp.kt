@@ -11,12 +11,25 @@ public class TuiAppBuilder {
     @PublishedApi
     internal var rootViewModel: KClass<*>? = null
 
+    @PublishedApi
+    internal var rootArgs: Any? = null
+
     /** Names the starting screen, e.g. `root<FeedViewModel>()`. */
     public inline fun <reified T : Any> root() {
         rootViewModel = T::class
+        rootArgs = null
+    }
+
+    /** Names a starting screen whose implementation requires assisted navigation [args]. */
+    public inline fun <reified T : Any> root(args: Any) {
+        rootViewModel = T::class
+        rootArgs = args
     }
 
     /** The configured root ViewModel class, or throws if [root] was never called. */
     public fun requireRoot(): KClass<*> =
         rootViewModel ?: error("TuiApp requires a root screen: call root<YourViewModel>() inside TuiApp { }")
+
+    /** Assisted arguments supplied by the root declaration, or null for an argument-free root. */
+    public fun configuredRootArgs(): Any? = rootArgs
 }

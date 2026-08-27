@@ -254,6 +254,7 @@ the convention plugins under [`basekit-gradle-plugin/`](basekit-gradle-plugin/sr
 | `@TuiAction(label, key, hidden)` | tui | function | Render hint for an action/mutation: rename it, pin its trigger key, or hide it |
 | `@TuiToggle(field)` | tui | function | Merges a `Boolean` mutation with the `Boolean` state property it sets into one toggle whose key flips it |
 | `@TuiList(label)` | tui | property | Render hint for a `@ViewModelList`: overrides the list title |
+| `@TuiChild(label, visibleWhenField, visibleWhenValue)` | tui | property | Embeds a `@ChildViewModel`, optionally gated by a parent-state value |
 | `@CodegenIgnore` | all | element | Excludes an element from codegen |
 
 ## KSP options

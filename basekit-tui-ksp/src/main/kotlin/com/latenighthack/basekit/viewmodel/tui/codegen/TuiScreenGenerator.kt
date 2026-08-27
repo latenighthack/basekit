@@ -3,17 +3,32 @@ package com.latenighthack.basekit.viewmodel.tui.codegen
 import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Dependencies
 
-/**
- * Emits one `<Vm>Screen` per bound ViewModel: a [com.latenighthack.basekit.viewmodel.tui.TuiScreen]
- * that renders the state as a table, a `@ViewModelList` as a selectable list, and zero-arg actions as
- * key-bound buttons. The screen never navigates itself — Enter on a row invokes the selected element's
- * selection action, and any navigation happens through the navigator injected into that ViewModel.
- */
+/** Generates a compositional terminal screen for a root ViewModel and its nested child ViewModels. */
 class TuiScreenGenerator(
     private val codeGenerator: CodeGenerator,
     private val dependencies: Dependencies,
     private val rootPackage: String,
 ) {
+    private data class Node(
+        val access: String,
+        val holder: String,
+        val prefix: String,
+        val title: String,
+        val visible: String,
+        val stateProps: List<StateProp>,
+        val actions: List<Action>,
+        val mutations: List<Mutation>,
+        val lists: List<ListInfo>,
+    )
+
+    private data class RenderList(
+        val index: Int,
+        val node: Node,
+        val info: ListInfo,
+        val holder: String,
+        val selected: String,
+    )
+
     fun generate(screens: List<ScreenInfo>) {
         for (screen in screens) {
             codeGenerator.createNewFile(dependencies, rootPackage, screen.screenClassName, "kt").use { out ->
@@ -22,105 +37,184 @@ class TuiScreenGenerator(
         }
     }
 
-    private fun render(screen: ScreenInfo): String = buildString {
-        // Mutations that still open a value prompt (i.e. not merged into a state toggle, not hidden).
-        val promptMutations = screen.mutations.filter { !it.hidden && it.toggleField == null }
-        val usesTransform = screen.stateProps.any { !it.hidden && it.transform != Transform.NONE }
-
-        appendLine("package $rootPackage")
-        appendLine()
-        appendLine("import com.latenighthack.basekit.viewmodel.tui.TuiScreen")
-        appendLine("import com.latenighthack.basekit.viewmodel.tui.TuiNavigation")
-        appendLine("import com.latenighthack.basekit.viewmodel.tui.TuiRender")
-        if (usesTransform) appendLine("import com.latenighthack.basekit.viewmodel.tui.Transform")
-        appendLine("import com.latenighthack.basekit.viewmodel.tui.StateHolder")
-        if (screen.list != null) appendLine("import com.latenighthack.basekit.viewmodel.tui.ListHolder")
-        if (promptMutations.isNotEmpty()) appendLine("import com.latenighthack.basekit.viewmodel.tui.MutationPrompt")
-        appendLine("import dev.tamboui.toolkit.Toolkit")
-        appendLine("import dev.tamboui.toolkit.element.Element")
-        appendLine("import dev.tamboui.toolkit.event.EventResult")
-        appendLine("import dev.tamboui.tui.event.KeyCode")
-        appendLine("import dev.tamboui.tui.event.KeyEvent")
-        appendLine("import kotlinx.coroutines.launch")
-        appendLine()
-
-        appendLine("/** Generated TamboUI screen for [${screen.vmQualifiedName}]. */")
-        appendLine("public class ${screen.screenClassName}(")
-        appendLine("    private val viewModel: ${screen.vmQualifiedName},")
-        appendLine("    private val nav: TuiNavigation,")
-        appendLine(") : TuiScreen {")
-        appendLine()
-        appendLine("    private val stateHolder = StateHolder(nav.scope, viewModel.initialState, viewModel.state)")
-        if (screen.list != null) {
-            appendLine("    private val listHolder = ListHolder(nav.scope, viewModel.${screen.list.propertyName})")
-            appendLine("    private var selectedIndex = 0")
+    private fun render(screen: ScreenInfo): String {
+        val nodes = flattenNodes(screen)
+        val lists = nodes.flatMap { node -> node.lists.map { node to it } }
+            .mapIndexed { index, (node, info) ->
+                val cap = info.propertyName.replaceFirstChar { it.uppercase() }
+                RenderList(index, node, info, "${node.prefix}${cap}ListHolder", "${node.prefix}${cap}Selected")
+            }
+        val promptMutations = nodes.flatMap { node ->
+            node.mutations.filter { !it.hidden && it.toggleField == null }.map { node to it }
         }
-        // Non-null while the user is entering a mutation's argument; consumes keys until submit/cancel.
-        if (promptMutations.isNotEmpty()) appendLine("    private var prompt: MutationPrompt? = null")
-        appendLine()
-        appendLine("    override val title: String = \"${screen.vmSimpleName}\"")
-        appendLine()
-        appendLine(renderMethod(screen))
-        appendLine()
-        appendLine(onKeyMethod(screen))
-        appendLine("}")
+        val usesTransform = nodes.any { node -> node.stateProps.any { !it.hidden && it.transform != Transform.NONE } }
+
+        return buildString {
+            appendLine("package $rootPackage")
+            appendLine()
+            appendLine("import com.latenighthack.basekit.viewmodel.tui.TuiScreen")
+            appendLine("import com.latenighthack.basekit.viewmodel.tui.TuiNavigation")
+            appendLine("import com.latenighthack.basekit.viewmodel.tui.TuiRender")
+            if (usesTransform) appendLine("import com.latenighthack.basekit.viewmodel.tui.Transform")
+            appendLine("import com.latenighthack.basekit.viewmodel.tui.StateHolder")
+            if (lists.isNotEmpty()) appendLine("import com.latenighthack.basekit.viewmodel.tui.ListHolder")
+            if (promptMutations.isNotEmpty()) appendLine("import com.latenighthack.basekit.viewmodel.tui.MutationPrompt")
+            appendLine("import dev.tamboui.toolkit.Toolkit")
+            appendLine("import dev.tamboui.toolkit.element.Element")
+            appendLine("import dev.tamboui.toolkit.event.EventResult")
+            appendLine("import dev.tamboui.tui.event.KeyCode")
+            appendLine("import dev.tamboui.tui.event.KeyEvent")
+            appendLine("import kotlinx.coroutines.launch")
+            appendLine()
+            appendLine("/** Generated TamboUI screen for [${screen.vmQualifiedName}]. */")
+            appendLine("public class ${screen.screenClassName}(")
+            appendLine("    private val viewModel: ${screen.vmQualifiedName},")
+            appendLine("    private val nav: TuiNavigation,")
+            appendLine(") : TuiScreen {")
+            appendLine()
+            for (node in nodes) {
+                appendLine("    private val ${node.holder} = StateHolder(nav.scope, ${node.access}.initialState, ${node.access}.state)")
+            }
+            for (list in lists) {
+                appendLine("    private val ${list.holder} = ListHolder(nav.scope, ${list.node.access}.${list.info.propertyName})")
+                appendLine("    private var ${list.selected} = 0")
+            }
+            if (lists.isNotEmpty()) appendLine("    private var focusedList = -1")
+            if (promptMutations.isNotEmpty()) appendLine("    private var prompt: MutationPrompt? = null")
+            appendLine()
+            appendLine("    override val title: String = \"${screen.vmSimpleName}\"")
+            appendLine()
+            if (lists.isNotEmpty()) appendLine(visibleListsMethod(lists))
+            appendLine(renderMethod(nodes, lists, promptMutations.isNotEmpty()))
+            appendLine()
+            appendLine(onKeyMethod(nodes, lists, promptMutations))
+            appendLine("}")
+        }
     }
 
-    private fun renderMethod(screen: ScreenInfo): String = buildString {
-        val promptMutations = screen.mutations.filter { !it.hidden && it.toggleField == null }
-        // Hidden fields are dropped; the rest render per their @TuiField style/transform (see valueExpr).
-        val statePairs = screen.stateProps.filterNot { it.hidden }.joinToString(", ") { prop ->
-            "\"${prop.label ?: prop.name}\" to ${valueExpr(prop)}"
-        }
-        val hints = buildList {
-            screen.actions.filterNot { it.hidden }.forEach { add("\"[${it.key}] ${it.label ?: it.name}\"") }
-            screen.mutations.filterNot { it.hidden }.forEach { m ->
-                add("\"[${m.key}] ${m.label ?: m.toggleField ?: m.name}\"")
+    private fun flattenNodes(screen: ScreenInfo): List<Node> {
+        val root = Node(
+            access = "viewModel",
+            holder = "rootStateHolder",
+            prefix = "root",
+            title = screen.vmSimpleName,
+            visible = "true",
+            stateProps = screen.stateProps,
+            actions = screen.actions,
+            mutations = screen.mutations,
+            lists = screen.lists,
+        )
+        val result = mutableListOf(root)
+        fun add(children: List<ChildInfo>, parent: Node) {
+            for (child in children) {
+                val cap = child.propertyName.replaceFirstChar { it.uppercase() }
+                val prefix = parent.prefix + cap
+                val localVisibility = if (child.visibleWhenField != null && child.visibleWhenValue != null) {
+                    "${parent.holder}.value.${child.visibleWhenField}.toString() == \"${child.visibleWhenValue}\""
+                } else {
+                    "true"
+                }
+                val visible = if (parent.visible == "true") localVisibility else "(${parent.visible}) && ($localVisibility)"
+                val node = Node(
+                    access = "${parent.access}.${child.propertyName}",
+                    holder = "${prefix}StateHolder",
+                    prefix = prefix,
+                    title = child.label ?: child.propertyName,
+                    visible = visible,
+                    stateProps = child.stateProps,
+                    actions = child.actions,
+                    mutations = child.mutations,
+                    lists = child.lists,
+                )
+                result += node
+                add(child.children, node)
             }
-            if (screen.list?.selectionAction != null) add("\"[Enter] ${screen.list.selectionAction}\"")
-        }.joinToString(", ")
+        }
+        add(screen.children, root)
+        return result
+    }
 
-        appendLine("    override fun render(): Element {")
-        appendLine("        val state = stateHolder.value")
+    private fun visibleListsMethod(lists: List<RenderList>): String = buildString {
+        appendLine("    private fun visibleListIndices(): List<Int> = buildList {")
+        for (list in lists) appendLine("        if (${list.node.visible}) add(${list.index})")
+        appendLine("    }")
+        appendLine()
+        appendLine("    private fun normalizeFocusedList(): List<Int> {")
+        appendLine("        val visible = visibleListIndices()")
+        appendLine("        if (focusedList !in visible) focusedList = visible.firstOrNull() ?: -1")
+        appendLine("        return visible")
+        append("    }")
+    }
+
+    private fun renderMethod(nodes: List<Node>, lists: List<RenderList>, hasPrompt: Boolean): String = buildString {
+        if (lists.isNotEmpty()) appendLine("    override fun render(): Element {") else appendLine("    override fun render(): Element {")
+        if (lists.isNotEmpty()) appendLine("        normalizeFocusedList()")
+        appendLine("        val hints = buildList<String> {")
+        for (node in nodes) {
+            for (action in node.actions.filterNot { it.hidden }) {
+                appendLine("            if (${node.visible}) add(\"[${action.key}] ${action.label ?: action.name}\")")
+            }
+            for (mutation in node.mutations.filterNot { it.hidden }) {
+                appendLine("            if (${node.visible}) add(\"[${mutation.key}] ${mutation.label ?: mutation.toggleField ?: mutation.name}\")")
+            }
+        }
+        if (lists.size > 1) appendLine("            if (visibleListIndices().size > 1) add(\"[Tab] Next list\")")
+        for (list in lists) {
+            val primary = list.info.possibleTypes.mapNotNull { it.selectionAction }.distinct()
+            if (primary.isNotEmpty()) appendLine("            if (focusedList == ${list.index}) add(\"[Enter] ${primary.joinToString("/")}\")")
+            val secondary = list.info.possibleTypes.flatMap { it.secondaryActions }.filterNot { it.hidden }.distinctBy { it.name to it.key }
+            for (action in secondary) appendLine("            if (focusedList == ${list.index}) add(\"[${action.key}] ${action.label ?: action.name}\")")
+        }
+        appendLine("        }")
         appendLine("        return Toolkit.column(")
-        appendLine("            TuiRender.stateTable(\"${screen.vmSimpleName}\", listOf($statePairs)),")
-        if (screen.list != null) {
-            appendLine("            TuiRender.selectableList(\"${screen.list.label ?: screen.list.propertyName}\", ${rowMapper(screen.list)}, selectedIndex),")
+        for (node in nodes) {
+            appendLine("            if (${node.visible}) ${stateTable(node)} else Toolkit.text(\"\"),")
+            for (list in lists.filter { it.node == node }) {
+                val title = list.info.label ?: list.info.propertyName
+                appendLine("            if (${node.visible}) TuiRender.selectableList((if (focusedList == ${list.index}) \"▶ \" else \"\") + \"$title\", ${rowMapper(list)}, ${list.selected}) else Toolkit.text(\"\"),")
+            }
         }
-        appendLine("            TuiRender.actionsBar(listOf($hints)),")
-        if (promptMutations.isNotEmpty()) {
-            appendLine("            prompt?.let { TuiRender.prompt(it.label, it.isBool, it.text) } ?: Toolkit.text(\"\"),")
-        }
+        appendLine("            TuiRender.actionsBar(hints),")
+        if (hasPrompt) appendLine("            prompt?.let { TuiRender.prompt(it.label, it.isBool, it.text) } ?: Toolkit.text(\"\"),")
         appendLine("        )")
         append("    }")
     }
 
-    /** The Kotlin expression that produces a state property's displayed value, honoring its @TuiField hint. */
-    private fun valueExpr(prop: StateProp): String = when (prop.style) {
-        FieldStyle.TOGGLE -> "TuiRender.toggle(state.${prop.name})"
-        FieldStyle.BAR -> "TuiRender.bar(state.${prop.name}, ${prop.max})"
+    private fun stateTable(node: Node): String {
+        val rows = node.stateProps.filterNot { it.hidden }.joinToString(", ") { prop ->
+            "\"${prop.label ?: prop.name}\" to ${valueExpr("${node.holder}.value", prop)}"
+        }
+        return "TuiRender.stateTable(\"${node.title}\", listOf($rows))"
+    }
+
+    private fun valueExpr(state: String, prop: StateProp): String = when (prop.style) {
+        FieldStyle.TOGGLE -> "TuiRender.toggle($state.${prop.name})"
+        FieldStyle.BAR -> "TuiRender.bar($state.${prop.name}, ${prop.max})"
         else -> {
-            val base = "state.${prop.name}.toString()"
+            val base = "$state.${prop.name}.toString()"
             if (prop.transform != Transform.NONE) "TuiRender.transform($base, Transform.${prop.transform})" else base
         }
     }
 
-    private fun rowMapper(list: ListInfo): String {
-        val body = if (list.elementStateProps.isEmpty()) {
-            "item.toString()"
-        } else {
-            "\"\" + " + list.elementStateProps.joinToString(" + \"  \" + ") { "item.initialState.${it.name}" }
+    private fun rowMapper(list: RenderList): String {
+        val branches = list.info.possibleTypes.joinToString("; ") { type ->
+            val body = if (type.stateProps.isEmpty()) {
+                "item.toString()"
+            } else {
+                type.stateProps.joinToString(" + \"  \" + ") { "item.initialState.${it.name}.toString()" }
+            }
+            "is ${type.qualifiedName} -> $body"
         }
-        return "listHolder.items.map { item -> $body }"
+        return "${list.holder}.items.map { item -> when (item) { $branches else -> item.toString() } }"
     }
 
-    private fun onKeyMethod(screen: ScreenInfo): String = buildString {
-        val promptMutations = screen.mutations.filter { !it.hidden && it.toggleField == null }
-        val toggleMutations = screen.mutations.filter { !it.hidden && it.toggleField != null }
+    private fun onKeyMethod(
+        nodes: List<Node>,
+        lists: List<RenderList>,
+        promptMutations: List<Pair<Node, Mutation>>,
+    ): String = buildString {
         appendLine("    override fun onKey(event: KeyEvent): EventResult {")
         if (promptMutations.isNotEmpty()) {
-            // While a prompt is open it owns every key: Esc cancels, t/f pick a boolean, typed characters
-            // build the text (Enter submits, Backspace deletes); everything else is swallowed.
             appendLine("        prompt?.let { active ->")
             appendLine("            if (event.isKey(KeyCode.ESCAPE)) { prompt = null; return EventResult.HANDLED }")
             appendLine("            if (active.isBool) {")
@@ -134,27 +228,63 @@ class TuiScreenGenerator(
             appendLine("            return EventResult.HANDLED")
             appendLine("        }")
         }
-        if (screen.list != null) {
-            appendLine("        if (event.isUp()) { if (selectedIndex > 0) selectedIndex--; return EventResult.HANDLED }")
-            appendLine("        if (event.isDown()) { if (selectedIndex < listHolder.items.size - 1) selectedIndex++; return EventResult.HANDLED }")
-        }
-        if (screen.list?.selectionAction != null) {
-            appendLine("        if (event.isKey(KeyCode.ENTER)) { listHolder.items.getOrNull(selectedIndex)?.let { item -> nav.scope.launch { item.${screen.list.selectionAction}() } }; return EventResult.HANDLED }")
-        }
-        for (action in screen.actions) {
-            if (action.hidden) continue
-            appendLine("        if (event.isChar('${action.key}')) { nav.scope.launch { viewModel.${action.name}() }; return EventResult.HANDLED }")
-        }
-        // A @TuiToggle mutation flips its bound Boolean state property directly, without opening a prompt.
-        for (mutation in toggleMutations) {
-            appendLine("        if (event.isChar('${mutation.key}')) { val s = stateHolder.value; nav.scope.launch { viewModel.${mutation.name}(!s.${mutation.toggleField}) }; return EventResult.HANDLED }")
-        }
-        for (mutation in promptMutations) {
-            val factory = when (mutation.paramKind) {
-                MutationParamKind.BOOL -> "MutationPrompt.bool(\"${mutation.label ?: mutation.name}\") { value -> nav.scope.launch { viewModel.${mutation.name}(value) } }"
-                MutationParamKind.STRING -> "MutationPrompt.text(\"${mutation.label ?: mutation.name}\") { value -> nav.scope.launch { viewModel.${mutation.name}(value) } }"
+        if (lists.isNotEmpty()) {
+            appendLine("        val visibleLists = normalizeFocusedList()")
+            appendLine("        if (event.isKey(KeyCode.TAB)) {")
+            appendLine("            if (visibleLists.isNotEmpty()) focusedList = visibleLists[(visibleLists.indexOf(focusedList) + 1) % visibleLists.size]")
+            appendLine("            return EventResult.HANDLED")
+            appendLine("        }")
+            appendLine("        if (event.isUp()) {")
+            appendLine("            when (focusedList) {")
+            for (list in lists) appendLine("                ${list.index} -> if (${list.selected} > 0) ${list.selected}--")
+            appendLine("            }")
+            appendLine("            return EventResult.HANDLED")
+            appendLine("        }")
+            appendLine("        if (event.isDown()) {")
+            appendLine("            when (focusedList) {")
+            for (list in lists) appendLine("                ${list.index} -> if (${list.selected} < ${list.holder}.items.size - 1) ${list.selected}++")
+            appendLine("            }")
+            appendLine("            return EventResult.HANDLED")
+            appendLine("        }")
+            appendLine("        if (event.isKey(KeyCode.ENTER)) {")
+            appendLine("            when (focusedList) {")
+            for (list in lists) {
+                appendLine("                ${list.index} -> ${list.holder}.items.getOrNull(${list.selected})?.let { item ->")
+                appendLine("                    when (item) {")
+                for (type in list.info.possibleTypes.filter { it.selectionAction != null }) {
+                    appendLine("                        is ${type.qualifiedName} -> nav.scope.launch { item.${type.selectionAction}() }")
+                }
+                appendLine("                    }")
+                appendLine("                }")
             }
-            appendLine("        if (event.isChar('${mutation.key}')) { prompt = $factory; return EventResult.HANDLED }")
+            appendLine("            }")
+            appendLine("            return EventResult.HANDLED")
+            appendLine("        }")
+        }
+        for (node in nodes) {
+            for (action in node.actions.filterNot { it.hidden }) {
+                appendLine("        if (${node.visible} && event.isChar('${action.key}')) { nav.scope.launch { ${node.access}.${action.name}() }; return EventResult.HANDLED }")
+            }
+            for (mutation in node.mutations.filter { !it.hidden && it.toggleField != null }) {
+                appendLine("        if (${node.visible} && event.isChar('${mutation.key}')) { val s = ${node.holder}.value; nav.scope.launch { ${node.access}.${mutation.name}(!s.${mutation.toggleField}) }; return EventResult.HANDLED }")
+            }
+            for (mutation in node.mutations.filter { !it.hidden && it.toggleField == null }) {
+                val factory = when (mutation.paramKind) {
+                    MutationParamKind.BOOL -> "MutationPrompt.bool(\"${mutation.label ?: mutation.name}\") { value -> nav.scope.launch { ${node.access}.${mutation.name}(value) } }"
+                    MutationParamKind.STRING -> "MutationPrompt.text(\"${mutation.label ?: mutation.name}\") { value -> nav.scope.launch { ${node.access}.${mutation.name}(value) } }"
+                }
+                appendLine("        if (${node.visible} && event.isChar('${mutation.key}')) { prompt = $factory; return EventResult.HANDLED }")
+            }
+        }
+        for (list in lists) {
+            val actions = list.info.possibleTypes.flatMap { type -> type.secondaryActions.map { type to it } }
+                .filterNot { it.second.hidden }
+            for ((type, action) in actions) {
+                appendLine("        if (focusedList == ${list.index} && event.isChar('${action.key}')) {")
+                appendLine("            (${list.holder}.items.getOrNull(${list.selected}) as? ${type.qualifiedName})?.let { item -> nav.scope.launch { item.${action.name}() } }")
+                appendLine("            return EventResult.HANDLED")
+                appendLine("        }")
+            }
         }
         appendLine("        return EventResult.UNHANDLED")
         append("    }")

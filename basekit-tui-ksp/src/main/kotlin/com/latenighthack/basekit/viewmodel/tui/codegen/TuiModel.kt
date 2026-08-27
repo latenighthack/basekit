@@ -48,6 +48,14 @@ data class Mutation(
     val toggleField: String? = null,
 )
 
+/** One concrete row type allowed in a (possibly marker-typed) ViewModel list. */
+data class ListItemType(
+    val qualifiedName: String,
+    val stateProps: List<StateProp>,
+    val selectionAction: String?,
+    val secondaryActions: List<Action>,
+)
+
 /**
  * A `@ViewModelList` property: a `Flow<Delta<ElementVm>>` of child ViewModels rendered as a list.
  * [selectionAction] is the zero-arg suspend method invoked on the selected element when Enter is
@@ -57,10 +65,23 @@ data class Mutation(
 data class ListInfo(
     val propertyName: String,
     val elementQualifiedName: String,
-    val elementStateProps: List<StateProp>,
-    val selectionAction: String?,
+    val possibleTypes: List<ListItemType>,
     // From `@TuiList.label`; null means use [propertyName] as the list title.
     val label: String? = null,
+)
+
+/** A nested `@ChildViewModel`, including its own recursively-rendered lists and children. */
+data class ChildInfo(
+    val propertyName: String,
+    val qualifiedName: String,
+    val label: String?,
+    val visibleWhenField: String?,
+    val visibleWhenValue: String?,
+    val stateProps: List<StateProp>,
+    val actions: List<Action>,
+    val mutations: List<Mutation>,
+    val lists: List<ListInfo>,
+    val children: List<ChildInfo>,
 )
 
 /**
@@ -105,7 +126,8 @@ data class ScreenInfo(
     // Single-argument suspend methods, each opened by [Mutation.key] into a prompt that collects the
     // argument (true/false, or typed text) before the method is called.
     val mutations: List<Mutation>,
-    val list: ListInfo?,
+    val lists: List<ListInfo>,
+    val children: List<ChildInfo>,
     val destQualifiedName: String,
     // The impl's `@Assisted` parameters in constructor order, each supplied by the component per screen
     // build (navigator / navigation args / responder). Empty when the impl is built straight from the graph.

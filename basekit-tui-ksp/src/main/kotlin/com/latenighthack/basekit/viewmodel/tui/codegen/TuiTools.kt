@@ -23,6 +23,14 @@ fun KSAnnotated.classArgument(annotationFqn: String, argumentName: String): KSTy
         ?.arguments?.firstOrNull { it.name?.asString() == argumentName }
         ?.value as? KSType
 
+/** Reads a vararg `KClass` annotation argument. */
+fun KSAnnotated.classListArgument(annotationFqn: String, argumentName: String): List<KSType> =
+    (annotations.firstOrNull { it.qualifiedName() == annotationFqn }
+        ?.arguments?.firstOrNull { it.name?.asString() == argumentName }
+        ?.value as? List<*>)
+        ?.filterIsInstance<KSType>()
+        .orEmpty()
+
 /** Reads a String-valued annotation argument, or null if the annotation/argument is absent. */
 fun KSAnnotated.stringArgument(annotationFqn: String, argumentName: String): String? =
     annotations.firstOrNull { it.qualifiedName() == annotationFqn }

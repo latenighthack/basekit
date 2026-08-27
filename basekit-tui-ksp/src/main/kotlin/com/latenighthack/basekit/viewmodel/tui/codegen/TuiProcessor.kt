@@ -19,6 +19,7 @@ import com.google.devtools.ksp.symbol.Modifier
 
 private const val VIEWMODEL_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelSpec"
 private const val VIEWMODEL_LIST_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelList"
+private const val CHILD_VIEWMODEL_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ChildViewModel"
 private const val VIEWMODEL_INJECT_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelInject"
 private const val VIEWMODEL_MODULE_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelModule"
 private const val VIEWMODEL_INTERFACE = "com.latenighthack.basekit.viewmodel.ViewModel"
@@ -27,6 +28,7 @@ private const val TUIFIELD_ANNOTATION = "com.latenighthack.basekit.viewmodel.tui
 private const val TUIACTION_ANNOTATION = "com.latenighthack.basekit.viewmodel.tui.annotations.TuiAction"
 private const val TUITOGGLE_ANNOTATION = "com.latenighthack.basekit.viewmodel.tui.annotations.TuiToggle"
 private const val TUILIST_ANNOTATION = "com.latenighthack.basekit.viewmodel.tui.annotations.TuiList"
+private const val TUICHILD_ANNOTATION = "com.latenighthack.basekit.viewmodel.tui.annotations.TuiChild"
 private const val DESTINATION_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.Destination"
 private const val ROUTE_ARG_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.RouteArg"
 private const val NAVIGATE_TO_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.NavigateTo"
@@ -161,12 +163,7 @@ class TuiProcessor(
             ?.map { it.simpleName.asString() }
             ?.toList().orEmpty()
 
-        val edges = decl.getDeclaredFunctions().flatMap { fn ->
-            fn.annotations.filter { it.qualifiedName() == NAVIGATE_TO_ANNOTATION }.mapNotNull { ann ->
-                val target = ann.arguments.firstOrNull { it.name?.asString() == "target" }?.value as? KSType
-                target?.declaration?.qualifiedName?.asString()?.let { Edge(fn.simpleName.asString(), it) }
-            }
-        }.toList()
+        val edges = collectEdges(decl, visited = mutableSetOf())
 
         return DestNode(
             qualifiedName = decl.qualifiedName!!.asString(),
@@ -178,6 +175,52 @@ class TuiProcessor(
             routeArgs = routeArgs,
             edges = edges,
         )
+    }
+
+    /**
+     * Collects the `@NavigateTo` edges declared on [decl] plus those on any viewmodel it embeds
+     * through `@ChildViewModel` / `@ViewModelList` properties, recursively — mirroring the
+     * navigation processor's roll-up, so a list row or child pane can navigate with its host
+     * destination's navigator. [visited] guards against spec cycles.
+     */
+    private fun collectEdges(decl: KSClassDeclaration, visited: MutableSet<String>): List<Edge> {
+        val qualifiedName = decl.qualifiedName?.asString() ?: return emptyList()
+        if (!visited.add(qualifiedName)) return emptyList()
+
+        val own = decl.getDeclaredFunctions().flatMap { fn ->
+            fn.annotations.filter { it.qualifiedName() == NAVIGATE_TO_ANNOTATION }.mapNotNull { ann ->
+                val target = ann.arguments.firstOrNull { it.name?.asString() == "target" }?.value as? KSType
+                target?.declaration?.qualifiedName?.asString()?.let { Edge(fn.simpleName.asString(), it) }
+            }
+        }.toList()
+
+        val embedded = decl.getDeclaredProperties()
+            .flatMap { embeddedViewModelTypes(it) }
+            .flatMap { collectEdges(it, visited) }
+            .toList()
+
+        return (own + embedded).distinct()
+    }
+
+    /** The viewmodel specs a `@ChildViewModel` / `@ViewModelList` property embeds in its host. */
+    private fun embeddedViewModelTypes(property: KSPropertyDeclaration): List<KSClassDeclaration> {
+        val listAnnotation = property.annotations.firstOrNull { it.qualifiedName() == VIEWMODEL_LIST_ANNOTATION }
+        return when {
+            property.hasAnnotation(CHILD_VIEWMODEL_ANNOTATION) ->
+                listOfNotNull(property.type.resolve().declaration as? KSClassDeclaration)
+            listAnnotation != null -> {
+                val possibleTypes = property.classListArgument(VIEWMODEL_LIST_ANNOTATION, "possibleTypes")
+                    .mapNotNull { it.declaration as? KSClassDeclaration }
+                // The property is Flow<Delta<X>>; X is the element spec for lists declared without
+                // explicit possibleTypes.
+                val element = property.type.resolve()
+                    .arguments.firstOrNull()?.type?.resolve()
+                    ?.arguments?.firstOrNull()?.type?.resolve()
+                    ?.declaration as? KSClassDeclaration
+                (possibleTypes + listOfNotNull(element)).distinctBy { it.qualifiedName?.asString() }
+            }
+            else -> emptyList()
+        }
     }
 
     private fun buildScreen(
@@ -216,10 +259,6 @@ class TuiProcessor(
 
         val navPackage = navPackageOption ?: dest.packageName
 
-        val list = vm.getDeclaredProperties()
-            .firstOrNull { it.hasAnnotation(VIEWMODEL_LIST_ANNOTATION) }
-            ?.let { buildList(it) }
-
         val outboundTargets = dest.edges.map { it.targetQualifiedName }.distinct()
 
         val navigatorInterface = outboundTargets
@@ -238,76 +277,19 @@ class TuiProcessor(
             )
         }
 
-        // Suspend methods split by arity: zero-arg ones become key-bound actions; single Bool/String-arg
-        // ones become mutations the TUI prompts for. `@TuiAction` tunes label/key/hidden; `@TuiToggle`
-        // turns a Boolean mutation into a state toggle. Keys are assigned across both — honoring pinned
-        // keys and skipping hidden ones — so they never collide.
-        val suspendFns = vm.getDeclaredFunctions()
-            .filter { it.modifiers.contains(Modifier.SUSPEND) && !it.simpleName.asString().startsWith("<") }
+        val keyAllocator = KeyAllocator(logger)
+        val behavior = buildBehavior(vm, stateDecl, keyAllocator, vmName)
+        val stateProps = behavior.stateProps
+        val actions = behavior.actions
+        val mutations = behavior.mutations
+        val lists = vm.getDeclaredProperties()
+            .filter { it.hasAnnotation(VIEWMODEL_LIST_ANNOTATION) }
+            .mapNotNull { buildList(it, keyAllocator, "$vmName.${it.simpleName.asString()}") }
             .toList()
-        val actionFns = suspendFns.filter { it.parameters.isEmpty() }
-        val mutationFns = suspendFns.mapNotNull { fn ->
-            fn.parameters.singleOrNull()?.mutationParamKind()?.let { fn to it }
-        }
-
-        // Auto-assign keys only to the visible elements without a pinned key; pinned keys are reserved so
-        // auto-assignment never lands on them.
-        val visibleFns = (actionFns + mutationFns.map { it.first })
-            .filter { it.booleanArgument(TUIACTION_ANNOTATION, "hidden") != true }
-        val pinnedKeys = visibleFns.mapNotNull { fn ->
-            fn.charArgument(TUIACTION_ANNOTATION, "key")?.takeIf { it != ' ' }
-                ?.let { fn.simpleName.asString() to it }
-        }.toMap()
-        val keys = assignKeys(visibleFns.map { it.simpleName.asString() }, pinnedKeys)
-
-        val actions = actionFns.map { fn ->
-            val name = fn.simpleName.asString()
-            Action(
-                name = name,
-                key = keys[name] ?: ' ',
-                label = fn.stringArgument(TUIACTION_ANNOTATION, "label")?.takeIf { it.isNotEmpty() },
-                hidden = fn.booleanArgument(TUIACTION_ANNOTATION, "hidden") == true,
-            )
-        }
-        val mutations = mutationFns.map { (fn, kind) ->
-            val name = fn.simpleName.asString()
-            Mutation(
-                name = name,
-                key = keys[name] ?: ' ',
-                paramKind = kind,
-                label = fn.stringArgument(TUIACTION_ANNOTATION, "label")?.takeIf { it.isNotEmpty() },
-                hidden = fn.booleanArgument(TUIACTION_ANNOTATION, "hidden") == true,
-                toggleField = fn.stringArgument(TUITOGGLE_ANNOTATION, "field")?.takeIf { it.isNotEmpty() },
-            )
-        }
-
-        // Merge each `@TuiToggle` mutation with the Boolean State property it names: the property renders
-        // as a toggle whose flip is driven by the mutation. Misconfigurations are hard errors so the
-        // author sees them instead of silently getting the default t/f prompt.
-        val baseStateProps = stateDecl.stateProps()
-        val statePropsByName = baseStateProps.associateBy { it.name }
-        for (fn in suspendFns.filter { it.hasAnnotation(TUITOGGLE_ANNOTATION) }) {
-            val name = fn.simpleName.asString()
-            val kind = fn.parameters.singleOrNull()?.mutationParamKind()
-            val field = fn.stringArgument(TUITOGGLE_ANNOTATION, "field")?.takeIf { it.isNotEmpty() }
-            val target = field?.let { statePropsByName[it] }
-            when {
-                kind != MutationParamKind.BOOL ->
-                    logger.error("@TuiToggle on $vmName.$name must annotate a single-Boolean-argument suspend function")
-                field == null ->
-                    logger.error("@TuiToggle on $vmName.$name requires a non-empty field name")
-                target == null ->
-                    logger.error("@TuiToggle(field = \"$field\") on $vmName.$name names no State property of $vmName")
-                target.typeSimpleName != "Boolean" ->
-                    logger.error("@TuiToggle(field = \"$field\") on $vmName.$name must target a Boolean State property, but $field is ${target.typeSimpleName}")
-            }
-        }
-        val stateProps = baseStateProps.map { prop ->
-            val toggle = mutations.firstOrNull {
-                it.toggleField == prop.name && it.paramKind == MutationParamKind.BOOL && prop.typeSimpleName == "Boolean"
-            }
-            if (toggle != null) prop.copy(style = FieldStyle.TOGGLE, hidden = false, toggleMutation = toggle.name) else prop
-        }
+        val children = vm.getDeclaredProperties()
+            .filter { it.hasAnnotation(CHILD_VIEWMODEL_ANNOTATION) }
+            .mapNotNull { buildChild(it, keyAllocator, vmName, emptySet()) }
+            .toList()
 
         // The impl's `@Assisted` params (in ctor order) — each supplied by the component per screen build.
         // Classified by type so screenForDestination hands over the right value. A screen may take more
@@ -333,7 +315,8 @@ class TuiProcessor(
             stateProps = stateProps,
             actions = actions,
             mutations = mutations,
-            list = list,
+            lists = lists,
+            children = children,
             destQualifiedName = dest.qualifiedName,
             assisted = assisted,
             navigatorInterface = navigatorInterface,
@@ -351,32 +334,164 @@ class TuiProcessor(
         }
     }
 
-    private fun buildList(prop: KSPropertyDeclaration): ListInfo? {
+    private fun buildList(prop: KSPropertyDeclaration, keys: KeyAllocator, owner: String): ListInfo? {
         // Property type is Flow<Delta<ElementVm>>.
         val elementDecl = prop.type.resolve()
             .arguments.firstOrNull()?.type?.resolve()          // Delta<X>
             ?.arguments?.firstOrNull()?.type?.resolve()        // X
             ?.declaration as? KSClassDeclaration ?: return null
-        val elementState = elementDecl.getAllSuperTypes()
-            .firstOrNull { it.declaration.qualifiedName?.asString() == VIEWMODEL_INTERFACE }
-            ?.arguments?.firstOrNull()?.type?.resolve()?.declaration as? KSClassDeclaration
-
-        // Enter on a row invokes the element's zero-arg suspend action (prefer one named `onSelected`).
-        // Whatever it does — including navigating via the element's injected navigator — is the
-        // element's concern, not the screen's.
-        val zeroArgActions = elementDecl.getDeclaredFunctions()
-            .filter { it.modifiers.contains(Modifier.SUSPEND) && it.parameters.isEmpty() && !it.simpleName.asString().startsWith("<") }
-            .map { it.simpleName.asString() }
-            .toList()
-        val selectionAction = zeroArgActions.firstOrNull { it == "onSelected" } ?: zeroArgActions.firstOrNull()
+        val declaredTypes = prop.classListArgument(VIEWMODEL_LIST_ANNOTATION, "possibleTypes")
+            .mapNotNull { it.declaration as? KSClassDeclaration }
+        val itemDecls = declaredTypes.ifEmpty { listOf(elementDecl) }
+        val possibleTypes = itemDecls.map { itemDecl ->
+            val stateDecl = itemDecl.getAllSuperTypes()
+                .firstOrNull { it.declaration.qualifiedName?.asString() == VIEWMODEL_INTERFACE }
+                ?.arguments?.firstOrNull()?.type?.resolve()?.declaration as? KSClassDeclaration
+            val zeroArgFns = itemDecl.getDeclaredFunctions()
+                .filter { it.modifiers.contains(Modifier.SUSPEND) && it.parameters.isEmpty() && !it.simpleName.asString().startsWith("<") }
+                .toList()
+            val selection = zeroArgFns.firstOrNull { it.simpleName.asString() == "onItemTapped" }
+                ?: zeroArgFns.firstOrNull { it.simpleName.asString() == "onSelected" }
+                ?: zeroArgFns.firstOrNull()
+            val secondary = zeroArgFns.filterNot { it == selection }.map { fn ->
+                val name = fn.simpleName.asString()
+                val hidden = fn.booleanArgument(TUIACTION_ANNOTATION, "hidden") == true
+                Action(
+                    name = name,
+                    key = if (hidden) ' ' else keys.allocate(
+                        owner = "$owner.${itemDecl.simpleName.asString()}.$name",
+                        name = name,
+                        pinned = fn.charArgument(TUIACTION_ANNOTATION, "key")?.takeIf { it != ' ' },
+                    ),
+                    label = fn.stringArgument(TUIACTION_ANNOTATION, "label")?.takeIf { it.isNotEmpty() },
+                    hidden = hidden,
+                )
+            }
+            ListItemType(
+                qualifiedName = itemDecl.qualifiedName!!.asString(),
+                stateProps = stateDecl?.stateProps().orEmpty(),
+                selectionAction = selection?.simpleName?.asString(),
+                secondaryActions = secondary,
+            )
+        }
 
         return ListInfo(
             propertyName = prop.simpleName.asString(),
             elementQualifiedName = elementDecl.qualifiedName!!.asString(),
-            elementStateProps = elementState?.stateProps().orEmpty(),
-            selectionAction = selectionAction,
+            possibleTypes = possibleTypes,
             label = prop.stringArgument(TUILIST_ANNOTATION, "label")?.takeIf { it.isNotEmpty() },
         )
+    }
+
+    private fun buildChild(
+        prop: KSPropertyDeclaration,
+        keys: KeyAllocator,
+        owner: String,
+        ancestors: Set<String>,
+    ): ChildInfo? {
+        val childDecl = prop.type.resolve().declaration as? KSClassDeclaration ?: return null
+        val childQn = childDecl.qualifiedName?.asString() ?: return null
+        if (childQn in ancestors) {
+            logger.error("Recursive @ChildViewModel cycle through $owner.${prop.simpleName.asString()}")
+            return null
+        }
+        val stateDecl = childDecl.getAllSuperTypes()
+            .firstOrNull { it.declaration.qualifiedName?.asString() == VIEWMODEL_INTERFACE }
+            ?.arguments?.firstOrNull()?.type?.resolve()?.declaration as? KSClassDeclaration
+        if (stateDecl == null) {
+            logger.error("@ChildViewModel $owner.${prop.simpleName.asString()} does not implement ViewModel<State>")
+            return null
+        }
+        val path = "$owner.${prop.simpleName.asString()}"
+        val behavior = buildBehavior(childDecl, stateDecl, keys, path)
+        val nextAncestors = ancestors + childQn
+        return ChildInfo(
+            propertyName = prop.simpleName.asString(),
+            qualifiedName = childQn,
+            label = prop.stringArgument(TUICHILD_ANNOTATION, "label")?.takeIf { it.isNotEmpty() },
+            visibleWhenField = prop.stringArgument(TUICHILD_ANNOTATION, "visibleWhenField")?.takeIf { it.isNotEmpty() },
+            visibleWhenValue = prop.stringArgument(TUICHILD_ANNOTATION, "visibleWhenValue")?.takeIf { it.isNotEmpty() },
+            stateProps = behavior.stateProps,
+            actions = behavior.actions,
+            mutations = behavior.mutations,
+            lists = childDecl.getDeclaredProperties()
+                .filter { it.hasAnnotation(VIEWMODEL_LIST_ANNOTATION) }
+                .mapNotNull { buildList(it, keys, "$path.${it.simpleName.asString()}") }
+                .toList(),
+            children = childDecl.getDeclaredProperties()
+                .filter { it.hasAnnotation(CHILD_VIEWMODEL_ANNOTATION) }
+                .mapNotNull { buildChild(it, keys, path, nextAncestors) }
+                .toList(),
+        )
+    }
+
+    private data class Behavior(
+        val stateProps: List<StateProp>,
+        val actions: List<Action>,
+        val mutations: List<Mutation>,
+    )
+
+    private fun buildBehavior(
+        vm: KSClassDeclaration,
+        stateDecl: KSClassDeclaration,
+        keys: KeyAllocator,
+        owner: String,
+    ): Behavior {
+        val suspendFns = vm.getDeclaredFunctions()
+            .filter { it.modifiers.contains(Modifier.SUSPEND) && !it.simpleName.asString().startsWith("<") }
+            .toList()
+        val actionFns = suspendFns.filter { it.parameters.isEmpty() }
+        val mutationFns = suspendFns.mapNotNull { fn ->
+            fn.parameters.singleOrNull()?.mutationParamKind()?.let { fn to it }
+        }
+        fun keyFor(fn: com.google.devtools.ksp.symbol.KSFunctionDeclaration): Char {
+            if (fn.booleanArgument(TUIACTION_ANNOTATION, "hidden") == true) return ' '
+            val name = fn.simpleName.asString()
+            return keys.allocate(
+                owner = "$owner.$name",
+                name = name,
+                pinned = fn.charArgument(TUIACTION_ANNOTATION, "key")?.takeIf { it != ' ' },
+            )
+        }
+        val actions = actionFns.map { fn ->
+            Action(
+                name = fn.simpleName.asString(),
+                key = keyFor(fn),
+                label = fn.stringArgument(TUIACTION_ANNOTATION, "label")?.takeIf { it.isNotEmpty() },
+                hidden = fn.booleanArgument(TUIACTION_ANNOTATION, "hidden") == true,
+            )
+        }
+        val mutations = mutationFns.map { (fn, kind) ->
+            Mutation(
+                name = fn.simpleName.asString(),
+                key = keyFor(fn),
+                paramKind = kind,
+                label = fn.stringArgument(TUIACTION_ANNOTATION, "label")?.takeIf { it.isNotEmpty() },
+                hidden = fn.booleanArgument(TUIACTION_ANNOTATION, "hidden") == true,
+                toggleField = fn.stringArgument(TUITOGGLE_ANNOTATION, "field")?.takeIf { it.isNotEmpty() },
+            )
+        }
+        val baseStateProps = stateDecl.stateProps()
+        val statePropsByName = baseStateProps.associateBy { it.name }
+        for (fn in suspendFns.filter { it.hasAnnotation(TUITOGGLE_ANNOTATION) }) {
+            val name = fn.simpleName.asString()
+            val kind = fn.parameters.singleOrNull()?.mutationParamKind()
+            val field = fn.stringArgument(TUITOGGLE_ANNOTATION, "field")?.takeIf { it.isNotEmpty() }
+            val target = field?.let { statePropsByName[it] }
+            when {
+                kind != MutationParamKind.BOOL -> logger.error("@TuiToggle on $owner.$name must annotate a single-Boolean-argument suspend function")
+                field == null -> logger.error("@TuiToggle on $owner.$name requires a non-empty field name")
+                target == null -> logger.error("@TuiToggle(field = \"$field\") on $owner.$name names no State property")
+                target.typeSimpleName != "Boolean" -> logger.error("@TuiToggle(field = \"$field\") on $owner.$name must target a Boolean State property")
+            }
+        }
+        val stateProps = baseStateProps.map { prop ->
+            val toggle = mutations.firstOrNull {
+                it.toggleField == prop.name && it.paramKind == MutationParamKind.BOOL && prop.typeSimpleName == "Boolean"
+            }
+            if (toggle != null) prop.copy(style = FieldStyle.TOGGLE, hidden = false, toggleMutation = toggle.name) else prop
+        }
+        return Behavior(stateProps, actions, mutations)
     }
 
     private fun KSClassDeclaration.stateProps(): List<StateProp> =
@@ -405,6 +520,29 @@ class TuiProcessor(
             else -> null
         }
 
+}
+
+/** Allocates one keyspace across a root screen, its visible children, and selected-row actions. */
+internal class KeyAllocator(private val logger: KSPLogger) {
+    private val owners = mutableMapOf('q' to "quit", '\t' to "focus")
+
+    fun allocate(owner: String, name: String, pinned: Char?): Char {
+        if (pinned != null) {
+            val normalized = pinned.lowercaseChar()
+            val previous = owners[normalized]
+            if (previous != null) {
+                logger.error("TUI key '$normalized' is pinned by both $previous and $owner")
+            } else {
+                owners[normalized] = owner
+            }
+            return normalized
+        }
+        val candidates = name.removePrefix("on") + name
+        val key = candidates.firstOrNull { it.isLetter() && it.lowercaseChar() !in owners }
+            ?.lowercaseChar() ?: '?'
+        if (key != '?') owners[key] = owner
+        return key
+    }
 }
 
 /**

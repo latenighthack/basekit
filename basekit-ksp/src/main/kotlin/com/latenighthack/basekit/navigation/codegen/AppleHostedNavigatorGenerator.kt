@@ -74,12 +74,15 @@ class AppleHostedNavigatorGenerator(
         write("Apple${cap}Navigator") {
             buildString {
                 appendLine("import com.latenighthack.basekit.navigation.awaitNavigationResult")
+                appendLine("import com.latenighthack.basekit.navigation.runOnMainThread")
                 appendLine()
+                appendLine("// Host calls cross into platform UI (UIKit/AppKit), which requires the main thread; the")
+                appendLine("// ViewModel action driving navigation may run on any dispatcher, so every call hops to main.")
                 appendLine("public class Apple${cap}Navigator(")
                 appendLine("    public val ownerId: String,")
                 appendLine("    private val host: AppleNavigationHost,")
                 appendLine(") : $navigatorType {")
-                appendLine("    override fun close(context: Any?) = host.close(ownerId, context)")
+                appendLine("    override fun close(context: Any?) = runOnMainThread { host.close(ownerId, context) }")
 
                 sourceSites.groupBy { it.target.qualifiedName }.values.forEach { targetSites ->
                     val target = targetSites.first().target
@@ -115,11 +118,11 @@ class AppleHostedNavigatorGenerator(
                     if (target.responseQualifiedName != null) {
                         appendLine("    override suspend fun navigateTo$targetCap($params): ${target.responseQualifiedName}? =")
                         appendLine("        awaitNavigationResult { responder ->")
-                        appendLine("            host.show$targetCap($callArgs)")
+                        appendLine("            runOnMainThread { host.show$targetCap($callArgs) }")
                         appendLine("        }")
                     } else {
                         appendLine("    override fun navigateTo$targetCap($params) {")
-                        appendLine("        host.show$targetCap($callArgs)")
+                        appendLine("        runOnMainThread { host.show$targetCap($callArgs) }")
                         appendLine("    }")
                     }
                 }

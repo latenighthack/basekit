@@ -79,3 +79,19 @@ public annotation class TuiToggle(val field: String)
  */
 @Target(AnnotationTarget.PROPERTY)
 public annotation class TuiList(val label: String = "")
+
+/**
+ * Controls how a `@ChildViewModel` is embedded in its parent's generated terminal screen.
+ *
+ * When [visibleWhenField] and [visibleWhenValue] are both non-empty, the child is rendered only
+ * while the named parent-state property's `toString()` equals [visibleWhenValue]. Empty values keep
+ * the child permanently visible. This deliberately uses display values rather than a concrete enum
+ * type so the annotation remains useful for enums, booleans, and strings without coupling the TUI
+ * annotations slice to an application's state types.
+ */
+@Target(AnnotationTarget.PROPERTY)
+public annotation class TuiChild(
+    val label: String = "",
+    val visibleWhenField: String = "",
+    val visibleWhenValue: String = "",
+)

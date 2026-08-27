@@ -1,7 +1,10 @@
 package com.latenighthack.basekit.viewmodel.tui.codegen
 
+import com.google.devtools.ksp.processing.KSPLogger
+import com.google.devtools.ksp.symbol.KSNode
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertContains
 import kotlin.test.assertTrue
 
 /** Covers the TUI key-binding assignment: distinct keys, `q` reserved, `?` fallback. */
@@ -50,4 +53,24 @@ class AssignKeysTest {
         assertTrue(keys.getValue("onReset") != 'r')
         assertEquals(2, keys.values.toSet().size, "each action still gets a unique key: $keys")
     }
+
+    @Test
+    fun explicitCollisionsAreReportedAcrossOneScreenKeyspace() {
+        val logger = RecordingLogger()
+        val allocator = KeyAllocator(logger)
+
+        allocator.allocate("Room.onOpen", "onOpen", 'a')
+        allocator.allocate("Room.chat.onAttach", "onAttach", 'a')
+
+        assertContains(logger.errors.single(), "pinned by both Room.onOpen and Room.chat.onAttach")
+    }
+}
+
+private class RecordingLogger : KSPLogger {
+    val errors = mutableListOf<String>()
+    override fun logging(message: String, symbol: KSNode?) = Unit
+    override fun info(message: String, symbol: KSNode?) = Unit
+    override fun warn(message: String, symbol: KSNode?) = Unit
+    override fun error(message: String, symbol: KSNode?) { errors += message }
+    override fun exception(e: Throwable) = throw e
 }
