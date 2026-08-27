@@ -50,14 +50,15 @@ class SwiftKvoGenerator(
             val className = "Kvo${vm.simpleName}"
 
             val dynamicProps = vm.stateProperties.joinToString("\n") {
-                val st = swiftType(it.typeQualifiedName, it.nullable)
+                val st = swiftType(it.typeQualifiedName, it.nullable, it.listElementQualifiedName)
                 "    @objc public dynamic var ${it.name}: ${st.type} = ${st.default}"
             }
 
             // Erased (AnyObject?) properties need an explicit bridge: Swift will not assign a
-            // value type ([String], a Kotlin enum bridged struct, …) to AnyObject implicitly.
+            // value type (a Kotlin enum bridged struct, …) to AnyObject implicitly. A typed
+            // collection like [String] maps directly and needs no bridge.
             fun VmStateProperty.assignSuffix(): String =
-                if (swiftType(typeQualifiedName, nullable).type == "AnyObject?") " as AnyObject" else ""
+                if (swiftType(typeQualifiedName, nullable, listElementQualifiedName).type == "AnyObject?") " as AnyObject" else ""
 
             val seedAssigns = vm.stateProperties.joinToString("\n") {
                 "        self.${it.name} = initial.${it.name}${it.assignSuffix()}"

@@ -7,7 +7,7 @@ import me.tatarka.inject.annotations.Provides
 data class FeedItemData(val id: String, val title: String, val subtitle: String)
 
 /** A detail screen's data, keyed by feed item id. [count], [note] and [flagged] are mutated by the detail actions. */
-data class DetailData(val id: String, val body: String, val count: Int, val note: String, val flagged: Boolean)
+data class DetailData(val id: String, val body: String, val count: Int, val note: String, val flagged: Boolean, val tags: List<String>)
 
 /** One choice the picker offers. */
 data class PickerOption(val id: Int, val label: String)
@@ -55,7 +55,10 @@ class InMemoryDemoStore : DemoStore {
 
     override fun detail(id: String): DetailData {
         val title = items.firstOrNull { it.id == id }?.title ?: id
-        return DetailData(id, "Body for $title", counts[id] ?: 0, notes[id] ?: "", flags[id] ?: false)
+        val count = counts[id] ?: 0
+        val flagged = flags[id] ?: false
+        val tags = listOfNotNull("flagged".takeIf { flagged }, "counted".takeIf { count > 0 }, id)
+        return DetailData(id, "Body for $title", count, notes[id] ?: "", flagged, tags)
     }
 
     override fun incrementCount(id: String): Int = ((counts[id] ?: 0) + 1).also { counts[id] = it }

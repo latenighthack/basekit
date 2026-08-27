@@ -33,7 +33,14 @@ class ReactHookGenerator(
             }
 
             val stateAssigns = vm.stateProperties.joinToString("\n") {
-                "    result.${it.name} = state.${it.name}"
+                // A Kotlin List is not a JS array; hand list-of-string state back as a real array so
+                // React consumers can map/index it. `?.` keeps a nullable list null rather than throwing.
+                if (it.listElementQualifiedName == "kotlin.String") {
+                    val access = if (it.nullable) "state.${it.name}?" else "state.${it.name}"
+                    "    result.${it.name} = $access.toTypedArray()"
+                } else {
+                    "    result.${it.name} = state.${it.name}"
+                }
             }
 
             val actionAssigns = vm.actions.joinToString("\n") { action ->

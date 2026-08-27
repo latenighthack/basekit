@@ -22,6 +22,12 @@ data class VmStateProperty(
     val typeSimpleName: String,
     val typeQualifiedName: String,
     val nullable: Boolean = false,
+    /**
+     * For a `List<E>` (or `MutableList<E>`) state property, the element type's qualified name (e.g.
+     * `kotlin.String`); null for any non-list property. Lets the Swift generators emit `[String]` and
+     * the React hook hand back a real JS array instead of erasing the list to an opaque object.
+     */
+    val listElementQualifiedName: String? = null,
 )
 
 /** A `@ViewModelList` property: a `Flow<Delta<ElementVm>>` of child ViewModels. */

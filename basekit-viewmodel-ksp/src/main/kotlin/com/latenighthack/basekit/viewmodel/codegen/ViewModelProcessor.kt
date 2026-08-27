@@ -119,7 +119,14 @@ class ViewModelProcessor(
             val resolved = prop.type.resolve()
             val type = resolved.declaration
             val typeQn = type.qualifiedName?.asString() ?: return@mapNotNull null
-            VmStateProperty(prop.simpleName.asString(), type.simpleName.asString(), typeQn, resolved.isMarkedNullable)
+            // For a List<E>/MutableList<E>, peel the element type so the platform generators can emit a
+            // typed collection rather than the erased-object fallback.
+            val elementQn = if (typeQn == "kotlin.collections.List" || typeQn == "kotlin.collections.MutableList") {
+                resolved.arguments.firstOrNull()?.type?.resolve()?.declaration?.qualifiedName?.asString()
+            } else {
+                null
+            }
+            VmStateProperty(prop.simpleName.asString(), type.simpleName.asString(), typeQn, resolved.isMarkedNullable, elementQn)
         }.toList()
 
         val boundFunctions = declaration.getDeclaredFunctions()

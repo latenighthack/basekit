@@ -35,14 +35,15 @@ class SwiftUIObservableGenerator(
             val className = "Observable${vm.simpleName}"
 
             val publishedProps = vm.stateProperties.joinToString("\n") {
-                val st = swiftType(it.typeQualifiedName, it.nullable)
+                val st = swiftType(it.typeQualifiedName, it.nullable, it.listElementQualifiedName)
                 "    @Published public private(set) var ${it.name}: ${st.type} = ${st.default}"
             }
 
             // Erased (AnyObject?) properties need an explicit bridge: Swift will not assign a
-            // value type ([String], a Kotlin enum bridged struct, …) to AnyObject implicitly.
+            // value type (a Kotlin enum bridged struct, …) to AnyObject implicitly. A typed
+            // collection like [String] maps directly and needs no bridge.
             fun VmStateProperty.assignSuffix(): String =
-                if (swiftType(typeQualifiedName, nullable).type == "AnyObject?") " as AnyObject" else ""
+                if (swiftType(typeQualifiedName, nullable, listElementQualifiedName).type == "AnyObject?") " as AnyObject" else ""
 
             val seedAssigns = vm.stateProperties.joinToString("\n") {
                 "        self.${it.name} = initial.${it.name}${it.assignSuffix()}"
@@ -77,9 +78,12 @@ class SwiftUIObservableGenerator(
                 val prop = vm.stateProperties.firstOrNull {
                     it.name == noun &&
                         it.typeQualifiedName == mutator.paramTypeQualifiedName &&
-                        it.nullable == mutator.paramTypeNullable
+                        it.nullable == mutator.paramTypeNullable &&
+                        // A list property is driven by an action, not a bound scalar control; skip it so
+                        // its `[String]` read side can't pair with a mutator whose param is still erased.
+                        it.listElementQualifiedName == null
                 } ?: return@mapNotNull null
-                val st = swiftType(prop.typeQualifiedName, prop.nullable)
+                val st = swiftType(prop.typeQualifiedName, prop.nullable, prop.listElementQualifiedName)
                 """
                 |    /// Two-way binding for `${prop.name}`: reads the latest state, writes call `${mutator.name}`.
                 |    public var ${noun}Binding: Binding<${st.type}> {

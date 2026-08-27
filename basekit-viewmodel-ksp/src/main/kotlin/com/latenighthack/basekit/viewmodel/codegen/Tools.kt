@@ -59,8 +59,18 @@ fun mutatorNoun(name: String): String {
 /** How a Kotlin type surfaces in the generated Swift wrappers: its Swift name and a zero-value default. */
 data class SwiftType(val type: String, val default: String)
 
-/** Maps a Kotlin type's qualified name to its Swift wrapper representation (non-primitives erase to `AnyObject?`). */
-fun swiftType(qualifiedName: String, nullable: Boolean = false): SwiftType {
+/**
+ * Maps a Kotlin type's qualified name to its Swift wrapper representation (non-primitives erase to
+ * `AnyObject?`). For a `List<E>`/`MutableList<E>` state property, pass the element's qualified name as
+ * [elementQualifiedName]: a `List<String>` surfaces as Swift `[String]` (Kotlin/Native bridges it to
+ * `NSArray<NSString>`); lists of any other element type keep the erased `AnyObject?` mapping.
+ */
+fun swiftType(qualifiedName: String, nullable: Boolean = false, elementQualifiedName: String? = null): SwiftType {
+    if ((qualifiedName == "kotlin.collections.List" || qualifiedName == "kotlin.collections.MutableList") &&
+        elementQualifiedName == "kotlin.String"
+    ) {
+        return if (nullable) SwiftType("[String]?", "nil") else SwiftType("[String]", "[]")
+    }
     // A nullable primitive cannot be a Swift value type on an @objc property, so it is boxed to the
     // SKIE/Kotlin-Native NSNumber bridge (KotlinInt?, KotlinBoolean?, …); a nullable String becomes a
     // Swift optional String?. Non-primitives already erase to AnyObject? (Kotlin/Native drops the

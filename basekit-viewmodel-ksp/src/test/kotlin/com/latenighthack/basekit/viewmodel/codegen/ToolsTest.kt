@@ -53,4 +53,28 @@ class ToolsTest {
         assertEquals("KotlinBoolean?", swiftType("kotlin.Boolean", nullable = true).type)
         assertEquals("nil", swiftType("kotlin.Int", nullable = true).default)
     }
+
+    @Test
+    fun swiftType_maps_a_list_of_string_to_a_string_array() {
+        val t = swiftType("kotlin.collections.List", elementQualifiedName = "kotlin.String")
+        assertEquals("[String]", t.type)
+        assertEquals("[]", t.default)
+        // MutableList<String> is treated the same.
+        assertEquals("[String]", swiftType("kotlin.collections.MutableList", elementQualifiedName = "kotlin.String").type)
+    }
+
+    @Test
+    fun swiftType_maps_a_nullable_list_of_string_to_an_optional_array() {
+        val t = swiftType("kotlin.collections.List", nullable = true, elementQualifiedName = "kotlin.String")
+        assertEquals("[String]?", t.type)
+        assertEquals("nil", t.default)
+    }
+
+    @Test
+    fun swiftType_erases_a_list_of_non_string_to_anyobject() {
+        // Only List<String> is bridged; other element types keep the erased mapping.
+        assertEquals("AnyObject?", swiftType("kotlin.collections.List", elementQualifiedName = "kotlin.Int").type)
+        // A list with no captured element type also erases.
+        assertEquals("AnyObject?", swiftType("kotlin.collections.List").type)
+    }
 }

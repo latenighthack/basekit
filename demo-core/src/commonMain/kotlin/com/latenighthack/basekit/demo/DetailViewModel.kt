@@ -45,6 +45,9 @@ interface DetailViewModel :
         @TuiField(label = "Note") val note: String,
         // Rendered as a toggle row driven by onSetFlagged (see @TuiToggle below).
         val flagged: Boolean,
+        // A plain collection state field: surfaces as [String] on Swift, a JS array in the React hook,
+        // and its Kotlin toString() in the TUI table.
+        @TuiField(label = "Tags") val tags: List<String>,
     )
 
     @TuiAction(label = "Add one", key = 'a')
@@ -87,4 +90,4 @@ class RealDetailViewModel @Inject constructor(
     }
 }
 
-private fun DetailData.toState() = DetailViewModel.State(id, body, count, note, flagged)
+private fun DetailData.toState() = DetailViewModel.State(id, body, count, note, flagged, tags)
