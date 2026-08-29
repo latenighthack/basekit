@@ -107,15 +107,22 @@ class SwiftUIObservableGenerator(
                 |    /// Collects `${list.propertyName}` into a SwiftUI `DeltaList`. Drive with
                 |    /// `.task { await model.observe$cap(into: list) }`; each row wraps its child in `Observable${list.elementSimpleName}`.
                 |    ${DeltaListAvailability.SWIFTUI}
+                |    @available(*, deprecated, message: "Use DeltaListView(model.${list.propertyName}) or DeltaForEach(model.${list.propertyName})")
                 |    public func observe$cap(into list: DeltaList<${list.elementSimpleName}>) async {
                 |        await list.collect(viewModel.${list.propertyName})
                 |    }
                 """.trimMargin()
             }
+            val listElements = vm.lists.map { appleListElementDeclaration(vm, it, AppleWrapperStyle.OBSERVABLE) }
+                .filter { it.isNotEmpty() }
+                .joinToString("\n\n")
+            val listDescriptors = vm.lists.joinToString("\n\n") {
+                appleListDescriptorProperty(vm, it, AppleWrapperStyle.OBSERVABLE)
+            }
 
             val body = buildString {
                 for (framework in frameworkImports) {
-                    appendLine("import $framework")
+                    appendLine("@_spi(BaseKitCodegen) import $framework")
                 }
                 appendLine("import Foundation")
                 appendLine("import Combine")
@@ -125,6 +132,10 @@ class SwiftUIObservableGenerator(
                 appendLine("// The exported ViewModel type (${vm.simpleName}), its State, DeltaList and the")
                 appendLine("// exported KMP frameworks are linked/compiled by the consuming Swift target.")
                 appendLine()
+                if (listElements.isNotEmpty()) {
+                    appendLine(listElements)
+                    appendLine()
+                }
                 appendLine("@MainActor")
                 appendLine("public final class $className: ObservableObject {")
                 appendLine()
@@ -166,6 +177,10 @@ class SwiftUIObservableGenerator(
                 if (bindings.isNotEmpty()) {
                     appendLine()
                     appendLine(bindings)
+                }
+                if (listDescriptors.isNotEmpty()) {
+                    appendLine()
+                    appendLine(listDescriptors)
                 }
                 if (listObservers.isNotEmpty()) {
                     appendLine()

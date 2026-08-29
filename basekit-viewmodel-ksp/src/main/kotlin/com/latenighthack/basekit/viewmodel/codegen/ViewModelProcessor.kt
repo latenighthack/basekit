@@ -219,6 +219,92 @@ class ViewModelProcessor(
         }
         val elementQn = elementDecl.qualifiedName?.asString() ?: return null
 
+        val annotation = prop.annotations.first { it.qualifiedName() == VIEWMODEL_LIST_ANNOTATION }
+        val declaredTypes = (annotation.arguments
+            .firstOrNull { it.name?.asString() == "possibleTypes" }
+            ?.value as? List<*>)
+            .orEmpty()
+            .mapNotNull { it as? KSType }
+
+        if (declaredTypes.isEmpty()) {
+            logger.error("@ViewModelList ${prop.simpleName.asString()} on $ownerName must declare its exact possibleTypes")
+            return null
+        }
+
+        val invalidTypes = declaredTypes.filterNot { elementType.isAssignableFrom(it) }
+        if (invalidTypes.isNotEmpty()) {
+            logger.error(
+                "@ViewModelList ${prop.simpleName.asString()} on $ownerName declares types outside $elementQn: " +
+                    invalidTypes.joinToString { it.declaration.qualifiedName?.asString().orEmpty() }
+            )
+            return null
+        }
+
+        val distinctTypes = declaredTypes.distinctBy { it.declaration.qualifiedName?.asString() }
+        if (distinctTypes.size != declaredTypes.size) {
+            logger.error("@ViewModelList ${prop.simpleName.asString()} on $ownerName contains duplicate possibleTypes")
+            return null
+        }
+
+        val unboundTypes = distinctTypes
+            .mapNotNull { it.declaration as? KSClassDeclaration }
+            .filterNot { it.hasAnnotation(VIEWMODEL_ANNOTATION) }
+        if (unboundTypes.isNotEmpty()) {
+            logger.error(
+                "@ViewModelList ${prop.simpleName.asString()} on $ownerName declares child types without " +
+                    "@ViewModelSpec bindings: ${unboundTypes.joinToString { it.qualifiedName?.asString().orEmpty() }}"
+            )
+            return null
+        }
+
+        // A base type alongside one of its subtypes would make classification order-dependent and
+        // therefore not precise. Exact polymorphic lists must declare a non-overlapping type set.
+        for (leftIndex in distinctTypes.indices) {
+            for (rightIndex in (leftIndex + 1)..<distinctTypes.size) {
+                val left = distinctTypes[leftIndex]
+                val right = distinctTypes[rightIndex]
+                if (left.isAssignableFrom(right) || right.isAssignableFrom(left)) {
+                    logger.error(
+                        "@ViewModelList ${prop.simpleName.asString()} on $ownerName has overlapping possibleTypes " +
+                            "${left.declaration.qualifiedName?.asString()} and ${right.declaration.qualifiedName?.asString()}"
+                    )
+                    return null
+                }
+            }
+        }
+
+        val possibleTypes = distinctTypes.mapNotNull { type ->
+            val declaration = type.declaration as? KSClassDeclaration ?: return@mapNotNull null
+            val qn = declaration.qualifiedName?.asString() ?: return@mapNotNull null
+            val stateDeclaration = declaration.getAllSuperTypes()
+                .firstOrNull { it.declaration.qualifiedName?.asString() == VIEWMODEL_INTERFACE }
+                ?.arguments?.firstOrNull()?.type?.resolve()
+                ?.declaration as? KSClassDeclaration
+            // An `id` only serves as SwiftUI/DeltaList identity if it bridges to a statically
+            // Hashable Swift type. Value-class / object ids erase to `AnyObject?`, which is not
+            // `Hashable`, so those fall back to per-wrapper `ObjectIdentifier` identity instead.
+            val idProperty = stateDeclaration?.getDeclaredProperties()
+                ?.firstOrNull { it.simpleName.asString() == "id" }
+            val idIsHashable = idProperty?.let { prop ->
+                val resolved = prop.type.resolve()
+                val idQn = resolved.declaration.qualifiedName?.asString() ?: return@let false
+                swiftType(idQn, resolved.isMarkedNullable).type != "AnyObject?"
+            } == true
+            VmListElementType(
+                simpleName = declaration.simpleName.asString(),
+                qualifiedName = qn,
+                hasId = idIsHashable,
+            )
+        }
+        val caseNames = possibleTypes.map { it.simpleName.toListCaseName() }
+        if (caseNames.distinct().size != caseNames.size) {
+            logger.error(
+                "@ViewModelList ${prop.simpleName.asString()} on $ownerName produces duplicate generated case names: " +
+                    caseNames.joinToString()
+            )
+            return null
+        }
+
         val elementState = elementDecl.getAllSuperTypes()
             .firstOrNull { it.declaration.qualifiedName?.asString() == VIEWMODEL_INTERFACE }
             ?.arguments?.firstOrNull()?.type?.resolve()
@@ -230,6 +316,7 @@ class ViewModelProcessor(
             elementQualifiedName = elementQn,
             elementStateSimpleName = elementState?.simpleName?.asString(),
             elementStateQualifiedName = elementState?.qualifiedName?.asString(),
+            possibleTypes = possibleTypes,
         )
     }
 

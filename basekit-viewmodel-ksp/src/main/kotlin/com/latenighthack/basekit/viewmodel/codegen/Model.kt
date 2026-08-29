@@ -30,13 +30,27 @@ data class VmStateProperty(
     val listElementQualifiedName: String? = null,
 )
 
-/** A `@ViewModelList` property: a `Flow<Delta<ElementVm>>` of child ViewModels. */
+/** One exact child ViewModel type admitted by a `@ViewModelList`. */
+data class VmListElementType(
+    val simpleName: String,
+    val qualifiedName: String,
+    /**
+     * Whether the generated wrapper exposes an `id` State property that is usable as SwiftUI/DeltaList
+     * identity — i.e. one that bridges to a statically `Hashable` Swift type. Ids that erase to
+     * `AnyObject?` (value classes, object types) are not `Hashable`, so `hasId` is false for them and
+     * the generators fall back to per-wrapper `ObjectIdentifier` identity.
+     */
+    val hasId: Boolean,
+)
+
+/** A `@ViewModelList` property: a `Flow<Delta<ElementVm>>` with a precise closed child set. */
 data class VmList(
     val propertyName: String,
     val elementSimpleName: String,
     val elementQualifiedName: String,
     val elementStateSimpleName: String?,
     val elementStateQualifiedName: String?,
+    val possibleTypes: List<VmListElementType>,
 )
 
 /** A `@ChildViewModel` property: a single nested child ViewModel. */

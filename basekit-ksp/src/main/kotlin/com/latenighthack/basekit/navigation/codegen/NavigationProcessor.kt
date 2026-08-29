@@ -8,6 +8,7 @@ import com.google.devtools.ksp.processing.Dependencies
 import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
+import com.google.devtools.ksp.symbol.ClassKind
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFile
@@ -67,12 +68,36 @@ class NavigationProcessor(
             .toList()
 
         sourceFiles = symbols.mapNotNull { it.containingFile }
-        symbols.forEach { destinations.add(buildDestination(it)) }
+        // A list row's (or child's) @NavigateTo edges frequently live on the concrete implementation
+        // rather than the spec interface named in @ViewModelList / @ChildViewModel. Index every
+        // concrete class by the specs it implements so those edges can be rolled up (see
+        // [embeddedViewModelTypes]).
+        val implementorsBySpec = buildImplementorIndex(resolver)
+        symbols.forEach { destinations.add(buildDestination(it, implementorsBySpec)) }
 
         return emptyList()
     }
 
-    private fun buildDestination(declaration: KSClassDeclaration): DestinationInfo {
+    /** spec qualified name -> concrete classes in this compilation that implement it. */
+    private fun buildImplementorIndex(resolver: Resolver): Map<String, List<KSClassDeclaration>> {
+        val index = LinkedHashMap<String, MutableList<KSClassDeclaration>>()
+        resolver.getAllFiles()
+            .flatMap { it.declarations }
+            .filterIsInstance<KSClassDeclaration>()
+            .filter { it.classKind == ClassKind.CLASS }
+            .forEach { impl ->
+                impl.getAllSuperTypes().forEach { superType ->
+                    val superName = superType.declaration.qualifiedName?.asString() ?: return@forEach
+                    index.getOrPut(superName) { mutableListOf() }.add(impl)
+                }
+            }
+        return index
+    }
+
+    private fun buildDestination(
+        declaration: KSClassDeclaration,
+        implementorsBySpec: Map<String, List<KSClassDeclaration>>,
+    ): DestinationInfo {
         val simpleName = declaration.simpleName.asString()
         val qualifiedName = declaration.qualifiedName!!.asString()
 
@@ -120,7 +145,7 @@ class NavigationProcessor(
 
         val routeArgs = routeArgProperties.map { it.simpleName.asString() }
 
-        val edges = collectEdges(declaration, visited = mutableSetOf())
+        val edges = collectEdges(declaration, implementorsBySpec, visited = mutableSetOf())
 
         val navNameOverride = declaration.stringArgument(DESTINATION_ANNOTATION, "navName")
             ?.takeIf { it.isNotEmpty() }
@@ -146,7 +171,11 @@ class NavigationProcessor(
      * `@Destination`s own a navigator — so embedded edges roll up into the hosting destination's
      * graph. [visited] guards against spec cycles.
      */
-    private fun collectEdges(declaration: KSClassDeclaration, visited: MutableSet<String>): List<NavEdge> {
+    private fun collectEdges(
+        declaration: KSClassDeclaration,
+        implementorsBySpec: Map<String, List<KSClassDeclaration>>,
+        visited: MutableSet<String>,
+    ): List<NavEdge> {
         val qualifiedName = declaration.qualifiedName?.asString() ?: return emptyList()
         if (!visited.add(qualifiedName)) return emptyList()
 
@@ -162,18 +191,27 @@ class NavigationProcessor(
         }.toList()
 
         val embedded = declaration.getDeclaredProperties()
-            .flatMap { embeddedViewModelTypes(it) }
-            .flatMap { collectEdges(it, visited) }
+            .flatMap { embeddedViewModelTypes(it, implementorsBySpec) }
+            .flatMap { collectEdges(it, implementorsBySpec, visited) }
             .toList()
 
         return (own + embedded).distinct()
     }
 
-    /** The viewmodel specs a `@ChildViewModel` / `@ViewModelList` property embeds in its host. */
-    private fun embeddedViewModelTypes(property: KSPropertyDeclaration): List<KSClassDeclaration> {
+    /**
+     * The viewmodel types a `@ChildViewModel` / `@ViewModelList` property embeds in its host: the spec
+     * interface(s) named on the annotation plus every concrete implementation of them found in this
+     * compilation. A list row typically declares its `@NavigateTo` edge on the implementation
+     * (e.g. `ContactsActionItemViewModelImpl`) rather than on the shared row spec, so the
+     * implementations must be traversed too for those edges to roll up into the host navigator.
+     */
+    private fun embeddedViewModelTypes(
+        property: KSPropertyDeclaration,
+        implementorsBySpec: Map<String, List<KSClassDeclaration>>,
+    ): List<KSClassDeclaration> {
         val isChild = property.annotations.any { it.qualifiedName() == CHILD_VIEWMODEL_ANNOTATION }
         val listAnnotation = property.annotations.firstOrNull { it.qualifiedName() == VIEWMODEL_LIST_ANNOTATION }
-        return when {
+        val declared = when {
             isChild -> listOfNotNull(property.type.resolve().declaration as? KSClassDeclaration)
             listAnnotation != null -> {
                 val possibleTypes = (
@@ -187,10 +225,15 @@ class NavigationProcessor(
                     .arguments.firstOrNull()?.type?.resolve()
                     ?.arguments?.firstOrNull()?.type?.resolve()
                     ?.declaration as? KSClassDeclaration
-                (possibleTypes + listOfNotNull(element)).distinctBy { it.qualifiedName?.asString() }
+                possibleTypes + listOfNotNull(element)
             }
-            else -> emptyList()
+            else -> return emptyList()
+        }.distinctBy { it.qualifiedName?.asString() }
+
+        val implementors = declared.flatMap { spec ->
+            implementorsBySpec[spec.qualifiedName?.asString()].orEmpty()
         }
+        return (declared + implementors).distinctBy { it.qualifiedName?.asString() }
     }
 
     override fun finish() {

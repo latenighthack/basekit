@@ -44,5 +44,10 @@ kotlin {
                 api(libs.deltalist.android.recyclerview)
             }
         }
+        val jsMain by getting {
+            dependencies {
+                api(libs.deltalist.react)
+            }
+        }
     }
 }

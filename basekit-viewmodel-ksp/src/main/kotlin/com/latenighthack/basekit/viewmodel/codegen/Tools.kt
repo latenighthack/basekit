@@ -85,6 +85,8 @@ fun swiftType(qualifiedName: String, nullable: Boolean = false, elementQualified
             "kotlin.Float" -> SwiftType("KotlinFloat?", "nil")
             "kotlin.Double" -> SwiftType("KotlinDouble?", "nil")
             "kotlin.String" -> SwiftType("String?", "nil")
+            // ByteArray bridges to a concrete Kotlin/Native class, not an erased generic.
+            "kotlin.ByteArray" -> SwiftType("KotlinByteArray?", "nil")
             else -> SwiftType("AnyObject?", "nil")
         }
     }
@@ -97,6 +99,8 @@ fun swiftType(qualifiedName: String, nullable: Boolean = false, elementQualified
         "kotlin.Float" -> SwiftType("Float", "0")
         "kotlin.Double" -> SwiftType("Double", "0")
         "kotlin.String" -> SwiftType("String", "\"\"")
+        // ByteArray bridges to a concrete Kotlin/Native class, not an erased generic.
+        "kotlin.ByteArray" -> SwiftType("KotlinByteArray", "KotlinByteArray(size: 0)")
         else -> SwiftType("AnyObject?", "nil")
     }
 }
@@ -106,3 +110,7 @@ fun String.toUpperCamelCase(): String {
     val parts = if (contains('_')) split("_") else listOf(this)
     return parts.filter { it.isNotEmpty() }.joinToString("") { it[0].uppercase() + it.substring(1) }
 }
+
+/** `IncomingMessageItemViewModel` -> `incomingMessageItem`; used for generated closed Swift cases. */
+fun String.toListCaseName(): String =
+    removeSuffix("ViewModel").replaceFirstChar { it.lowercase() }

@@ -9,45 +9,21 @@ import java.io.File
 import java.io.OutputStream
 import kotlin.test.Test
 import kotlin.test.assertContains
-import kotlin.test.assertFalse
 
-class AppleSwiftNavigationGeneratorTest {
+class AppleHostedNavigatorGeneratorTest {
+    // A single action carrying two @NavigateTo (fan-out) must keep BOTH targets: previously the edge
+    // name was derived from source+method only, so distinctBy collapsed the two call sites and one
+    // target's navigate method silently vanished (leaving the Apple navigator non-conforming).
     @Test
-    fun isolatesTheKotlinNavigationHostConformanceToTheMainActor() {
-        val output = RecordingSwiftCodeGenerator()
+    fun fanOutActionKeepsEveryTargetWithDisambiguatedEdges() {
+        val output = RecordingCodeGenerator()
         val destinations = listOf(
             destination(
                 simpleName = "HomeViewModel",
                 qualifiedName = "sample.HomeViewModel",
                 navName = "home",
-                edges = listOf(NavEdge("onOpenRoom", "sample.RoomViewModel")),
+                edges = listOf(NavEdge("onOpenScan", "sample.ScanViewModel")),
             ),
-            destination(
-                simpleName = "RoomViewModel",
-                qualifiedName = "sample.RoomViewModel",
-                navName = "room",
-            ),
-        )
-
-        AppleSwiftNavigationGenerator(output, Dependencies(false), listOf("SampleKit"))
-            .generate(destinations)
-
-        val source = output.source()
-        assertContains(
-            source,
-            "BasekitNavigationRouter: NSObject, ObservableObject, @MainActor AppleNavigationHost",
-        )
-        assertFalse("@preconcurrency AppleNavigationHost" in source)
-        assertContains(
-            source,
-            "private static func replacingResponder(in route: BasekitRoute, with responder: NavigationResponder)",
-        )
-    }
-
-    @Test
-    fun keepsBothEdgesOfAFanOutActionDisambiguatedByTarget() {
-        val output = RecordingSwiftCodeGenerator()
-        val destinations = listOf(
             destination(
                 simpleName = "ContactsViewModel",
                 qualifiedName = "sample.ContactsViewModel",
@@ -61,16 +37,18 @@ class AppleSwiftNavigationGeneratorTest {
             destination("RoomViewModel", "sample.RoomViewModel", "room"),
         )
 
-        AppleSwiftNavigationGenerator(output, Dependencies(false), listOf("SampleKit"))
+        AppleHostedNavigatorGenerator(output, Dependencies(false), "sample")
             .generate(destinations)
 
         val source = output.source()
-        // both fan-out targets keep a distinct BasekitNavigationEdge case...
-        assertContains(source, "case contactsOnSearchChangedToScan")
-        assertContains(source, "case contactsOnSearchChangedToRoom")
-        // ...and the AppleNavigationEdge(_:) bridge maps both (matching the Kotlin enum's disambiguation)
-        assertContains(source, "self = .contactsOnSearchChangedToScan")
-        assertContains(source, "self = .contactsOnSearchChangedToRoom")
+        // both fan-out targets survive, as separate navigate methods
+        assertContains(source, "override fun navigateToScan(")
+        assertContains(source, "override fun navigateToRoom(")
+        // and their shared base edge name is disambiguated by target so the flat enum stays unique
+        assertContains(source, "CONTACTS_ON_SEARCH_CHANGED_TO_SCAN")
+        assertContains(source, "CONTACTS_ON_SEARCH_CHANGED_TO_ROOM")
+        // the non-colliding edge keeps its plain name
+        assertContains(source, "HOME_ON_OPEN_SCAN")
     }
 
     private fun destination(
@@ -92,7 +70,7 @@ class AppleSwiftNavigationGeneratorTest {
     )
 }
 
-private class RecordingSwiftCodeGenerator : CodeGenerator {
+private class RecordingCodeGenerator : CodeGenerator {
     private val output = ByteArrayOutputStream()
 
     fun source(): String = output.toString(Charsets.UTF_8.name())

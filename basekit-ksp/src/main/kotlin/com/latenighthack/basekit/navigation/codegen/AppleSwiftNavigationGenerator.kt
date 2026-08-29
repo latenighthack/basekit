@@ -9,16 +9,36 @@ class AppleSwiftNavigationGenerator(
     private val dependencies: Dependencies,
     private val frameworkImports: List<String>,
 ) {
-    private data class Site(val source: DestinationInfo, val method: String, val target: DestinationInfo) {
-        val kotlinName: String get() = "${source.navName.uppercase()}_${method.toUpperSnakeCase()}"
-        val swiftName: String get() = (source.navName + "_" + method).toUpperCamelCase().replaceFirstChar { it.lowercase() }
-    }
+    private data class Site(
+        val source: DestinationInfo,
+        val method: String,
+        val target: DestinationInfo,
+        // kotlinName must match AppleHostedNavigatorGenerator's AppleNavigationEdge entry so the
+        // BasekitNavigationEdge(_:) switch stays exhaustive. Both are target-disambiguated on fan-out.
+        val kotlinName: String,
+        val swiftName: String,
+    )
 
     fun generate(destinations: List<DestinationInfo>) {
         val byName = destinations.associateBy { it.qualifiedName }
-        val sites = destinations.flatMap { source ->
-            source.edges.mapNotNull { edge -> byName[edge.targetQualifiedName]?.let { Site(source, edge.methodName, it) } }
-        }.distinctBy { it.kotlinName }
+        val rawSites = destinations.flatMap { source ->
+            source.edges.mapNotNull { edge -> byName[edge.targetQualifiedName]?.let { Triple(source, edge.methodName, it) } }
+        }.distinctBy { (source, method, target) -> Triple(source.qualifiedName, method, target.qualifiedName) }
+        if (rawSites.isEmpty()) return
+
+        // Kept in lockstep with AppleHostedNavigatorGenerator: a fan-out action (multiple @NavigateTo)
+        // produces call sites sharing a source+method base name, so disambiguate by target.
+        val kotlinBase = { source: DestinationInfo, method: String ->
+            "${source.navName.uppercase()}_${method.toUpperSnakeCase()}"
+        }
+        val colliding = rawSites.groupingBy { (source, method, _) -> kotlinBase(source, method) }
+            .eachCount().filterValues { it > 1 }.keys
+        val sites = rawSites.map { (source, method, target) ->
+            val fanOut = kotlinBase(source, method) in colliding
+            val kotlinName = if (fanOut) "${kotlinBase(source, method)}_TO_${target.navName.uppercase()}" else kotlinBase(source, method)
+            val swiftRaw = if (fanOut) "${source.navName}_${method}_to_${target.navName}" else "${source.navName}_$method"
+            Site(source, method, target, kotlinName, swiftRaw.toUpperCamelCase().replaceFirstChar { it.lowercase() })
+        }
         if (sites.isEmpty()) return
 
         val content = render(destinations, sites)

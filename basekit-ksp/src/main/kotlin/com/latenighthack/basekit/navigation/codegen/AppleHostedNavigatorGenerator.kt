@@ -13,18 +13,36 @@ class AppleHostedNavigatorGenerator(
         val source: DestinationInfo,
         val methodName: String,
         val target: DestinationInfo,
+        // Unique flat-enum identity for this edge. Equal to [baseName] unless the source action fans
+        // out (multiple @NavigateTo) — then it is disambiguated by target so the two edges don't collide.
+        val edgeName: String,
     ) {
-        val edgeName: String get() = "${source.navName.uppercase()}_${methodName.toUpperSnakeCase()}"
+        // The <Target>Source enum value name — always source+method, independent of edgeName disambiguation.
+        val sourceEntry: String get() = "${source.navName.uppercase()}_${methodName.toUpperSnakeCase()}"
     }
 
     fun generate(destinations: List<DestinationInfo>) {
         val byName = destinations.associateBy { it.qualifiedName }
-        val sites = destinations.flatMap { source ->
+        val rawSites = destinations.flatMap { source ->
             source.edges.mapNotNull { edge ->
-                byName[edge.targetQualifiedName]?.let { CallSite(source, edge.methodName, it) }
+                byName[edge.targetQualifiedName]?.let { Triple(source, edge.methodName, it) }
             }
-        }.distinctBy { it.edgeName }
-        if (sites.isEmpty()) return
+        }.distinctBy { (source, method, target) -> Triple(source.qualifiedName, method, target.qualifiedName) }
+        if (rawSites.isEmpty()) return
+
+        // A single action can carry multiple @NavigateTo (fan out to several targets); those call sites
+        // share a source+method base name. Disambiguate colliding names by target so every
+        // AppleNavigationEdge entry stays unique and no call site is dropped.
+        val baseName = { source: DestinationInfo, method: String ->
+            "${source.navName.uppercase()}_${method.toUpperSnakeCase()}"
+        }
+        val colliding = rawSites.groupingBy { (source, method, _) -> baseName(source, method) }
+            .eachCount().filterValues { it > 1 }.keys
+        val sites = rawSites.map { (source, method, target) ->
+            val base = baseName(source, method)
+            val edgeName = if (base in colliding) "${base}_TO_${target.navName.uppercase()}" else base
+            CallSite(source, method, target, edgeName)
+        }
 
         val sitesByTarget = sites.groupBy { it.target.qualifiedName }
         generateEdge(sites)
@@ -98,8 +116,7 @@ class AppleHostedNavigatorGenerator(
                         buildString {
                             appendLine("when (source) {")
                             allTargetSites.forEach { site ->
-                                val sourceEntry = "${site.source.navName.uppercase()}_${site.methodName.toUpperSnakeCase()}"
-                                appendLine("                ${targetCap}NavigationTarget.${targetCap}Source.$sourceEntry -> AppleNavigationEdge.${site.edgeName}")
+                                appendLine("                ${targetCap}NavigationTarget.${targetCap}Source.${site.sourceEntry} -> AppleNavigationEdge.${site.edgeName}")
                             }
                             append("            }")
                         }

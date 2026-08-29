@@ -86,12 +86,18 @@ class SwiftKvoGenerator(
             }
 
             val listBinders = vm.lists.joinToString("\n\n") { list -> appleListBinder(list) }
+            val listElements = vm.lists.map { appleListElementDeclaration(vm, it, AppleWrapperStyle.KVO) }
+                .filter { it.isNotEmpty() }
+                .joinToString("\n\n")
+            val listDescriptors = vm.lists.joinToString("\n\n") {
+                appleListDescriptorProperty(vm, it, AppleWrapperStyle.KVO)
+            }
 
             val actionThunks = targetActionThunks(vm)
 
             val body = buildString {
                 for (framework in frameworkImports) {
-                    appendLine("import $framework")
+                    appendLine("@_spi(BaseKitCodegen) import $framework")
                 }
                 appendLine("import Foundation")
                 // UIKit first: Mac Catalyst can import both, and there the UIKit binder is correct.
@@ -106,6 +112,10 @@ class SwiftKvoGenerator(
                 appendLine("// The exported ViewModel type (${vm.simpleName}), its State, DeltaListCore and the")
                 appendLine("// KvoViewModel support base are linked/compiled by the consuming Swift target.")
                 appendLine()
+                if (listElements.isNotEmpty()) {
+                    appendLine(listElements)
+                    appendLine()
+                }
                 appendLine("@objcMembers")
                 appendLine("public final class $className: KvoViewModel {")
                 appendLine()
@@ -144,6 +154,10 @@ class SwiftKvoGenerator(
                 if (actionThunks.isNotEmpty()) {
                     appendLine()
                     appendLine(actionThunks)
+                }
+                if (listDescriptors.isNotEmpty()) {
+                    appendLine()
+                    appendLine(listDescriptors)
                 }
                 if (listBinders.isNotEmpty()) {
                     appendLine()

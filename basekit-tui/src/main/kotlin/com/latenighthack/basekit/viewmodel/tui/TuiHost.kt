@@ -7,6 +7,8 @@ import dev.tamboui.toolkit.Toolkit
 import dev.tamboui.toolkit.app.ToolkitRunner
 import dev.tamboui.toolkit.element.Element
 import dev.tamboui.toolkit.event.EventResult
+import dev.tamboui.tui.TuiConfig
+import dev.tamboui.tui.bindings.Actions
 import dev.tamboui.tui.event.KeyCode
 import dev.tamboui.tui.event.KeyEvent
 import dev.tamboui.tui.event.ResizeEvent
@@ -105,7 +107,7 @@ public class TuiHost(private val rootFactory: (TuiNavigation) -> TuiScreen) : Tu
             // Capture process-wide System.out/System.err into the bottom log window for the session, so
             // stray prints are visible for debugging instead of corrupting the rendered screen.
             TuiLog.install()
-            ToolkitRunner.create().use { r ->
+            ToolkitRunner.create(focusKeysFreedConfig()).use { r ->
                 runner = r
                 // Repaint clock: navigation nudges via requestRender(), but Holder flow emissions
                 // (state/list updates like Home's recommended titles landing) have no such hook, so a
@@ -123,6 +125,25 @@ public class TuiHost(private val rootFactory: (TuiNavigation) -> TuiScreen) : Tu
             TuiLog.uninstall()
             scope.cancel()
         }
+    }
+
+    /**
+     * The default TamboUI config, but with Tab / Shift+Tab freed from focus traversal.
+     *
+     * TamboUI's `EventRouter` treats a key as focus navigation when it `matches("focusNext")` /
+     * `"focusPrevious"` in the active [dev.tamboui.tui.bindings.Bindings], and handles those keys
+     * itself — it never forwards them to an element's key handler. Our screens bind Tab to "next
+     * list", so we unbind the two focus actions here; with no trigger left, `KeyEvent.isFocusNext()`
+     * is false for Tab and it reaches the top screen like any other key. We register a single
+     * focusable root, so this removes no behaviour a user could otherwise reach.
+     */
+    private fun focusKeysFreedConfig(): TuiConfig {
+        val defaults = TuiConfig.defaults()
+        val bindings = defaults.bindings().toBuilder()
+            .unbind(Actions.FOCUS_NEXT)
+            .unbind(Actions.FOCUS_PREVIOUS)
+            .build()
+        return defaults.toBuilder().bindings(bindings).build()
     }
 
     private fun renderRoot(): Element {

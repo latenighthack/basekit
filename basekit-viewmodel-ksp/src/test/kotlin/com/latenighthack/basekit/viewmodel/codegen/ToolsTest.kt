@@ -34,6 +34,13 @@ class ToolsTest {
     }
 
     @Test
+    fun swiftType_maps_bytearray_to_kotlinbytearray() {
+        assertEquals("KotlinByteArray", swiftType("kotlin.ByteArray").type)
+        assertEquals("KotlinByteArray?", swiftType("kotlin.ByteArray", nullable = true).type)
+        assertEquals("nil", swiftType("kotlin.ByteArray", nullable = true).default)
+    }
+
+    @Test
     fun swiftType_erases_non_primitives_to_anyobject() {
         val t = swiftType("com.example.MyType")
         assertEquals("AnyObject?", t.type)
@@ -76,5 +83,11 @@ class ToolsTest {
         assertEquals("AnyObject?", swiftType("kotlin.collections.List", elementQualifiedName = "kotlin.Int").type)
         // A list with no captured element type also erases.
         assertEquals("AnyObject?", swiftType("kotlin.collections.List").type)
+    }
+
+    @Test
+    fun list_case_names_drop_the_viewmodel_suffix() {
+        assertEquals("incomingMessageItem", "IncomingMessageItemViewModel".toListCaseName())
+        assertEquals("status", "StatusViewModel".toListCaseName())
     }
 }

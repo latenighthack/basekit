@@ -49,6 +49,7 @@ internal fun uiKitListBinder(list: VmList): String {
     val childKvo = "Kvo${list.elementSimpleName}"
     return """
     |    ${DeltaListAvailability.UIKIT}
+    |    @available(*, deprecated, message: "Use collectionView.items(model.${list.propertyName}, cell:/using:) with the generated direct binding")
     |    @discardableResult
     |    @MainActor public func bind$cap(
     |        _ collectionView: UICollectionView,
@@ -77,6 +78,7 @@ internal fun appKitListBinder(list: VmList): String {
     val childKvo = "Kvo${list.elementSimpleName}"
     return """
     |    ${DeltaListAvailability.APPKIT}
+    |    @available(*, deprecated, message: "Use collectionView.items(model.${list.propertyName}, item:/using:) with the generated direct binding")
     |    @discardableResult
     |    @MainActor public func bind$cap(
     |        _ collectionView: NSCollectionView,

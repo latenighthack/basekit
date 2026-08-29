@@ -159,8 +159,15 @@ The viewmodel processor emits, per `@ViewModelSpec`:
   `Binding`s for mutators, for SwiftUI). Delivered as **source**; a consuming Xcode/SwiftPM target
   compiles them alongside the exported KMP framework. Collect them with the
   `collectBasekitAppleSwift` Gradle task (`collectBasekitViewModelSwift` remains as a compatibility
-  alias).
-- **Web** — a `@JsExport use{Vm}(viewModel)` React hook.
+  alias). Every `@ViewModelList` also becomes a direct DeltaList-native binding property. SwiftUI
+  renders it with `DeltaListView(model.items)` / `DeltaForEach(model.items)`; UIKit and AppKit use
+  `collectionView.items(model.items, cell:/item:/using:)`. The older generated `bindItems` and
+  `observeItems(into:)` helpers remain temporarily but are deprecated.
+- **Web** — a `@JsExport use{Vm}(viewModel)` React hook. Annotated lists are stable delegated
+  iterables, so ordinary rendering is `model.items.map(...)` with no list component. Each child is a
+  closed generated handle with `kind`, `key`, and `use()`; the raw child ViewModel and its
+  `initialState` are not exposed. Virtualizers call `items.visibleRange(start, end)` to delegate lazy
+  acquire/release and paginated requests.
 
 ### Apple navigation
 
@@ -245,7 +252,7 @@ the convention plugins under [`basekit-gradle-plugin/`](basekit-gradle-plugin/sr
 | `@RouteArg` | navigation | `Args` property | Binds a path param from the URL (must be `String`) |
 | `@NavigateTo(target)` | navigation | function | Declares a navigation edge from this action to `target` |
 | `@ViewModelSpec(webPath)` | viewmodel | interface | Marks a ViewModel; drives the platform binding codegen |
-| `@ViewModelList(possibleTypes)` | viewmodel | property | A `Flow<Delta<ChildVm>>` list of child ViewModels |
+| `@ViewModelList(possibleTypes)` | viewmodel | property | A `Flow<Delta<ChildVm>>`; `possibleTypes` is the exact, non-overlapping closed child set used for list-specific Apple enums and React `kind` handles |
 | `@ChildViewModel` | viewmodel | property | A single nested child ViewModel |
 | `@ViewModelInject` | viewmodel | class | Wires a concrete impl into the generated kotlin-inject module |
 | `@ViewModelModule` | viewmodel | interface | App-supplied kotlin-inject providers the component includes |
