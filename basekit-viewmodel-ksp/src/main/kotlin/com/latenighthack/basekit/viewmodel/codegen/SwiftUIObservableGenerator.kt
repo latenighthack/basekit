@@ -36,7 +36,7 @@ class SwiftUIObservableGenerator(
 
             val publishedProps = vm.stateProperties.joinToString("\n") {
                 val st = swiftType(it.typeQualifiedName, it.nullable, it.listElementQualifiedName)
-                "    @Published public private(set) var ${it.name}: ${st.type} = ${st.default}"
+                "    @Published public private(set) var ${it.name.swiftDeclName()}: ${st.type} = ${st.default}"
             }
 
             // Erased (AnyObject?) properties need an explicit bridge: Swift will not assign a
@@ -46,17 +46,17 @@ class SwiftUIObservableGenerator(
                 if (swiftType(typeQualifiedName, nullable, listElementQualifiedName).type == "AnyObject?") " as AnyObject" else ""
 
             val seedAssigns = vm.stateProperties.joinToString("\n") {
-                "        self.${it.name} = initial.${it.name}${it.assignSuffix()}"
+                "        self.${it.name.swiftDeclName()} = initial.${it.name.swiftSourceRef()}${it.assignSuffix()}"
             }
 
             val updateAssigns = vm.stateProperties.joinToString("\n") {
-                "                self.${it.name} = state.${it.name}${it.assignSuffix()}"
+                "                self.${it.name.swiftDeclName()} = state.${it.name.swiftSourceRef()}${it.assignSuffix()}"
             }
 
             val actionMethods = vm.actions.joinToString("\n\n") { action ->
                 """
-                |    public func ${action.name}() async throws {
-                |        try await viewModel.${action.name}()
+                |    public func ${action.name.swiftDeclName()}() async throws {
+                |        try await viewModel.${action.name.swiftSourceRef()}()
                 |    }
                 """.trimMargin()
             }
@@ -64,8 +64,8 @@ class SwiftUIObservableGenerator(
             val mutatorMethods = vm.mutators.joinToString("\n\n") { mutator ->
                 val st = swiftType(mutator.paramTypeQualifiedName, mutator.paramTypeNullable)
                 """
-                |    public func ${mutator.name}(_ ${mutator.paramName}: ${st.type}) async throws {
-                |        try await viewModel.${mutator.name}(${mutator.paramName}: ${mutator.paramName})
+                |    public func ${mutator.name.swiftDeclName()}(_ ${mutator.paramName.swiftDeclName()}: ${st.type}) async throws {
+                |        try await viewModel.${mutator.name.swiftSourceRef()}(${mutator.paramName.swiftSourceRef()}: ${mutator.paramName.swiftDeclName()})
                 |    }
                 """.trimMargin()
             }
@@ -84,17 +84,19 @@ class SwiftUIObservableGenerator(
                         it.listElementQualifiedName == null
                 } ?: return@mapNotNull null
                 val st = swiftType(prop.typeQualifiedName, prop.nullable, prop.listElementQualifiedName)
+                val declProp = prop.name.swiftDeclName()
+                val declMutator = mutator.name.swiftDeclName()
                 """
                 |    /// Two-way binding for `${prop.name}`: reads the latest state, writes call `${mutator.name}`.
-                |    public var ${noun}Binding: Binding<${st.type}> {
+                |    public var ${noun.swiftDeclName()}Binding: Binding<${st.type}> {
                 |        Binding(
-                |            get: { [weak self] in self?.${prop.name} ?? ${st.default} },
+                |            get: { [weak self] in self?.$declProp ?? ${st.default} },
                 |            set: { [weak self] newValue in
                 |                guard let self = self else { return }
                 |                // Optimistic echo keeps a bound control responsive; the real state event
                 |                // from `${mutator.name}` reconciles it a moment later.
-                |                self.${prop.name} = newValue
-                |                Task { try? await self.${mutator.name}(newValue) }
+                |                self.$declProp = newValue
+                |                Task { try? await self.$declMutator(newValue) }
                 |            }
                 |        )
                 |    }

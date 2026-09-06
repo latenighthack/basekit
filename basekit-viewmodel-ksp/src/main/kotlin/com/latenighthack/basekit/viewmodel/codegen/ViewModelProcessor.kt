@@ -294,6 +294,7 @@ class ViewModelProcessor(
                 simpleName = declaration.simpleName.asString(),
                 qualifiedName = qn,
                 hasId = idIsHashable,
+                stateQualifiedName = stateDeclaration?.qualifiedName?.asString(),
             )
         }
         val caseNames = possibleTypes.map { it.simpleName.toListCaseName() }

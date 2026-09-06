@@ -36,8 +36,8 @@ internal fun targetActionThunks(vm: VmInfo): String = vm.actions.joinToString("\
     |    /// Target-action / IBAction thunk for `${action.name}`, for call sites that need an
     |    /// Objective-C selector rather than the `async throws` method. Fire-and-forget; a thrown
     |    /// error goes to `onActionError`.
-    |    @objc public func ${action.name}Action(_ sender: Any?) {
-    |        runAction { [weak self] in try await self?.${action.name}() }
+    |    @objc public func ${targetActionThunkName(action.name.swiftDeclName())}(_ sender: Any?) {
+    |        runAction { [weak self] in try await self?.${action.name.swiftDeclName()}() }
     |    }
     """.trimMargin()
 }

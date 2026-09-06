@@ -4,6 +4,34 @@ All notable changes to basekit are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor versions may break API).
 
+## [0.2.3] — 2026
+
+### Added
+- Polymorphic `@ViewModelList` binding on Android. A list declaring more than one `possibleTypes`
+  entry now generates one named `ViewModelRowSpec` parameter per declared type instead of a single
+  view factory, so heterogeneous lists render on Android the way they already do on Apple (closed
+  Swift enum), React (`kind` handles) and the TUI (per-type rows). Named parameters make the set
+  exhaustive: adding a row type to the annotation breaks every call site until it is handled. New
+  runtime API in `basekit-viewmodel` androidMain: `ViewModelRowSpec`, `viewModelRow(...)`,
+  `MultiTypeViewModelDeltaAdapter` and `RecyclerView.bindViewModelRows(...)`.
+- `demo-core`'s picker list is now polymorphic (option rows + a placeholder row), so CI exercises
+  `possibleTypes` generation on all four platform generators.
+- Swift identifier safety in the Apple generators: a State property, action, mutator or parameter whose
+  name collides with a Swift keyword or an inherited/already-declared wrapper member (`description`,
+  `hash`, `objectWillChange`, `viewModel`, `observe`, ...) is declared with a trailing `_`
+  (`swiftDeclName`), while references to Kotlin-exported members are backtick-escaped only when the name
+  is a keyword (`swiftSourceRef`). Keywords cannot be backtick-escaped into a valid declaration, and
+  inherited-member collisions cannot be escaped at all — both previously emitted uncompilable Swift.
+
+### Fixed
+- A polymorphic `@ViewModelList` made the Android target **fail to compile**, whether or not the
+  generated helper was called: `AndroidBindingGenerator` always emitted a `bindViewModels` call,
+  whose `T : ViewModel<S>` bound the list's marker element type cannot satisfy. Declaring a second
+  `possibleTypes` entry therefore made the annotation unusable on Android.
+- Each row of a polymorphic list now binds against its own child State type. Previously a list whose
+  element type was a marker interface erased its `stateBinder` state parameter to `kotlin.Any`,
+  because the element type has no `ViewModel<State>` supertype of its own.
+
 ## [Unreleased] — 0.2.0
 
 ### Added

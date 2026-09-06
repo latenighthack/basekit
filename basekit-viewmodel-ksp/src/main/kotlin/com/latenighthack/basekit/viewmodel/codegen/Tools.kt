@@ -105,6 +105,51 @@ fun swiftType(qualifiedName: String, nullable: Boolean = false, elementQualified
     }
 }
 
+/**
+ * Swift keywords that are invalid as a bare identifier. Using one as a `var`/`func`/parameter name is a
+ * syntax error; referencing a Kotlin-exported member with one of these names needs backtick escaping.
+ */
+private val SWIFT_KEYWORDS = setOf(
+    "associatedtype", "class", "deinit", "enum", "extension", "fileprivate", "func", "import", "init",
+    "inout", "internal", "let", "open", "operator", "private", "protocol", "public", "rethrows", "static",
+    "struct", "subscript", "typealias", "var", "break", "case", "continue", "default", "defer", "do",
+    "else", "fallthrough", "for", "guard", "if", "in", "repeat", "return", "switch", "where", "while",
+    "as", "catch", "false", "is", "nil", "super", "self", "Self", "throw", "throws", "true", "try",
+)
+
+/**
+ * Names a generated wrapper must not declare a State property / action / mutator under: the Swift
+ * keywords plus members it would collide with. `Kvo{Vm}` is an `NSObject` subclass and `Observable{Vm}`
+ * an `ObservableObject`, so their inherited members (`description`, `hash`, `objectWillChange`, …) clash;
+ * and both wrappers already declare `viewModel`, `onError`, `observe`, and the `KvoViewModel` base API.
+ * Unlike a keyword, these cannot be backtick-escaped into working code — the declaration must be renamed.
+ */
+private val SWIFT_RESERVED_MEMBERS = SWIFT_KEYWORDS + setOf(
+    // NSObject / ObservableObject inherited members.
+    "description", "debugDescription", "hash", "hashValue", "superclass", "isEqual", "isProxy",
+    "objectWillChange",
+    // Members the generated wrappers already declare.
+    "viewModel", "onError", "onActionError", "observe", "runAction", "startObserving", "unbind",
+)
+
+/**
+ * Disambiguates an identifier the generator *declares* (a State `var`, a `{noun}Binding`, an
+ * action/mutator method, a mutator's parameter): a name that would collide with a Swift keyword or an
+ * inherited/already-declared member gets a trailing `_` (`default` -> `default_`, `description` ->
+ * `description_`). A `_`-suffixed name is never itself reserved, so one pass always yields a safe name.
+ * The read side of an assignment keeps the original name via [swiftSourceRef].
+ */
+fun String.swiftDeclName(): String = if (this in SWIFT_RESERVED_MEMBERS) this + "_" else this
+
+/**
+ * Escapes a reference to a *Kotlin-exported* member or argument label (the right side of `self.x =
+ * initial.x`, a `viewModel.action()` call, a `param:` label). Only Swift keywords break member-access
+ * syntax, so only they are backtick-wrapped (`default` -> `` `default` ``); every other name — including
+ * inherited-member names like `description`, which legitimately read the State's own field — is
+ * returned unchanged.
+ */
+fun String.swiftSourceRef(): String = if (this in SWIFT_KEYWORDS) "`$this`" else this
+
 /** "feed_item" -> "FeedItem"; also uppercases the first letter of an already-camel identifier. */
 fun String.toUpperCamelCase(): String {
     val parts = if (contains('_')) split("_") else listOf(this)

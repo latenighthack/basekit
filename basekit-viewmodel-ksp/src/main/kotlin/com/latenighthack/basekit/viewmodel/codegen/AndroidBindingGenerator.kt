@@ -6,7 +6,9 @@ import com.google.devtools.ksp.processing.Dependencies
 /**
  * Emits, per `@ViewModelSpec`, an `Abstract{Vm}Activity` extending the runtime `BaseActivity`. The
  * developer subclasses it, supplies the view, and overrides the typed `onStateChanged(state)`; each
- * `@ViewModelList` gets a `bind{ListProp}(recyclerView, ...)` helper wired to the deltalist adapter.
+ * `@ViewModelList` gets a `bind{ListProp}(recyclerView, ...)` helper wired to the deltalist adapter —
+ * one view factory for a single-type list, one `ViewModelRowSpec` per declared type for a polymorphic
+ * one (see [androidListBinder]).
  * Each single-arg mutator gets a fire-and-forget helper that launches it on the Activity's lifecycle.
  */
 class AndroidBindingGenerator(
@@ -26,33 +28,15 @@ class AndroidBindingGenerator(
                 """.trimMargin()
             }
 
-            val listBinders = vm.lists.joinToString("\n\n") { list ->
-                val cap = list.propertyName.toUpperCamelCase()
-                val elementState = list.elementStateQualifiedName ?: "kotlin.Any"
-                """
-                |    protected fun bind$cap(
-                |        recyclerView: androidx.recyclerview.widget.RecyclerView,
-                |        viewFactory: (android.view.ViewGroup) -> android.view.View,
-                |        binder: (android.view.View, ${list.elementQualifiedName}) -> Unit = { _, _ -> },
-                |        stateBinder: (android.view.View, ${list.elementQualifiedName}, $elementState) -> Unit,
-                |    ) {
-                |        recyclerView.bindViewModels(
-                |            this,
-                |            lifecycleScope,
-                |            viewModel.${list.propertyName},
-                |            viewFactory,
-                |            binder,
-                |            stateBinder,
-                |        )
-                |    }
-                """.trimMargin()
-            }
+            val listBinders = vm.lists.joinToString("\n\n") { list -> androidListBinder(list) }
 
             codeGenerator.createNewFile(dependencies, vm.packageName, className, "kt").apply {
                 writeln("package ${vm.packageName}")
                 writeln()
                 writeln("import androidx.lifecycle.lifecycleScope")
-                writeln("import com.latenighthack.basekit.viewmodel.bindViewModels")
+                for (import in androidListImports(vm)) {
+                    writeln("import $import")
+                }
                 writeln("import kotlinx.coroutines.launch")
                 writeln()
                 writeln(

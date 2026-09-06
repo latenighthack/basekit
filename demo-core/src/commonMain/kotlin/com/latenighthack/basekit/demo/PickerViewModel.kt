@@ -35,13 +35,25 @@ interface PickerViewModel :
 
     data class State(val title: String)
 
-    @ViewModelList(PickerOptionViewModel::class)
-    val options: Flow<Delta<PickerOptionViewModel>>
+    // Polymorphic on purpose: option rows plus a placeholder row when there is nothing to pick. This
+    // is the demo's coverage for `possibleTypes` binding — the Apple enum, the React `kind` handle, the
+    // TUI per-type rows and the Android per-type row specs are all generated from this one declaration.
+    @ViewModelList(PickerOptionViewModel::class, PickerEmptyViewModel::class)
+    val options: Flow<Delta<PickerRowViewModel>>
+}
+
+/** Common supertype of the picker's rows. A marker, so it is deliberately NOT a `ViewModel<S>`. */
+interface PickerRowViewModel
+
+/** Shown in place of the options when the store has none. */
+@ViewModelSpec
+interface PickerEmptyViewModel : PickerRowViewModel, ViewModel<PickerEmptyViewModel.State> {
+    data class State(val message: String)
 }
 
 /** One selectable option row. Selecting it responds with its id. */
 @ViewModelSpec
-interface PickerOptionViewModel : ViewModel<PickerOptionViewModel.State> {
+interface PickerOptionViewModel : PickerRowViewModel, ViewModel<PickerOptionViewModel.State> {
     data class State(val label: String, val id: Int)
 
     suspend fun onSelected()
@@ -58,15 +70,21 @@ class RealPickerOptionViewModel(
     }
 }
 
+class RealPickerEmptyViewModel : PickerEmptyViewModel, StatefulViewModel<PickerEmptyViewModel.State>(
+    PickerEmptyViewModel.State(message = "Nothing to pick"),
+)
+
 @ViewModelInject
 class RealPickerViewModel @Inject constructor(
     store: DemoStore,
     @Assisted responder: NavigationResponder<PickResult>,
 ) : PickerViewModel, StatefulViewModel<PickerViewModel.State>(PickerViewModel.State(title = "Pick one")) {
 
-    private val optionsList = mutableDeltaListOf<PickerOptionViewModel>(
-        store.pickerOptions().map { RealPickerOptionViewModel(it, responder) },
+    private val optionsList = mutableDeltaListOf<PickerRowViewModel>(
+        store.pickerOptions()
+            .map { RealPickerOptionViewModel(it, responder) }
+            .ifEmpty { listOf(RealPickerEmptyViewModel()) },
     )
 
-    override val options: Flow<Delta<PickerOptionViewModel>> get() = optionsList
+    override val options: Flow<Delta<PickerRowViewModel>> get() = optionsList
 }

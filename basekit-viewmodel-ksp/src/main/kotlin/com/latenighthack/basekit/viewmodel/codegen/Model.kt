@@ -41,6 +41,11 @@ data class VmListElementType(
      * the generators fall back to per-wrapper `ObjectIdentifier` identity.
      */
     val hasId: Boolean,
+    /**
+     * The child's own `ViewModel<State>` type argument. Each row of a polymorphic list binds against its
+     * exact State; the list's element type is a bare marker whose State would otherwise erase to `Any`.
+     */
+    val stateQualifiedName: String? = null,
 )
 
 /** A `@ViewModelList` property: a `Flow<Delta<ElementVm>>` with a precise closed child set. */

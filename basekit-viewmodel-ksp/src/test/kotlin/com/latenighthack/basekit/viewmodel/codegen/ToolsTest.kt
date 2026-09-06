@@ -90,4 +90,39 @@ class ToolsTest {
         assertEquals("incomingMessageItem", "IncomingMessageItemViewModel".toListCaseName())
         assertEquals("status", "StatusViewModel".toListCaseName())
     }
+
+    @Test
+    fun swiftDeclName_suffixes_swift_keywords() {
+        assertEquals("default_", "default".swiftDeclName())
+        assertEquals("class_", "class".swiftDeclName())
+        assertEquals("repeat_", "repeat".swiftDeclName())
+    }
+
+    @Test
+    fun swiftDeclName_suffixes_inherited_and_generated_members() {
+        // NSObject / ObservableObject members that backticks would not fix.
+        assertEquals("description_", "description".swiftDeclName())
+        assertEquals("objectWillChange_", "objectWillChange".swiftDeclName())
+        // Members the wrappers already declare.
+        assertEquals("viewModel_", "viewModel".swiftDeclName())
+        assertEquals("onError_", "onError".swiftDeclName())
+        assertEquals("observe_", "observe".swiftDeclName())
+    }
+
+    @Test
+    fun swiftDeclName_leaves_ordinary_names_untouched() {
+        assertEquals("userName", "userName".swiftDeclName())
+        assertEquals("isLoading", "isLoading".swiftDeclName())
+        // A `_`-suffixed name is never itself reserved, so the transform is idempotent.
+        assertEquals("default_", "default_".swiftDeclName())
+    }
+
+    @Test
+    fun swiftSourceRef_backticks_only_swift_keywords() {
+        assertEquals("`default`", "default".swiftSourceRef())
+        assertEquals("`class`", "class".swiftSourceRef())
+        // Inherited-member names are not keywords: reading `initial.description` is legal, so no escape.
+        assertEquals("description", "description".swiftSourceRef())
+        assertEquals("userName", "userName".swiftSourceRef())
+    }
 }
