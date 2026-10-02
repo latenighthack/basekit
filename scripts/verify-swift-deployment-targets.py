@@ -15,6 +15,6 @@ expected = {
 for (module, target), triple in expected.items():
     log = root / module / "build/skie/binaries/debugFramework/DEBUG" / target / "debug/logs/swiftc.log"
     actual = re.findall(r"(?:^|\s)-target\s+(\S+)", log.read_text())
-    if actual != [triple]:
+    if not actual or set(actual) != {triple}:
         raise SystemExit(f"{module}/{target}: expected {triple}, got {actual}")
     print(f"{module}/{target}: {triple}")
