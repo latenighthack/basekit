@@ -21,6 +21,9 @@ jobs:
     # macOS is required so the Kotlin/Native Apple targets + SKIE compile; an ubuntu run would
     # silently skip them. Matches release.yml.
     runs-on: macos-14
+    env:
+      # Match the macOS 15 / iOS 18 deployment targets and Swift 6 consumer checks.
+      DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
 
@@ -31,6 +34,13 @@ jobs:
         run: >
           xcrun swiftc -typecheck -swift-version 5 -warnings-as-errors
           basekit-viewmodel/src/commonMain/swift/KvoViewModel.swift
+
+      - name: Verify Apple toolchain
+        run: |
+          xcodebuild -version
+          xcrun swiftc --version
+          xcrun --sdk macosx --show-sdk-version
+          xcrun --sdk iphoneos --show-sdk-version
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -47,10 +57,7 @@ jobs:
       - name: Build and test all targets
         run: ./gradlew build --stacktrace
 
-      # `build` compiles klibs and runs tests but does NOT link frameworks — and linking is what
-      # compiles the Swift bundled under src/commonMain/swift (KvoViewModel, and deltalist's data
-      # sources re-emitted into any framework that exports it). Without this step the AppKit Swift
-      # is never type-checked.
+      # Explicitly cover the frameworks whose bundled Swift and generated consumers are checked below.
       - name: Link debug frameworks (compiles the bundled Swift)
         run: >
           ./gradlew --stacktrace
@@ -114,4 +121,12 @@ jobs:
         with:
           name: test-reports
           path: '**/build/reports/tests/**'
+          if-no-files-found: ignore
+
+      - name: Upload Swift compiler diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swift-compiler-diagnostics
+          path: '**/build/skie/**/debug/logs/**'
           if-no-files-found: ignore

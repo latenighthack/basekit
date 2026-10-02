@@ -15,8 +15,18 @@ jobs:
     # macOS is required so the KMP iOS targets + SKIE compile — an ubuntu run would silently
     # skip them and publish an incomplete artifact set.
     runs-on: macos-14
+    env:
+      # Match the macOS 15 / iOS 18 deployment targets and Swift 6 consumer checks.
+      DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
+
+      - name: Verify Apple toolchain
+        run: |
+          xcodebuild -version
+          xcrun swiftc --version
+          xcrun --sdk macosx --show-sdk-version
+          xcrun --sdk iphoneos --show-sdk-version
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
