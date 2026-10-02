@@ -32,12 +32,19 @@ internal object DeltaListAvailability {
  * `!os(watchOS)` is required because `canImport(UIKit)` is true on watchOS, where `UICollectionView`
  * does not exist; without it a watchOS target would fail to compile the generated file.
  */
-internal fun appleListBinder(list: VmList): String = buildString {
-    appendLine("    #if canImport(UIKit) && !os(watchOS)")
-    appendLine(uiKitListBinder(list))
-    appendLine("    #elseif canImport(AppKit)")
-    appendLine(appKitListBinder(list))
-    append("    #endif")
+internal fun appleListBinder(list: VmList): String {
+    // The deprecated provider API can wrap only a concrete, homogeneous element. Marker interfaces
+    // have no Kvo wrapper; polymorphic lists use the exact enum in the direct binding instead.
+    if (list.possibleTypes.size != 1 ||
+        list.possibleTypes.single().qualifiedName != list.elementQualifiedName
+    ) return ""
+    return buildString {
+        appendLine("    #if canImport(UIKit) && !os(watchOS)")
+        appendLine(uiKitListBinder(list))
+        appendLine("    #elseif canImport(AppKit)")
+        appendLine(appKitListBinder(list))
+        append("    #endif")
+    }
 }
 
 /**

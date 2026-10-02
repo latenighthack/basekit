@@ -56,6 +56,14 @@ class AppleListDescriptorsTest {
     }
 
     @Test
+    fun legacy_binders_do_not_reference_a_wrapper_for_a_marker_interface() {
+        assertEquals("", appleListBinder(polymorphicList))
+        assertEquals("", appleListBinder(polymorphicList.copy(
+            possibleTypes = polymorphicList.possibleTypes.take(1),
+        )))
+    }
+
+    @Test
     fun homogeneous_lists_do_not_get_a_one_case_enum() {
         val list = polymorphicList.copy(
             propertyName = "attachments",
@@ -66,6 +74,7 @@ class AppleListDescriptorsTest {
 
         assertEquals("", appleListElementDeclaration(viewModel, list, AppleWrapperStyle.KVO))
         assertEquals("KvoAttachmentViewModel", appleListElementType(viewModel, list, AppleWrapperStyle.KVO))
+        assertContains(appleListBinder(list), "KvoAttachmentViewModel(item)")
         assertContains(
             appleListDescriptorProperty(viewModel, list, AppleWrapperStyle.KVO),
             "@MainActor @nonobjc public lazy var attachments"
