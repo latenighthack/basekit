@@ -18,7 +18,7 @@ A generated **test harness** lets you drive whole navigation journeys in a plain
 
 ## Status
 
-Pre-1.0 (`0.2.0`). No binary-compatibility guarantee yet; the public API may change between minor
+Pre-1.0 (`0.2.4`). No binary-compatibility guarantee yet; the public API may change between minor
 versions. Supported targets: `jvm`, `android`, `iosArm64`, `iosX64`, `iosSimulatorArm64`,
 `macosArm64`, `macosX64`, `js` (IR). The `tui` slice is a preview and depends on a snapshot build of
 TamboUI (see below).
@@ -55,13 +55,13 @@ Apply the convention plugin for each slice you use — it turns on KSP and wires
 // build.gradle.kts (a KMP module)
 plugins {
     kotlin("multiplatform")
-    id("com.latenighthack.basekit.navigation") version "0.2.0"
-    id("com.latenighthack.basekit.viewmodel") version "0.2.0"
+    id("com.latenighthack.basekit.navigation") version "0.2.4"
+    id("com.latenighthack.basekit.viewmodel") version "0.2.4"
 }
 kotlin {
     sourceSets.commonMain.dependencies {
-        implementation("com.latenighthack.basekit:basekit-navigation:0.2.0")
-        implementation("com.latenighthack.basekit:basekit-viewmodel:0.2.0")
+        implementation("com.latenighthack.basekit:basekit-navigation:0.2.4")
+        implementation("com.latenighthack.basekit:basekit-viewmodel:0.2.4")
     }
 }
 ksp {
@@ -216,7 +216,7 @@ this only if you need to customize it. This is not more than the plugins do:
 **navigation** (pure common types, generated in the metadata pass):
 
 ```kotlin
-dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-ksp:0.2.0") }
+dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-ksp:0.2.4") }
 kotlin.sourceSets.named("commonMain") {
     kotlin.srcDir(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/kotlin"))
 }
@@ -229,11 +229,11 @@ tasks.matching { it.name.startsWith("ksp") && it.name != "kspCommonMainKotlinMet
 **viewmodel** (per-platform code, so add to every target's ksp configuration):
 
 ```kotlin
-dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-viewmodel-ksp:0.2.0") }
+dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-viewmodel-ksp:0.2.4") }
 kotlin.targets.configureEach {
     if (name == "metadata") return@configureEach
     add("ksp" + name.replaceFirstChar { it.uppercase() },
-        "com.latenighthack.basekit:basekit-viewmodel-ksp:0.2.0")
+        "com.latenighthack.basekit:basekit-viewmodel-ksp:0.2.4")
 }
 ```
 
@@ -304,7 +304,7 @@ maven("https://central.sonatype.com/repository/maven-snapshots/") { mavenContent
 ```
 ```kotlin
 // build.gradle.kts (a JVM module)
-implementation("com.latenighthack.basekit:basekit-tui:0.2.0")
+implementation("com.latenighthack.basekit:basekit-tui:0.2.4")
 implementation("dev.tamboui:tamboui-toolkit:0.5.0-SNAPSHOT")
 runtimeOnly("dev.tamboui:tamboui-jline3-backend:0.5.0-SNAPSHOT")
 ```
@@ -319,8 +319,24 @@ published app — you choose the TamboUI version. See [`demo-jvm`](demo-jvm) for
 ```
 
 Requires JDK 17 and (for the Apple targets/frameworks) macOS. The `js` npm lockfile is committed
-under `kotlin-js-store/`; if you change JS dependencies, run `./gradlew kotlinUpgradePackageLock` and
+under `kotlin-js-store/`; if you change the release version or JS dependencies, run `./gradlew kotlinUpgradePackageLock` and
 commit the result.
+
+### Release validation
+
+`VERSION_NAME` in the root `gradle.properties` versions the libraries, Gradle plugin, plugin
+markers, and embedded processor coordinates together. Do not add a separate plugin version.
+
+Run `python3 scripts/verify-plugin-release.py` before a release. It checks incremental version
+regeneration, publishes the plugin into a temporary isolated repository, and applies all three
+plugins in a standalone consumer to check JVM, Android, JS, and Apple processor wiring. It does
+not use composite substitution or global Maven Local. The normal build continues to test the
+processors and generated bindings.
+
+Release tags must match `v<VERSION_NAME>`. CI repeats the plugin validation before publishing,
+then verifies Central propagation and processor resolution with
+`python3 scripts/verify-plugin-release.py --repository https://repo.maven.apache.org/maven2 --wait-seconds 1200`.
+Always use a new version for changed artifacts.
 
 ## License
 

@@ -8,13 +8,33 @@ import com.latenighthack.basekit.demo.DetailViewModel
 import com.latenighthack.basekit.demo.PickResult
 import com.latenighthack.basekit.demo.PickerViewModel
 import com.latenighthack.basekit.navigation.NavigationResponder
-import kotlinx.coroutines.async
-import kotlinx.coroutines.test.runTest
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AppleHostedNavigatorTest {
+    // Generated Apple navigators dispatch host calls to Main. JVM tests have no UI dispatcher.
+    @BeforeTest
+    fun installMainDispatcher() {
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+    }
+
+    @AfterTest
+    fun resetMainDispatcher() {
+        Dispatchers.resetMain()
+    }
+
     private class Host : AppleNavigationHost {
         val detailEdges = mutableListOf<AppleNavigationEdge>()
         var closedOwner: String? = null
@@ -68,8 +88,8 @@ class AppleHostedNavigatorTest {
         val navigator = AppleHomeNavigator("home-instance", host)
         val result = async { navigator.navigateToPicker(PickerViewModel.Args()) }
 
-        while (host.pickerResponder == null) testScheduler.runCurrent()
-        host.pickerResponder!!.respond(PickResult(9))
+        testScheduler.runCurrent()
+        assertNotNull(host.pickerResponder).respond(PickResult(9))
 
         assertEquals(9, result.await()?.selectedId)
     }
@@ -80,8 +100,8 @@ class AppleHostedNavigatorTest {
         val navigator = AppleHomeNavigator("home-instance", host)
         val result = async { navigator.navigateToPicker(PickerViewModel.Args()) }
 
-        while (host.pickerResponder == null) testScheduler.runCurrent()
-        host.pickerResponder!!.respond(null)
+        testScheduler.runCurrent()
+        assertNotNull(host.pickerResponder).respond(null)
 
         assertNull(result.await())
     }

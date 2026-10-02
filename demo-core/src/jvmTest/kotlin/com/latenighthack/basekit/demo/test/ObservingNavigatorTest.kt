@@ -11,12 +11,32 @@ import com.latenighthack.basekit.demo.PickResult
 import com.latenighthack.basekit.demo.PickerViewModel
 import com.latenighthack.basekit.navigation.NavigationEvent
 import com.latenighthack.basekit.navigation.NavigationObserver
-import kotlinx.coroutines.async
-import kotlinx.coroutines.test.runTest
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ObservingNavigatorTest {
+    // Generated Apple navigators dispatch host calls to Main. JVM tests have no UI dispatcher.
+    @BeforeTest
+    fun installMainDispatcher() {
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+    }
+
+    @AfterTest
+    fun resetMainDispatcher() {
+        Dispatchers.resetMain()
+    }
+
     private class Host : AppleNavigationHost {
         var pickerResponder: com.latenighthack.basekit.navigation.NavigationResponder<PickResult>? = null
 
@@ -88,8 +108,8 @@ class ObservingNavigatorTest {
         val navigator = ObservingHomeNavigator(AppleHomeNavigator("home-instance", host), recorder)
 
         val result = async { navigator.navigateToPicker(PickerViewModel.Args()) }
-        while (host.pickerResponder == null) testScheduler.runCurrent()
-        host.pickerResponder!!.respond(PickResult(9))
+        testScheduler.runCurrent()
+        assertNotNull(host.pickerResponder).respond(PickResult(9))
 
         assertEquals(9, result.await()?.selectedId)
 

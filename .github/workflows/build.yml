@@ -33,6 +33,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Verify published plugin coordinates and consumer wiring
+        run: python3 scripts/verify-plugin-release.py
+
       - name: Build and test all targets
         run: ./gradlew build --stacktrace
 

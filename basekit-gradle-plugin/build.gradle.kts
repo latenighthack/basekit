@@ -1,5 +1,6 @@
 import com.vanniktech.maven.publish.GradlePlugin
 import com.vanniktech.maven.publish.JavadocJar
+import java.util.Properties
 
 // The publishable home of the Basekit consumer convention plugins (navigation / viewmodel / tui).
 // It is its own build, included by the root `settings.gradle.kts` (so the in-repo demos apply the
@@ -22,9 +23,15 @@ dependencies {
 // Bake the Basekit + kotlin-inject versions into a generated source, read from the single source of
 // truth (the root gradle.properties / version catalog), so the published plugin resolves the
 // processors it wires by coordinate without a hand-maintained duplicate that could drift.
-val basekitVersion = providers.provider {
-    file("../gradle.properties").readLines().first { it.startsWith("VERSION_NAME=") }.substringAfter("=").trim()
+val releaseProperties = Properties().apply {
+    file("../gradle.properties").inputStream().use { load(it) }
 }
+val basekitVersion = providers.provider { releaseProperties.getProperty("VERSION_NAME") }
+val basekitGroup = releaseProperties.getProperty("GROUP")
+// Included builds do not inherit the root project's properties. Use the same source for both
+// publication coordinates (including markers) and the processor version embedded in the jar.
+group = basekitGroup
+version = basekitVersion.get()
 val kotlinInjectVersion = providers.provider {
     file("../gradle/libs.versions.toml").readLines()
         .first { it.trimStart().startsWith("kotlin-inject ") }
@@ -35,6 +42,8 @@ val generateVersions = tasks.register("generateBasekitVersions") {
     val outputDir = layout.buildDirectory.dir("generated/version/kotlin")
     val basekit = basekitVersion
     val kotlinInject = kotlinInjectVersion
+    inputs.property("basekitVersion", basekit)
+    inputs.property("kotlinInjectVersion", kotlinInject)
     outputs.dir(outputDir)
     doLast {
         val file = outputDir.get().file("com/latenighthack/basekit/gradle/plugin/BasekitVersions.kt").asFile
@@ -64,5 +73,14 @@ kotlin.sourceSets.named("main") {
 // RELEASE_SIGNING_ENABLED / POM_* from gradle.properties). The GradlePlugin platform is what makes
 // vanniktech emit and sign the `<id>.gradle.plugin` markers alongside the main publication.
 mavenPublishing {
+    coordinates(basekitGroup, "basekit-gradle-plugin", basekitVersion.get())
     configure(GradlePlugin(javadocJar = JavadocJar.Empty(), sourcesJar = true))
+}
+
+// An isolated file repository for the external-consumer release check; never global Maven Local.
+providers.gradleProperty("pluginValidationRepository").orNull?.let { repositoryPath ->
+    publishing.repositories.maven {
+        name = "Validation"
+        url = uri(repositoryPath)
+    }
 }

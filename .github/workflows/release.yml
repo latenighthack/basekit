@@ -38,6 +38,9 @@ jobs:
             exit 1
           fi
 
+      - name: Validate plugin publication before releasing anything
+        run: python3 scripts/verify-plugin-release.py
+
       # Every basekit module is released to Central, including the whole `tui` slice. basekit-tui
       # declares the snapshot-only TamboUI as `compileOnly`, so it never reaches the published POM
       # (Central rejects SNAPSHOT deps) — consumers supply TamboUI themselves. `demo-*` are not
@@ -73,3 +76,12 @@ jobs:
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+
+      # A successful upload is not proof that Central serves the expected coordinates. Wait for
+      # propagation, then resolve all markers and processor jars from an external consumer.
+      - name: Verify release is available to consumers
+        timeout-minutes: 25
+        run: >
+          python3 scripts/verify-plugin-release.py
+          --repository https://repo.maven.apache.org/maven2
+          --wait-seconds 1200
