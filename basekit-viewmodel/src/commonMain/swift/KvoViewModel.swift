@@ -47,9 +47,13 @@ open class KvoViewModel: NSObject {
             do {
                 try await body()
             } catch {
-                await MainActor.run { self?.onActionError?(error) }
+                // Capture a fresh weak reference instead of sharing the outer Task's mutable
+                // weak capture with a concurrently executing closure (Swift 5.10 / Xcode 15.4).
+                await MainActor.run { [weak self] in self?.onActionError?(error) }
             }
-            await MainActor.run { self?.actionTasks.removeValue(forKey: id) }
+            await MainActor.run { [weak self] in
+                _ = self?.actionTasks.removeValue(forKey: id)
+            }
         }
     }
 
