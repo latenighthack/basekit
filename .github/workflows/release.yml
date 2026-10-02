@@ -14,10 +14,10 @@ jobs:
     name: Publish to Maven Central
     # macOS is required so the KMP iOS targets + SKIE compile — an ubuntu run would silently
     # skip them and publish an incomplete artifact set.
-    runs-on: macos-14
+    runs-on: macos-15
     env:
-      # Match the macOS 15 / iOS 18 deployment targets and Swift 6 consumer checks.
-      DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
+      # Match the validated Apple build toolchain.
+      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
 

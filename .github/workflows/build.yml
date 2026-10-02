@@ -16,14 +16,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  apple:
-    name: All targets + Apple frameworks + generated-Swift typecheck
-    # macOS is required so the Kotlin/Native Apple targets + SKIE compile; an ubuntu run would
-    # silently skip them. Matches release.yml.
+  swift-runtime-compatibility:
+    name: Swift runtime compatibility (Xcode 15.4)
     runs-on: macos-14
-    env:
-      # Match the macOS 15 / iOS 18 deployment targets and Swift 6 consumer checks.
-      DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
 
@@ -34,6 +29,17 @@ jobs:
         run: >
           xcrun swiftc -typecheck -swift-version 5 -warnings-as-errors
           basekit-viewmodel/src/commonMain/swift/KvoViewModel.swift
+
+  apple:
+    name: All targets + Apple frameworks + generated-Swift typecheck
+    # macOS is required so the Kotlin/Native Apple targets + SKIE compile; an ubuntu run would
+    # silently skip them. Matches release.yml.
+    runs-on: macos-15
+    env:
+      # Generated navigation uses Swift 6.2 actor-isolated protocol conformances.
+      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Verify Apple toolchain
         run: |

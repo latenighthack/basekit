@@ -156,7 +156,9 @@ The viewmodel processor emits, per `@ViewModelSpec`:
   is collected under `repeatOnLifecycle(STARTED)`.
 - **iOS** — `Kvo{Vm}.swift` (an `NSObject` exposing State as `@objc dynamic` KVO properties, for
   UIKit) and `Observable{Vm}.swift` (an `ObservableObject` with `@Published` state and two-way
-  `Binding`s for mutators, for SwiftUI). Delivered as **source**; a consuming Xcode/SwiftPM target
+  `Binding`s for mutators, for SwiftUI). Generated Apple navigation requires **Swift 6.2 / Xcode 26 or newer**
+  for actor-isolated protocol conformances (deployment targets remain iOS 18 / macOS 15).
+  Delivered as **source**; a consuming Xcode/SwiftPM target
   compiles them alongside the exported KMP framework. Collect them with the
   `collectBasekitAppleSwift` Gradle task (`collectBasekitViewModelSwift` remains as a compatibility
   alias). Every `@ViewModelList` also becomes a direct DeltaList-native binding property. SwiftUI
