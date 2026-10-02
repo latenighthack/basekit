@@ -27,6 +27,5 @@ dependencies {
     testImplementation(project(":demo-core"))
     testImplementation("androidx.activity:activity-compose:1.9.3")
     testImplementation("androidx.compose.ui:ui-test-junit4")
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
     testImplementation("org.robolectric:robolectric:4.14.1")
 }

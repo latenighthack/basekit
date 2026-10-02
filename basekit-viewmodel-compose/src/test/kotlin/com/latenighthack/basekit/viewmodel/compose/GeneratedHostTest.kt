@@ -19,7 +19,7 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(sdk = [34], application = ComposeTestApplication::class)
 class GeneratedHostTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 

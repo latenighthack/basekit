@@ -14,7 +14,7 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(sdk = [34], application = ComposeTestApplication::class)
 class DeltaRowsTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private class Row(val title: String) {

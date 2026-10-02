@@ -129,7 +129,7 @@ jobs:
           npm test
 
       - name: Test generated Compose host
-        run: ./gradlew :basekit-viewmodel-compose:testDebugUnitTest
+        run: ./gradlew :basekit-viewmodel-compose:testDebugUnitTest :basekit-viewmodel-compose:testReleaseUnitTest
 
       - name: Build and execute Swift 6 consumer
         run: |

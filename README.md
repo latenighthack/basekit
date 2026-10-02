@@ -502,7 +502,7 @@ belongs to the application; a failed queue must be reconciled before a new editi
 ### Consumer verification
 
 - `python3 scripts/verify-binding-diagnostics.py` compiles real positive/negative KSP consumers.
-- `./gradlew :basekit-viewmodel-compose:testDebugUnitTest` runs preparation and generated-host tests,
+- `./gradlew :basekit-viewmodel-compose:testDebugUnitTest :basekit-viewmodel-compose:testReleaseUnitTest` runs preparation and generated-host tests in both variants,
   including Activity recreation.
 - Build `:demo-core:jsBrowserProductionLibraryDistribution :demo-core:collectBasekitReact`, then run
   `npm ci && npm test` in `integration/react`. Install Chromium with `npx playwright install chromium`
