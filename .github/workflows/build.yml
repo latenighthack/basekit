@@ -71,6 +71,9 @@ jobs:
       # Also runs verifyBasekitViewModelSwiftIsUniversal, which fails if any two Apple passes emit
       # the same Swift file name with different bytes (the flatten below keeps only one copy, in
       # unspecified walk order).
+      - name: Verify Swift compiler deployment targets
+        run: python3 scripts/verify-swift-deployment-targets.py
+
       - name: Collect generated Swift and verify it is universal
         run: ./gradlew :demo-core:collectBasekitAppleSwift --stacktrace
 

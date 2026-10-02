@@ -21,8 +21,13 @@ fun KotlinMultiplatformExtension.appleTargets(): List<KotlinNativeTarget> = list
     iosArm64(), iosX64(), iosSimulatorArm64(), macosArm64(), macosX64(),
 ).onEach { target ->
     target.binaries.configureEach {
-        freeCompilerArgs += "-Xoverride-konan-properties=minVersion.ios=18.0"
-        freeCompilerArgs += "-Xoverride-konan-properties=minVersion.macos=15.0"
+        val minimum = if (target.konanTarget.family == org.jetbrains.kotlin.konan.target.Family.IOS) "18.0" else "15.0"
+        val konanName = target.konanTarget.name
+        // SKIE configures its Swift minimum before a fresh runner downloads Kotlin/Native. Set
+        // the resolved target keys explicitly so it cannot fall back to iOS 13 / macOS 10.15.
+        // Keep both overrides in one argument: SKIE's parser retains only the last such argument.
+        freeCompilerArgs += "-Xoverride-konan-properties=" +
+            "osVersionMin.$konanName=$minimum;osVersionMinSinceXcode15.$konanName=$minimum"
     }
 }
 
