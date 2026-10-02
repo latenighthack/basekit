@@ -1,6 +1,7 @@
 import com.vanniktech.maven.publish.GradlePlugin
 import com.vanniktech.maven.publish.JavadocJar
 import java.util.Properties
+import groovy.json.JsonSlurper
 
 // The publishable home of the Basekit consumer convention plugins (navigation / viewmodel / tui).
 // It is its own build, included by the root `settings.gradle.kts` (so the in-repo demos apply the
@@ -18,6 +19,7 @@ plugins {
 dependencies {
     implementation(libs.plugin.kotlin)
     implementation(libs.plugin.ksp)
+    implementation(libs.plugin.skie)
 }
 
 // Bake the Basekit + kotlin-inject versions into a generated source, read from the single source of
@@ -26,8 +28,16 @@ dependencies {
 val releaseProperties = Properties().apply {
     file("../gradle.properties").inputStream().use { load(it) }
 }
-val basekitVersion = providers.provider { releaseProperties.getProperty("VERSION_NAME") }
 val basekitGroup = releaseProperties.getProperty("GROUP")
+// Fullhouse assigns immutable source-derived versions. The included plugin must use the same
+// coordinate as the runtime and processors or its buildscript dependency cannot be substituted.
+val basekitVersion = providers.provider {
+    val manifest = providers.gradleProperty("fhWorkspace").orNull
+        ?.let { JsonSlurper().parse(file(it)) as Map<*, *> }
+    val groups = manifest?.get("groups") as? Map<*, *>
+    val workspace = groups?.get(basekitGroup) as? Map<*, *>
+    workspace?.get("version") as? String ?: releaseProperties.getProperty("VERSION_NAME")
+}
 // Included builds do not inherit the root project's properties. Use the same source for both
 // publication coordinates (including markers) and the processor version embedded in the jar.
 group = basekitGroup

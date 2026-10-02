@@ -21,7 +21,7 @@ internal fun appleListElementDeclaration(vm: VmInfo, list: VmList, style: AppleW
     }
     val identities = list.possibleTypes.joinToString("\n") { type ->
         val caseName = type.simpleName.toListCaseName()
-        val identity = if (type.hasId) "AnyHashable(model.id)" else "AnyHashable(ObjectIdentifier(model))"
+        val identity = if (type.identityProperty != null) "AnyHashable(\"${type.qualifiedName}:\" + model.basekitIdentity)" else if (type.hasId) "AnyHashable(model.id)" else "AnyHashable(ObjectIdentifier(model))"
         "        case .$caseName(let model): return $identity"
     }
     val observation = if (style == AppleWrapperStyle.OBSERVABLE) {
@@ -78,7 +78,7 @@ internal fun appleListDescriptorProperty(vm: VmInfo, list: VmList, style: AppleW
         """.trimMargin()
     }
     val identity = if (list.possibleTypes.size == 1) {
-        if (list.possibleTypes.single().hasId) "AnyHashable(element.id)" else "AnyHashable(ObjectIdentifier(element))"
+        if (list.possibleTypes.single().identityProperty != null) "AnyHashable(\"${list.possibleTypes.single().qualifiedName}:\" + element.basekitIdentity)" else if (list.possibleTypes.single().hasId) "AnyHashable(element.id)" else "AnyHashable(ObjectIdentifier(element))"
     } else {
         "element.deltaListIdentity"
     }

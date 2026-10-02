@@ -11,6 +11,8 @@ import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.ClassKind
+import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import com.google.devtools.ksp.symbol.KSFile
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.Modifier
@@ -21,6 +23,8 @@ private const val VIEWMODEL_LIST_ANNOTATION = "com.latenighthack.basekit.viewmod
 private const val CHILD_VIEWMODEL_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ChildViewModel"
 private const val CODEGEN_IGNORE_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.CodegenIgnore"
 private const val VIEWMODEL_INJECT_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelInject"
+private const val IDENTITY_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelIdentity"
+private const val REACT_ADAPTER_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ReactBindingAdapter"
 private const val VIEWMODEL_INTERFACE = "com.latenighthack.basekit.viewmodel.ViewModel"
 private const val INJECT_ANNOTATION = "me.tatarka.inject.annotations.Inject"
 private const val ASSISTED_ANNOTATION = "me.tatarka.inject.annotations.Assisted"
@@ -64,13 +68,14 @@ class ViewModelProcessor(
             platformCollected = true
             val symbols = resolver.getSymbolsWithAnnotation(VIEWMODEL_ANNOTATION)
                 .filterIsInstance<KSClassDeclaration>()
+                .filterNot { it.hasAnnotation(CODEGEN_IGNORE_ANNOTATION) }
                 .toList()
 
             sourceFiles = symbols.mapNotNull { it.containingFile }
             symbols.mapNotNullTo(viewModels) { buildViewModel(it) }
         }
 
-        for (impl in resolver.getSymbolsWithAnnotation(VIEWMODEL_INJECT_ANNOTATION).filterIsInstance<KSClassDeclaration>()) {
+        for (impl in resolver.getSymbolsWithAnnotation(VIEWMODEL_INJECT_ANNOTATION).filterIsInstance<KSClassDeclaration>().filterNot { it.hasAnnotation(CODEGEN_IGNORE_ANNOTATION) }) {
             buildInjectInfo(impl)?.let { info ->
                 injectInfos.add(info)
                 impl.containingFile?.let(injectSourceFiles::add)
@@ -102,6 +107,10 @@ class ViewModelProcessor(
     }
 
     private fun buildViewModel(declaration: KSClassDeclaration): VmInfo? {
+        if (declaration.classKind != ClassKind.INTERFACE || !declaration.isPublicBinding()) {
+            logger.error("@ViewModelSpec must declare a public interface with a handwritten implementation", declaration)
+            return null
+        }
         val simpleName = declaration.simpleName.asString()
         val qualifiedName = declaration.qualifiedName?.asString() ?: return null
         val packageName = declaration.packageName.asString()
@@ -111,11 +120,11 @@ class ViewModelProcessor(
             ?.arguments?.firstOrNull()?.type?.resolve()
         val stateDecl = stateType?.declaration as? KSClassDeclaration
         if (stateDecl == null) {
-            logger.warn("@ViewModelSpec $simpleName does not implement ViewModel<State>; skipping")
+            logger.error("@ViewModelSpec $simpleName must implement ViewModel<State>", declaration)
             return null
         }
 
-        val stateProperties = stateDecl.getDeclaredProperties().mapNotNull { prop ->
+        val stateProperties = stateDecl.getAllProperties().filter { it.isPublicBinding() }.mapNotNull { prop ->
             val resolved = prop.type.resolve()
             val type = resolved.declaration
             val typeQn = type.qualifiedName?.asString() ?: return@mapNotNull null
@@ -126,12 +135,12 @@ class ViewModelProcessor(
             } else {
                 null
             }
-            VmStateProperty(prop.simpleName.asString(), type.simpleName.asString(), typeQn, resolved.isMarkedNullable, elementQn)
+            VmStateProperty(prop.simpleName.asString(), type.simpleName.asString(), typeQn, resolved.isMarkedNullable, elementQn, resolved.bindingType(), prop.reactAdapter())
         }.toList()
 
-        val boundFunctions = declaration.getDeclaredFunctions()
+        val boundFunctions = declaration.getAllFunctions()
             .filter { fn ->
-                fn.modifiers.contains(Modifier.SUSPEND) &&
+                fn.isPublicBinding() && fn.modifiers.contains(Modifier.SUSPEND) &&
                     !fn.simpleName.asString().startsWith("<") &&
                     fn.annotations.none { it.qualifiedName() == CODEGEN_IGNORE_ANNOTATION }
             }
@@ -156,14 +165,26 @@ class ViewModelProcessor(
                     paramTypeSimpleName = paramType.simpleName.asString(),
                     paramTypeQualifiedName = paramQn,
                     paramTypeNullable = resolvedParam.isMarkedNullable,
+                    type = resolvedParam.bindingType(),
+                    reactAdapter = param.reactAdapter(),
                 )
             }
 
         boundFunctions
             .filter { it.parameters.size > 1 }
             .forEach { fn ->
-                logger.warn("Action ${fn.simpleName.asString()} on $simpleName has multiple parameters; only zero-arg actions and single-arg mutators are bound")
+                logger.error("Action ${fn.simpleName.asString()} on $simpleName has multiple parameters; use one immutable command argument or @CodegenIgnore", fn)
             }
+
+        boundFunctions.forEach { fn ->
+            if (fn.typeParameters.isNotEmpty() || fn.extensionReceiver != null || fn.parameters.any { it.isVararg } ||
+                fn.returnType?.resolve()?.declaration?.qualifiedName?.asString() != "kotlin.Unit") {
+                logger.error("Binding ${fn.simpleName.asString()} must be a non-generic, non-extension suspend function returning Unit without varargs; use @CodegenIgnore", fn)
+            }
+        }
+        boundFunctions.groupBy { it.simpleName.asString() }.filterValues { it.size > 1 }.forEach { (name, functions) ->
+            logger.error("Overloaded binding $name on $simpleName is ambiguous; rename or use @CodegenIgnore", functions.first())
+        }
 
         // The Swift wrapper adds an `@objc {action}Action(_:)` target-action thunk per zero-arg
         // action (see targetActionThunks). If the ViewModel already declares a member with that
@@ -177,7 +198,7 @@ class ViewModelProcessor(
                 logger.error("$simpleName declares `$collision`, which collides with the generated target-action thunk for the action it would shadow; rename one of them")
             }
 
-        val properties = declaration.getDeclaredProperties().toList()
+        val properties = declaration.getAllProperties().filter { it.isPublicBinding() }.toList()
 
         val lists = properties
             .filter { it.hasAnnotation(VIEWMODEL_LIST_ANNOTATION) }
@@ -186,7 +207,12 @@ class ViewModelProcessor(
         val children = properties
             .filter { it.hasAnnotation(CHILD_VIEWMODEL_ANNOTATION) }
             .mapNotNull { prop ->
-                val decl = prop.type.resolve().declaration
+                val resolved = prop.type.resolve()
+                val decl = resolved.declaration
+                if (resolved.isMarkedNullable || prop.isMutable || !decl.hasAnnotation(VIEWMODEL_ANNOTATION) || decl.hasAnnotation(CODEGEN_IGNORE_ANNOTATION)) {
+                    logger.error("@ChildViewModel must be a stable non-null val of a generated @ViewModelSpec type", prop)
+                    return@mapNotNull null
+                }
                 val qn = decl.qualifiedName?.asString() ?: return@mapNotNull null
                 VmChild(prop.simpleName.asString(), decl.simpleName.asString(), qn)
             }
@@ -204,17 +230,22 @@ class ViewModelProcessor(
             mutators = mutators,
             lists = lists,
             children = children,
+            identityProperty = identityProperty(declaration),
         )
     }
 
     private fun buildList(ownerName: String, prop: com.google.devtools.ksp.symbol.KSPropertyDeclaration): VmList? {
-        // Property type is Flow<Delta<ElementVm>>.
-        val elementType = prop.type.resolve()          // Flow<Delta<X>>
-            .arguments.firstOrNull()?.type?.resolve()  // Delta<X>
-            ?.arguments?.firstOrNull()?.type?.resolve() // X
+        val flow = prop.type.resolve()
+        val delta = flow.arguments.singleOrNull()?.type?.resolve()
+        if (flow.isMarkedNullable || flow.declaration.qualifiedName?.asString() != "kotlinx.coroutines.flow.Flow" ||
+            delta?.declaration?.qualifiedName?.asString() != "com.latenighthack.deltalist.Delta" || delta.isMarkedNullable) {
+            logger.error("@ViewModelList ${prop.simpleName.asString()} on $ownerName must be Flow<Delta<ChildVm>>", prop)
+            return null
+        }
+        val elementType = delta.arguments.singleOrNull()?.type?.resolve()
         val elementDecl = elementType?.declaration as? KSClassDeclaration
-        if (elementDecl == null) {
-            logger.warn("@ViewModelList ${prop.simpleName.asString()} on $ownerName is not Flow<Delta<ChildVm>>; skipping")
+        if (elementDecl == null || elementType.isMarkedNullable) {
+            logger.error("@ViewModelList ${prop.simpleName.asString()} on $ownerName must declare a concrete non-null child type", prop)
             return null
         }
         val elementQn = elementDecl.qualifiedName?.asString() ?: return null
@@ -248,7 +279,7 @@ class ViewModelProcessor(
 
         val unboundTypes = distinctTypes
             .mapNotNull { it.declaration as? KSClassDeclaration }
-            .filterNot { it.hasAnnotation(VIEWMODEL_ANNOTATION) }
+            .filterNot { it.hasAnnotation(VIEWMODEL_ANNOTATION) && !it.hasAnnotation(CODEGEN_IGNORE_ANNOTATION) }
         if (unboundTypes.isNotEmpty()) {
             logger.error(
                 "@ViewModelList ${prop.simpleName.asString()} on $ownerName declares child types without " +
@@ -288,13 +319,15 @@ class ViewModelProcessor(
             val idIsHashable = idProperty?.let { prop ->
                 val resolved = prop.type.resolve()
                 val idQn = resolved.declaration.qualifiedName?.asString() ?: return@let false
-                swiftType(idQn, resolved.isMarkedNullable).type != "AnyObject?"
+                idQn in setOf("kotlin.String", "kotlin.Int", "kotlin.Long", "kotlin.Short", "kotlin.Byte", "kotlin.Boolean", "kotlin.Float", "kotlin.Double")
             } == true
             VmListElementType(
                 simpleName = declaration.simpleName.asString(),
                 qualifiedName = qn,
                 hasId = idIsHashable,
                 stateQualifiedName = stateDeclaration?.qualifiedName?.asString(),
+                identityProperty = identityProperty(declaration),
+                reactId = idProperty?.type?.resolve()?.let { !it.isMarkedNullable && it.declaration.qualifiedName?.asString() in setOf("kotlin.String", "kotlin.Int", "kotlin.Short", "kotlin.Byte") } == true,
             )
         }
         val caseNames = possibleTypes.map { it.simpleName.toListCaseName() }
@@ -321,6 +354,45 @@ class ViewModelProcessor(
         )
     }
 
+    private fun KSAnnotated.isPublicBinding(): Boolean =
+        !hasAnnotation(CODEGEN_IGNORE_ANNOTATION) &&
+            (this !is com.google.devtools.ksp.symbol.KSDeclaration ||
+                modifiers.none { it in setOf(Modifier.PRIVATE, Modifier.PROTECTED, Modifier.INTERNAL) })
+
+    private fun identityProperty(declaration: KSClassDeclaration): String? {
+        val ids = declaration.getAllProperties().filter { it.hasAnnotation(IDENTITY_ANNOTATION) && !it.hasAnnotation(CODEGEN_IGNORE_ANNOTATION) }.toList()
+        if (ids.size > 1) logger.error("Only one @ViewModelIdentity is allowed", declaration)
+        val prop = ids.singleOrNull() ?: return null
+        val type = prop.type.resolve()
+        if (!prop.isPublicBinding() || prop.isMutable || type.isMarkedNullable || type.declaration.qualifiedName?.asString() != "kotlin.String") {
+            logger.error("@ViewModelIdentity must be a public non-null String val", prop)
+            return null
+        }
+        return prop.simpleName.asString()
+    }
+
+    private fun KSAnnotated.reactAdapter(): ReactAdapter? {
+        val toJs = stringArgument(REACT_ADAPTER_ANNOTATION, "toJs") ?: return null
+        return ReactAdapter(toJs, stringArgument(REACT_ADAPTER_ANNOTATION, "fromJs").orEmpty(),
+            stringArgument(REACT_ADAPTER_ANNOTATION, "exportedType").orEmpty())
+    }
+
+    private fun KSType.bindingType(): VmType {
+        val klass = declaration as? KSClassDeclaration
+        return VmType(
+            qualifiedName = declaration.qualifiedName?.asString() ?: "kotlin.Any",
+            nullable = isMarkedNullable,
+            arguments = arguments.map { it.type?.resolve()?.bindingType() ?: VmType("kotlin.Any", true) },
+            jsName = klass?.jsExportName() ?: declaration.simpleName.asString(),
+            swiftName = klass?.swiftExportName() ?: declaration.simpleName.asString(),
+            enumCases = klass?.takeIf { it.classKind == ClassKind.ENUM_CLASS }?.declarations
+                ?.filterIsInstance<KSClassDeclaration>()?.filter { it.classKind == ClassKind.ENUM_ENTRY }
+                ?.map { it.simpleName.asString() }?.toList(),
+            jsExported = declaration.hasAnnotation("kotlin.js.JsExport") || declaration.containingFile?.hasAnnotation("kotlin.js.JsExport") == true,
+            objcRepresentable = klass != null && Modifier.VALUE !in klass.modifiers && Modifier.INLINE !in klass.modifiers,
+        )
+    }
+
     override fun finish() {
         // Emit a marker to learn the output path, then route to the generator for this pass.
         codeGenerator.createNewFile(Dependencies(false), MARKER_PACKAGE, "basekit_viewmodel_marker", "log").close()
@@ -341,12 +413,34 @@ class ViewModelProcessor(
 
         val dependencies = Dependencies(aggregating = true, *sourceFiles.toTypedArray())
         when (pass) {
-            Pass.ANDROID -> AndroidBindingGenerator(codeGenerator, dependencies).generate(viewModels)
-            Pass.APPLE -> {
-                SwiftKvoGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
-                SwiftUIObservableGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
+            Pass.ANDROID -> {
+                AndroidBindingGenerator(codeGenerator, dependencies).generate(viewModels)
+                if (options["basekit.viewmodel.compose"] == "true") ComposeGenerator(codeGenerator, dependencies).generate(viewModels)
             }
-            Pass.JS -> ReactHookGenerator(codeGenerator, dependencies).generate(viewModels)
+            Pass.APPLE -> {
+                try {
+                    viewModels.forEach { vm ->
+                        vm.stateProperties.forEach { it.swiftBindingType() }
+                        vm.mutators.forEach { swiftType(it.type) }
+                    }
+                    SwiftKvoGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
+                    SwiftUIObservableGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
+                } catch (error: IllegalArgumentException) { logger.error(error.message.orEmpty()) }
+                  catch (error: IllegalStateException) { logger.error(error.message.orEmpty()) }
+            }
+            Pass.JS -> {
+                try {
+                    if (options.containsKey("basekit.viewmodel.reactModule")) viewModels.forEach { vm ->
+                        vm.stateProperties.forEach { reactType(it.type, it.reactAdapter) }
+                        vm.mutators.forEach { reactType(it.type, it.reactAdapter); reactFromJs(it.type, it.paramName, it.reactAdapter) }
+                    }
+                    ReactHookGenerator(codeGenerator, dependencies).generate(viewModels)
+                    options["basekit.viewmodel.reactModule"]?.let {
+                        ReactTypesGenerator(codeGenerator, dependencies).generate(viewModels, it, options["basekit.viewmodel.reactPackageVersion"] ?: "0.0.0")
+                    }
+                } catch (error: IllegalArgumentException) { logger.error(error.message.orEmpty()) }
+                  catch (error: IllegalStateException) { logger.error(error.message.orEmpty()) }
+            }
             Pass.METADATA, Pass.OTHER -> Unit // jvm pass produces no platform binding
         }
     }

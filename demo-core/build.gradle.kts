@@ -8,10 +8,14 @@ plugins {
     id("com.latenighthack.basekit.viewmodel")
     alias(libs.plugins.ksp)
     alias(libs.plugins.skie)
+    alias(libs.plugins.compose.compiler)
 }
 
 ksp {
     // Package the generated navigator/route interfaces land in (co-located with the destinations).
+    arg("basekit.viewmodel.compose", "true")
+    arg("basekit.viewmodel.reactPackageVersion", project.version.toString())
+    arg("basekit.viewmodel.reactModule", "basekit-demo-core")
     arg("Basekit_NavigationPackage", "com.latenighthack.basekit.demo")
     // Also generate the ViewModel test harness (TestViewModelRegistry + TestClientNavigator) into
     // com.latenighthack.basekit.demo.test — proves the harness codegen end-to-end.
@@ -31,6 +35,11 @@ dependencies {
 }
 
 kotlin {
+    js {
+        useEsModules()
+        generateTypeScriptDefinitions()
+        compilations["main"].packageJson { customField("type", "module") }
+    }
     appleXcframework("DemoCore", isStatic = true) {
         export(project(":basekit-navigation"))
         export(project(":basekit-viewmodel"))
@@ -40,6 +49,7 @@ kotlin {
     }
 
     sourceSets {
+        androidMain.dependencies { implementation(project(":basekit-viewmodel-compose")) }
         val commonMain by getting {
             dependencies {
                 api(project(":basekit-navigation"))
@@ -60,4 +70,8 @@ kotlin {
             }
         }
     }
+}
+
+composeCompiler {
+    targetKotlinPlatforms.set(setOf(org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType.androidJvm))
 }

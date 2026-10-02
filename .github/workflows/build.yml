@@ -34,10 +34,10 @@ jobs:
     name: All targets + Apple frameworks + generated-Swift typecheck
     # macOS is required so the Kotlin/Native Apple targets + SKIE compile; an ubuntu run would
     # silently skip them. Matches release.yml.
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       # Generated navigation uses Swift 6.2 actor-isolated protocol conformances.
-      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
 
@@ -116,6 +116,28 @@ jobs:
         run: |
           minimum=$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' demo-core/build/bin/iosSimulatorArm64/debugFramework/DemoCore.framework/Info.plist)
           test "$minimum" = "18.0"
+
+      - name: Verify real KSP diagnostics and manual wiring
+        run: python3 scripts/verify-binding-diagnostics.py
+
+      - name: Test typed React package in Chromium
+        run: |
+          ./gradlew :demo-core:jsBrowserProductionLibraryDistribution :demo-core:collectBasekitReact
+          cd integration/react
+          npm ci
+          npx playwright install chromium
+          npm test
+
+      - name: Test generated Compose host
+        run: ./gradlew :basekit-viewmodel-compose:testDebugUnitTest
+
+      - name: Build and execute Swift 6 consumer
+        run: |
+          command -v xcodegen || brew install xcodegen
+          runtime=$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; print(next(r["identifier"] for r in json.load(sys.stdin)["runtimes"] if r["isAvailable"] and r["name"].startswith("iOS")))')
+          device=$(xcrun simctl create "Basekit bindings" com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro "$runtime")
+          trap 'xcrun simctl delete "$device"' EXIT
+          python3 scripts/verify-apple-bindings.py --simulator "$device"
 
       - name: Assemble XCFrameworks
         run: >

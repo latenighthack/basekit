@@ -13,6 +13,7 @@ import Foundation
 /// `state` stream (a SKIE `AsyncSequence`, since this framework leaves Flow interop enabled) and
 /// pushes each snapshot onto the `@objc dynamic` properties the subclass declares — making state
 /// observable through ordinary KVO. The subscription is cancelled on `unbind()` / `deinit`.
+@MainActor
 open class KvoViewModel: NSObject {
 
     private var stateTask: Task<Void, Never>?
@@ -41,7 +42,7 @@ open class KvoViewModel: NSObject {
     /// The generated `{action}Action(_:)` target-action thunks call this. Registration happens on
     /// whichever thread delivered the action - AppKit and UIKit both dispatch target-action on the
     /// main thread - and the bookkeeping on completion hops back to the main actor to match.
-    public func runAction(_ body: @escaping () async throws -> Void) {
+    public func runAction(_ body: @escaping @MainActor () async throws -> Void) {
         let id = UUID()
         actionTasks[id] = Task { [weak self] in
             do {
@@ -59,7 +60,7 @@ open class KvoViewModel: NSObject {
 
     /// Starts (or restarts) the state subscription. `body` should loop the ViewModel's `state`
     /// sequence and assign the mapped values to the subclass's dynamic properties on the main actor.
-    public func startObserving(_ body: @escaping () async -> Void) {
+    public func startObserving(_ body: @escaping @MainActor () async -> Void) {
         stateTask?.cancel()
         stateTask = Task { [weak self] in
             guard self != nil else { return }

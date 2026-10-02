@@ -50,22 +50,16 @@ class SwiftKvoGenerator(
             val className = "Kvo${vm.simpleName}"
 
             val dynamicProps = vm.stateProperties.joinToString("\n") {
-                val st = swiftType(it.typeQualifiedName, it.nullable, it.listElementQualifiedName)
-                "    @objc public dynamic var ${it.name.swiftDeclName()}: ${st.type} = ${st.default}"
+                val st = it.swiftBindingType().let { st -> if (it.type.enumCases != null) st.copy(type = "__" + st.type) else st }
+                "    @objc public dynamic var ${it.name.swiftDeclName()}: ${st.type}"
             }
 
-            // Erased (AnyObject?) properties need an explicit bridge: Swift will not assign a
-            // value type (a Kotlin enum bridged struct, …) to AnyObject implicitly. A typed
-            // collection like [String] maps directly and needs no bridge.
-            fun VmStateProperty.assignSuffix(): String =
-                if (swiftType(typeQualifiedName, nullable, listElementQualifiedName).type == "AnyObject?") " as AnyObject" else ""
-
             val seedAssigns = vm.stateProperties.joinToString("\n") {
-                "        self.${it.name.swiftDeclName()} = initial.${it.name.swiftSourceRef()}${it.assignSuffix()}"
+                "        self.${it.name.swiftDeclName()} = initial.${it.name.swiftSourceRef()}${if (it.type.enumCases != null) (if (it.nullable) "?.toKotlinEnum()" else ".toKotlinEnum()") else ""}"
             }
 
             val updateAssigns = vm.stateProperties.joinToString("\n") {
-                "                        self.${it.name.swiftDeclName()} = state.${it.name.swiftSourceRef()}${it.assignSuffix()}"
+                "                        self.${it.name.swiftDeclName()} = state.${it.name.swiftSourceRef()}${if (it.type.enumCases != null) (if (it.nullable) "?.toKotlinEnum()" else ".toKotlinEnum()") else ""}"
             }
 
             val actionMethods = vm.actions.joinToString("\n\n") { action ->
@@ -77,7 +71,7 @@ class SwiftKvoGenerator(
             }
 
             val mutatorMethods = vm.mutators.joinToString("\n\n") { mutator ->
-                val st = swiftType(mutator.paramTypeQualifiedName, mutator.paramTypeNullable)
+                val st = swiftType(mutator.type)
                 """
                 |    public func ${mutator.name.swiftDeclName()}(_ ${mutator.paramName.swiftDeclName()}: ${st.type}) async throws {
                 |        try await viewModel.${mutator.name.swiftSourceRef()}(${mutator.paramName.swiftSourceRef()}: ${mutator.paramName.swiftDeclName()})
@@ -116,10 +110,17 @@ class SwiftKvoGenerator(
                     appendLine(listElements)
                     appendLine()
                 }
+                appendLine("@MainActor")
                 appendLine("@objcMembers")
                 appendLine("public final class $className: KvoViewModel {")
                 appendLine()
                 appendLine("    private let viewModel: ${vm.simpleName}")
+                vm.identityProperty?.let { identity ->
+                    appendLine("    public var basekitIdentity: String { viewModel.${identity.swiftSourceRef()} }")
+                }
+                for (child in vm.children) {
+                    appendLine("    public lazy var ${child.propertyName.swiftDeclName()} = Kvo${child.typeSimpleName}(viewModel.${child.propertyName.swiftSourceRef()})")
+                }
                 appendLine()
                 if (dynamicProps.isNotEmpty()) {
                     appendLine(dynamicProps)
@@ -127,17 +128,15 @@ class SwiftKvoGenerator(
                 }
                 appendLine("    public init(_ viewModel: ${vm.simpleName}) {")
                 appendLine("        self.viewModel = viewModel")
-                appendLine("        super.init()")
                 appendLine("        let initial = viewModel.initialState as! ${vm.stateSwiftName}")
                 if (seedAssigns.isNotEmpty()) appendLine(seedAssigns)
+                appendLine("        super.init()")
                 appendLine("        startObserving { [weak self] in")
-                appendLine("            guard let self = self else { return }")
                 appendLine("            do {")
-                appendLine("                for try await anyState in self.viewModel.state {")
+                appendLine("                for try await anyState in viewModel.state {")
+                appendLine("                    guard let self = self else { break }")
                 appendLine("                    guard let state = anyState as? ${vm.stateSwiftName} else { continue }")
-                appendLine("                    await MainActor.run {")
                 if (updateAssigns.isNotEmpty()) appendLine(updateAssigns)
-                appendLine("                    }")
                 appendLine("                }")
                 appendLine("            } catch {")
                 appendLine("            }")

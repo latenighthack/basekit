@@ -165,7 +165,7 @@ class AppleSwiftNavigationGenerator(
         appendLine("    init(upstream: NavigationResponder, completed: @escaping @MainActor () -> Void) { self.upstream = upstream; self.completed = completed }")
         appendLine("    func respond(response: Any?) {")
         appendLine("        lock.lock(); guard !resolved else { lock.unlock(); return }; resolved = true; lock.unlock()")
-        appendLine("        upstream.respond(response: response); Task { @MainActor in completed() }")
+        appendLine("        upstream.respond(response: response); let completion = completed; Task { @MainActor in completion() }")
         appendLine("    }")
         appendLine("}")
         appendLine()

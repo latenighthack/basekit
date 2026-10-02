@@ -56,3 +56,20 @@ public annotation class ViewModelInject
  */
 @Target(AnnotationTarget.CLASS)
 public annotation class ViewModelModule
+
+/** Stable domain identity. Exactly one public non-null String val on a ViewModel specification.
+ * The handwritten implementation must keep this value unchanged for the lifetime of the instance.
+ */
+@Target(AnnotationTarget.PROPERTY)
+public annotation class ViewModelIdentity
+
+/** Explicit JS boundary for a custom value. Functions are qualified Kotlin/JS function names;
+ * exportedType names an @JsExport type in the consuming runtime module. fromJs is required on
+ * mutator parameters. Conversion functions are typechecked by the Kotlin compiler.
+ */
+@Target(AnnotationTarget.PROPERTY, AnnotationTarget.VALUE_PARAMETER)
+public annotation class ReactBindingAdapter(
+    val toJs: String,
+    val exportedType: String,
+    val fromJs: String = "",
+)

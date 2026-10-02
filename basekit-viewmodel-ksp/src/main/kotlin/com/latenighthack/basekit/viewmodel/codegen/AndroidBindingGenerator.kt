@@ -22,7 +22,7 @@ class AndroidBindingGenerator(
             val mutatorMethods = vm.mutators.joinToString("\n\n") { mutator ->
                 """
                 |    /** Runs the `${mutator.name}` mutator on this Activity's lifecycle scope. */
-                |    protected fun ${mutator.name}(${mutator.paramName}: ${mutator.paramTypeQualifiedName}) {
+                |    protected fun ${mutator.name}(${mutator.paramName}: ${mutator.type.kotlinName}) {
                 |        lifecycleScope.launch { viewModel.${mutator.name}(${mutator.paramName}) }
                 |    }
                 """.trimMargin()

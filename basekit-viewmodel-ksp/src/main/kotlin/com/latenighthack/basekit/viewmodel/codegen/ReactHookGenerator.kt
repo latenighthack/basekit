@@ -28,48 +28,14 @@ class ReactHookGenerator(
             }
 
             val stateAssigns = vm.stateProperties.joinToString("\n") {
-                // A Kotlin List is not a JS array; hand list-of-string state back as a real array so
-                // React consumers can map/index it. `?.` keeps a nullable list null rather than throwing.
-                if (it.listElementQualifiedName == "kotlin.String") {
-                    val access = if (it.nullable) "state.${it.name}?" else "state.${it.name}"
-                    "    result.${it.name} = $access.toTypedArray()"
-                } else {
-                    "    result.${it.name} = state.${it.name}"
-                }
+                "    result.${it.name} = ${reactToJs(it.type, "state.${it.name}", it.reactAdapter)}"
             }
 
             val actionAssigns = vm.actions.joinToString("\n") { action ->
-                """
-                |    result.${action.name} = {
-                |        Promise<Unit> { resolve, reject ->
-                |            CoroutineScope(SupervisorJob()).launch {
-                |                try {
-                |                    viewModel.${action.name}()
-                |                    resolve(Unit)
-                |                } catch (t: Throwable) {
-                |                    reject(t)
-                |                }
-                |            }
-                |        }
-                |    }
-                """.trimMargin()
+                "    result.${action.name} = { actions.run { viewModel.${action.name}() } }"
             }
-
             val mutatorAssigns = vm.mutators.joinToString("\n") { mutator ->
-                """
-                |    result.${mutator.name} = { ${mutator.paramName}: ${mutator.paramTypeQualifiedName} ->
-                |        Promise<Unit> { resolve, reject ->
-                |            CoroutineScope(SupervisorJob()).launch {
-                |                try {
-                |                    viewModel.${mutator.name}(${mutator.paramName})
-                |                    resolve(Unit)
-                |                } catch (t: Throwable) {
-                |                    reject(t)
-                |                }
-                |            }
-                |        }
-                |    }
-                """.trimMargin()
+                "    result.${mutator.name} = { value: dynamic -> actions.run { viewModel.${mutator.name}(${reactFromJs(mutator.type, "value", mutator.reactAdapter)}) } }"
             }
 
             val listAssigns = vm.lists.joinToString("\n") {
@@ -83,10 +49,12 @@ class ReactHookGenerator(
                 writeln()
                 writeln("import com.latenighthack.basekit.viewmodel.React")
                 writeln("import com.latenighthack.basekit.viewmodel.bindFlow")
+                writeln("import com.latenighthack.basekit.viewmodel.ReactActionScope")
                 writeln("import com.latenighthack.deltalist.react.useMappedDeltaList")
                 writeln("import kotlinx.coroutines.CoroutineScope")
                 writeln("import kotlinx.coroutines.SupervisorJob")
                 writeln("import kotlinx.coroutines.launch")
+                writeln("import kotlinx.coroutines.cancel")
                 writeln("import kotlin.js.ExperimentalJsExport")
                 writeln("import kotlin.js.JsExport")
                 writeln("import kotlin.js.JsName")
@@ -96,6 +64,16 @@ class ReactHookGenerator(
                     writeln(listFactories)
                     writeln()
                 }
+                writeln("""
+                    |/** Export this reference from the app's Kotlin/JS client factory. */
+                    |@OptIn(ExperimentalJsExport::class)
+                    |@JsExport
+                    |public class ${vm.simpleName}ReactRef internal constructor(private val value: ${vm.qualifiedName}) {
+                    |    public val ${vm.simpleName.replaceFirstChar { it.lowercase() }}Reference: Boolean get() = true
+                    |    public fun use(): dynamic = $hookName(value)
+                    |}
+                    |public fun ${vm.qualifiedName}.reactReference(): ${vm.simpleName}ReactRef = ${vm.simpleName}ReactRef(this)
+                """.trimMargin())
                 writeln(
                     """
                     |/** Generated React hook for [${vm.qualifiedName}]. */
@@ -105,11 +83,14 @@ class ReactHookGenerator(
                     |public fun $hookName(viewModelArg: dynamic): dynamic {
                     |    val viewModel = viewModelArg.unsafeCast<${vm.qualifiedName}>()
                     |
+                    |    val actions = React.useMemo({ ReactActionScope() }, arrayOf(viewModelArg)).unsafeCast<ReactActionScope>()
+                    |    React.useEffect({ actions.start(); { actions.stop() } }, arrayOf(actions))
                     |    val stateHolder = React.useState(viewModel.initialState)
                     |    val state = stateHolder[0].unsafeCast<${vm.stateQualifiedName}>()
                     |    val setState = stateHolder[1]
                     |
                     |    React.useEffect({
+                    |        setState(viewModel.initialState)
                     |        bindFlow(viewModel.state) { s -> setState(s) }
                     |    }, arrayOf(viewModelArg))
                     """.trimMargin()
@@ -124,6 +105,7 @@ class ReactHookGenerator(
                 if (actionAssigns.isNotEmpty()) writeln(actionAssigns)
                 if (mutatorAssigns.isNotEmpty()) writeln(mutatorAssigns)
                 if (listAssigns.isNotEmpty()) writeln(listAssigns)
+                for (child in vm.children) writeln("    result.${child.propertyName} = ${child.typeQualifiedName.substringBeforeLast('.')}.use${child.typeSimpleName}(viewModel.${child.propertyName})")
                 writeln("    return result")
                 writeln("}")
             }.close()

@@ -5,11 +5,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.promise
+import kotlin.js.Promise
 
 /** Minimal React interop used by the generated `use{ViewModel}` hooks. */
 @JsModule("react")
 @JsNonModule
 public external object React {
+    public fun useMemo(factory: () -> dynamic, deps: Array<dynamic>): dynamic
     public fun useState(initial: dynamic): Array<dynamic>
     public fun useEffect(effect: () -> dynamic, deps: Array<dynamic>)
 }
@@ -30,4 +33,13 @@ public fun <T> bindFlow(flow: Flow<T>, onEach: (T) -> Unit): () -> Unit {
         active = false
         scope.cancel()
     }
+}
+
+/** One effect lifetime, restarted safely by React StrictMode. */
+public class ReactActionScope {
+    private var scope: CoroutineScope? = null
+    public fun start() { stop(); scope = CoroutineScope(SupervisorJob()) }
+    public fun stop() { scope?.cancel(); scope = null }
+    public fun run(action: suspend () -> Unit): Promise<Unit> =
+        scope?.promise { action() } ?: Promise.reject(IllegalStateException("ViewModel binding is not mounted"))
 }

@@ -6,3 +6,12 @@ xcuserdata
 .kotlin
 .idea
 .gradle
+
+# Isolated Fullhouse paired-build state
+.fh/
+.artifacts/
+
+# Consumer verification artifacts
+node_modules/
+test-results/
+playwright-report/

@@ -35,22 +35,16 @@ class SwiftUIObservableGenerator(
             val className = "Observable${vm.simpleName}"
 
             val publishedProps = vm.stateProperties.joinToString("\n") {
-                val st = swiftType(it.typeQualifiedName, it.nullable, it.listElementQualifiedName)
-                "    @Published public private(set) var ${it.name.swiftDeclName()}: ${st.type} = ${st.default}"
+                val st = it.swiftBindingType()
+                "    @Published public private(set) var ${it.name.swiftDeclName()}: ${st.type}"
             }
 
-            // Erased (AnyObject?) properties need an explicit bridge: Swift will not assign a
-            // value type (a Kotlin enum bridged struct, …) to AnyObject implicitly. A typed
-            // collection like [String] maps directly and needs no bridge.
-            fun VmStateProperty.assignSuffix(): String =
-                if (swiftType(typeQualifiedName, nullable, listElementQualifiedName).type == "AnyObject?") " as AnyObject" else ""
-
             val seedAssigns = vm.stateProperties.joinToString("\n") {
-                "        self.${it.name.swiftDeclName()} = initial.${it.name.swiftSourceRef()}${it.assignSuffix()}"
+                "        self.${it.name.swiftDeclName()} = initial.${it.name.swiftSourceRef()}"
             }
 
             val updateAssigns = vm.stateProperties.joinToString("\n") {
-                "                self.${it.name.swiftDeclName()} = state.${it.name.swiftSourceRef()}${it.assignSuffix()}"
+                "                self.${it.name.swiftDeclName()} = state.${it.name.swiftSourceRef()}"
             }
 
             val actionMethods = vm.actions.joinToString("\n\n") { action ->
@@ -62,7 +56,7 @@ class SwiftUIObservableGenerator(
             }
 
             val mutatorMethods = vm.mutators.joinToString("\n\n") { mutator ->
-                val st = swiftType(mutator.paramTypeQualifiedName, mutator.paramTypeNullable)
+                val st = swiftType(mutator.type)
                 """
                 |    public func ${mutator.name.swiftDeclName()}(_ ${mutator.paramName.swiftDeclName()}: ${st.type}) async throws {
                 |        try await viewModel.${mutator.name.swiftSourceRef()}(${mutator.paramName.swiftSourceRef()}: ${mutator.paramName.swiftDeclName()})
@@ -83,14 +77,14 @@ class SwiftUIObservableGenerator(
                         // its `[String]` read side can't pair with a mutator whose param is still erased.
                         it.listElementQualifiedName == null
                 } ?: return@mapNotNull null
-                val st = swiftType(prop.typeQualifiedName, prop.nullable, prop.listElementQualifiedName)
+                val st = prop.swiftBindingType()
                 val declProp = prop.name.swiftDeclName()
                 val declMutator = mutator.name.swiftDeclName()
                 """
                 |    /// Two-way binding for `${prop.name}`: reads the latest state, writes call `${mutator.name}`.
                 |    public var ${noun.swiftDeclName()}Binding: Binding<${st.type}> {
                 |        Binding(
-                |            get: { [weak self] in self?.$declProp ?? ${st.default} },
+                |            get: { self.$declProp },
                 |            set: { [weak self] newValue in
                 |                guard let self = self else { return }
                 |                // Optimistic echo keeps a bound control responsive; the real state event
@@ -109,7 +103,7 @@ class SwiftUIObservableGenerator(
                 |    /// Collects `${list.propertyName}` into a SwiftUI `DeltaList`. Drive with
                 |    /// `.task { await model.observe$cap(into: list) }`; each row wraps its child in `Observable${list.elementSimpleName}`.
                 |    ${DeltaListAvailability.SWIFTUI}
-                |    @available(*, deprecated, message: "Use DeltaListView(model.${list.propertyName}) or DeltaForEach(model.${list.propertyName})")
+                |    @available(*, deprecated, message: "Use DeltaListView(model.${list.propertyName}); in Form/List use DeltaForEach(model.${list.propertyName}, observing: list) with container-owned collection")
                 |    public func observe$cap(into list: DeltaList<${list.elementSimpleName}>) async {
                 |        await list.collect(viewModel.${list.propertyName})
                 |    }
@@ -142,6 +136,12 @@ class SwiftUIObservableGenerator(
                 appendLine("public final class $className: ObservableObject {")
                 appendLine()
                 appendLine("    private let viewModel: ${vm.simpleName}")
+                vm.identityProperty?.let { identity ->
+                    appendLine("    public var basekitIdentity: String { viewModel.${identity.swiftSourceRef()} }")
+                }
+                for (child in vm.children) {
+                    appendLine("    public lazy var ${child.propertyName.swiftDeclName()} = Observable${child.typeSimpleName}(viewModel.${child.propertyName.swiftSourceRef()})")
+                }
                 appendLine()
                 if (publishedProps.isNotEmpty()) {
                     appendLine(publishedProps)

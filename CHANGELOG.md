@@ -4,6 +4,20 @@ All notable changes to basekit are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor versions may break API).
 
+## [0.3.0] — 2026-10-02
+
+- Typed generated React package, opaque typed references, exhaustive child unions, and explicit
+  custom-value adapters. The raw hook entrypoint remains a migration surface.
+- Optional generated Compose hosts with retained asynchronous preparation, retry, resource cleanup,
+  typed actions and lifecycle-aware state/list bindings.
+- Explicit shared `@ViewModelIdentity` keys across Apple, React and Compose.
+- Concrete Swift custom state and enum types; preserve nullable and generic mutator types.
+- Swift 6 executable-consumer fixes: main-actor KVO runtime, isolated responder completion capture,
+  and caller-isolated SKIE async extensions (Swift 6.2+).
+- Unsupported public suspend binding signatures now fail KSP; use `@CodegenIgnore` intentionally.
+- Real KSP, TypeScript/browser, Android host and iOS consumer regression fixtures; acknowledged
+  text-input example. Adopt DeltaList 0.3.2 and its container-owned `Form`/`List` collection path.
+
 ## [0.2.3] — 2026
 
 ### Added

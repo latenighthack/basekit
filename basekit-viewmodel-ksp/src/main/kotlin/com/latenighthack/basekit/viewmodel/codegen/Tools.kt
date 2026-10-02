@@ -34,7 +34,15 @@ fun KSClassDeclaration.swiftExportName(): String {
         parts.add(0, parent.simpleName.asString())
         parent = parent.parentDeclaration
     }
-    return parts.joinToString("")
+    val explicit = stringArgument("kotlin.native.ObjCName", "swiftName")?.takeIf { it.isNotBlank() }
+    return explicit ?: parts.joinToString("")
+}
+
+/** ESM declarations keep enclosing class namespaces and explicit JS export names. */
+fun KSClassDeclaration.jsExportName(): String {
+    val own = stringArgument("kotlin.js.JsName", "name") ?: simpleName.asString()
+    val parent = parentDeclaration as? KSClassDeclaration
+    return if (parent == null) own else "${parent.jsExportName()}.$own"
 }
 
 /** Splits an identifier into its words, e.g. "onOpenDetail" -> [on, Open, Detail]. */
@@ -129,7 +137,7 @@ private val SWIFT_RESERVED_MEMBERS = SWIFT_KEYWORDS + setOf(
     "description", "debugDescription", "hash", "hashValue", "superclass", "isEqual", "isProxy",
     "objectWillChange",
     // Members the generated wrappers already declare.
-    "viewModel", "onError", "onActionError", "observe", "runAction", "startObserving", "unbind",
+    "basekitIdentity", "viewModel", "onError", "onActionError", "observe", "runAction", "startObserving", "unbind",
 )
 
 /**
@@ -159,3 +167,30 @@ fun String.toUpperCamelCase(): String {
 /** `IncomingMessageItemViewModel` -> `incomingMessageItem`; used for generated closed Swift cases. */
 fun String.toListCaseName(): String =
     removeSuffix("ViewModel").replaceFirstChar { it.lowercase() }
+
+/** Precise mapping for resolved exported types. Collection mappings mirror Kotlin/Native bridges. */
+fun swiftType(type: VmType): SwiftType {
+    val qn = type.qualifiedName
+    if (qn in setOf("kotlin.collections.List", "kotlin.collections.MutableList")) {
+        val element = type.arguments.singleOrNull() ?: error("Missing list element type")
+        require(!element.nullable && element.arguments.isEmpty()) { "Nullable or nested Swift collection elements require an exported boundary type" }
+        val mapped = when {
+            element.enumCases != null -> "__" + element.swiftName
+            element.qualifiedName in setOf("kotlin.Int", "kotlin.Long", "kotlin.Short", "kotlin.Byte", "kotlin.Boolean", "kotlin.Float", "kotlin.Double") ->
+                swiftType(element.qualifiedName, true).type.removeSuffix("?")
+            else -> swiftType(element).type
+        }
+        return SwiftType("[$mapped]" + if (type.nullable) "?" else "", "nil")
+    }
+    val primitive = swiftType(qn, type.nullable)
+    if (primitive.type != "AnyObject?") return primitive
+    require(type.objcRepresentable && qn != "kotlin.Any") {
+        "Unsupported Swift binding type $qn; expose an exported class or use @CodegenIgnore"
+    }
+    require(type.arguments.isEmpty()) { "Generic custom Swift type $qn needs an explicit exported boundary type" }
+    return SwiftType(type.swiftName + if (type.nullable) "?" else "", "nil")
+}
+
+fun VmStateProperty.swiftBindingType(): SwiftType =
+    swiftType(if (type.arguments.isEmpty() && listElementQualifiedName != null)
+        type.copy(arguments = listOf(VmType(listElementQualifiedName))) else type)

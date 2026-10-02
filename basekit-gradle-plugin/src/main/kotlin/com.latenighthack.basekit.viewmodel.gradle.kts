@@ -99,3 +99,22 @@ tasks.register<Copy>("collectBasekitViewModelSwift") {
     eachFile { path = name }
     into(layout.buildDirectory.dir("generated/basekit-viewmodel/swift"))
 }
+
+// Package the facade separately from compiler-owned Kotlin/JS output. Consumers give this directory
+// a package name in their workspace, or expose its files through their npm package's exports map.
+tasks.register<Copy>("collectBasekitReact") {
+    dependsOn(tasks.matching { it.name == "kspKotlinJs" })
+    from(layout.buildDirectory.dir("generated/ksp/js/jsMain/resources")) {
+        include("basekit-react.js", "basekit-react.d.ts", "basekit-react.package.json")
+        rename("basekit-react.package.json", "package.json")
+    }
+    into(layout.buildDirectory.dir("generated/basekit-react"))
+}
+
+// Applies only when the framework consumer enables SKIE. Keep its cancellation-aware protocol
+// extensions on the caller's actor instead of crossing into the generic executor (Swift 6.2+).
+pluginManager.withPlugin("co.touchlab.skie") {
+    extensions.configure<co.touchlab.skie.plugin.configuration.SkieExtension> {
+        build.freeSwiftCompilerArgs.addAll("-enable-upcoming-feature", "NonisolatedNonsendingByDefault")
+    }
+}

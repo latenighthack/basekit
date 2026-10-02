@@ -13,7 +13,9 @@ internal fun reactListElementFactory(vm: VmInfo, list: VmList): String {
         } else {
             "$childPackage.use${type.simpleName}"
         }
-        val identity = if (type.hasId) {
+        val identity = if (type.identityProperty != null) {
+            "result.key = \"${type.qualifiedName}:\" + child.${type.identityProperty}"
+        } else if (type.reactId) {
             """
             |            result.id = child.initialState.id
             |            result.key = child.initialState.id

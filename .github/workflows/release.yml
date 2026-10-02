@@ -14,10 +14,10 @@ jobs:
     name: Publish to Maven Central
     # macOS is required so the KMP iOS targets + SKIE compile — an ubuntu run would silently
     # skip them and publish an incomplete artifact set.
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       # Match the validated Apple build toolchain.
-      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
 
@@ -64,6 +64,7 @@ jobs:
           :basekit-ksp:publishAndReleaseToMavenCentral
           :basekit-viewmodel-annotations:publishAndReleaseToMavenCentral
           :basekit-viewmodel:publishAndReleaseToMavenCentral
+          :basekit-viewmodel-compose:publishAndReleaseToMavenCentral
           :basekit-viewmodel-ksp:publishAndReleaseToMavenCentral
           :basekit-tui-annotations:publishAndReleaseToMavenCentral
           :basekit-tui:publishAndReleaseToMavenCentral

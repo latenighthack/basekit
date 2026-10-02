@@ -14,6 +14,8 @@ data class VmMutator(
     val paramTypeSimpleName: String,
     val paramTypeQualifiedName: String,
     val paramTypeNullable: Boolean = false,
+    val type: VmType = VmType(paramTypeQualifiedName, paramTypeNullable),
+    val reactAdapter: ReactAdapter? = null,
 )
 
 /** One property of a ViewModel's State type. */
@@ -28,6 +30,8 @@ data class VmStateProperty(
      * the React hook hand back a real JS array instead of erasing the list to an opaque object.
      */
     val listElementQualifiedName: String? = null,
+    val type: VmType = VmType(typeQualifiedName, nullable),
+    val reactAdapter: ReactAdapter? = null,
 )
 
 /** One exact child ViewModel type admitted by a `@ViewModelList`. */
@@ -46,6 +50,8 @@ data class VmListElementType(
      * exact State; the list's element type is a bare marker whose State would otherwise erase to `Any`.
      */
     val stateQualifiedName: String? = null,
+    val identityProperty: String? = null,
+    val reactId: Boolean = hasId,
 )
 
 /** A `@ViewModelList` property: a `Flow<Delta<ElementVm>>` with a precise closed child set. */
@@ -81,4 +87,24 @@ data class VmInfo(
     val mutators: List<VmMutator>,
     val lists: List<VmList>,
     val children: List<VmChild>,
+    val identityProperty: String? = null,
 )
+
+/** Resolved type tree; platform mappings must not infer nullability or identity from each other. */
+data class VmType(
+    val qualifiedName: String,
+    val nullable: Boolean = false,
+    val arguments: List<VmType> = emptyList(),
+    val swiftName: String = qualifiedName.substringAfterLast('.'),
+    val enumCases: List<String>? = null,
+    val jsExported: Boolean = false,
+    val objcRepresentable: Boolean = true,
+    val jsName: String = qualifiedName.substringAfterLast('.'),
+) {
+    val kotlinName: String get() = qualifiedName +
+        (if (arguments.isEmpty()) "" else arguments.joinToString(", ", "<", ">") { it.kotlinName }) +
+        (if (nullable) "?" else "")
+}
+
+/** Explicit Kotlin/JS conversion functions and the exported browser type they implement. */
+data class ReactAdapter(val toJs: String, val fromJs: String, val exportedType: String)

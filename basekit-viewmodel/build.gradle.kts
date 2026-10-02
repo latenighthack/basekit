@@ -51,3 +51,7 @@ kotlin {
         }
     }
 }
+
+// SKIE's async protocol extensions must inherit the caller's isolation (Swift 6.2+).
+// This preserves the SKIE cancellation bridge without sending UI-owned Kotlin objects away.
+skie { build { freeSwiftCompilerArgs.addAll("-enable-upcoming-feature", "NonisolatedNonsendingByDefault") } }

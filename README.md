@@ -18,7 +18,7 @@ A generated **test harness** lets you drive whole navigation journeys in a plain
 
 ## Status
 
-Pre-1.0 (`0.2.6`). No binary-compatibility guarantee yet; the public API may change between minor
+Pre-1.0 (`0.3.0`). No binary-compatibility guarantee yet; the public API may change between minor
 versions. Supported targets: `jvm`, `android`, `iosArm64`, `iosX64`, `iosSimulatorArm64`,
 `macosArm64`, `macosX64`, `js` (IR). The `tui` slice is a preview and depends on a snapshot build of
 TamboUI (see below).
@@ -55,13 +55,13 @@ Apply the convention plugin for each slice you use — it turns on KSP and wires
 // build.gradle.kts (a KMP module)
 plugins {
     kotlin("multiplatform")
-    id("com.latenighthack.basekit.navigation") version "0.2.6"
-    id("com.latenighthack.basekit.viewmodel") version "0.2.6"
+    id("com.latenighthack.basekit.navigation") version "0.3.0"
+    id("com.latenighthack.basekit.viewmodel") version "0.3.0"
 }
 kotlin {
     sourceSets.commonMain.dependencies {
-        implementation("com.latenighthack.basekit:basekit-navigation:0.2.6")
-        implementation("com.latenighthack.basekit:basekit-viewmodel:0.2.6")
+        implementation("com.latenighthack.basekit:basekit-navigation:0.3.0")
+        implementation("com.latenighthack.basekit:basekit-viewmodel:0.3.0")
     }
 }
 ksp {
@@ -165,7 +165,7 @@ The viewmodel processor emits, per `@ViewModelSpec`:
   renders it with `DeltaListView(model.items)` / `DeltaForEach(model.items)`; UIKit and AppKit use
   `collectionView.items(model.items, cell:/item:/using:)`. The older generated `bindItems` and
   `observeItems(into:)` helpers remain temporarily but are deprecated.
-- **Web** — a `@JsExport use{Vm}(viewModel)` React hook. Annotated lists are stable delegated
+- **Web** — a typed generated React package over the Kotlin/JS hook runtime (see [Typed React bindings](#typed-react-bindings)). Annotated lists are stable delegated
   iterables, so ordinary rendering is `model.items.map(...)` with no list component. Each child is a
   closed generated handle with `kind`, `key`, and `use()`; the raw child ViewModel and its
   `initialState` are not exposed. Virtualizers call `items.visibleRange(start, end)` to delegate lazy
@@ -218,7 +218,7 @@ this only if you need to customize it. This is not more than the plugins do:
 **navigation** (pure common types, generated in the metadata pass):
 
 ```kotlin
-dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-ksp:0.2.6") }
+dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-ksp:0.3.0") }
 kotlin.sourceSets.named("commonMain") {
     kotlin.srcDir(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/kotlin"))
 }
@@ -231,11 +231,11 @@ tasks.matching { it.name.startsWith("ksp") && it.name != "kspCommonMainKotlinMet
 **viewmodel** (per-platform code, so add to every target's ksp configuration):
 
 ```kotlin
-dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-viewmodel-ksp:0.2.6") }
+dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-viewmodel-ksp:0.3.0") }
 kotlin.targets.configureEach {
     if (name == "metadata") return@configureEach
-    add("ksp" + name.replaceFirstChar { it.uppercase() },
-        "com.latenighthack.basekit:basekit-viewmodel-ksp:0.2.6")
+    project.dependencies.add("ksp" + name.replaceFirstChar { it.uppercase() },
+        "com.latenighthack.basekit:basekit-viewmodel-ksp:0.3.0")
 }
 ```
 
@@ -255,7 +255,7 @@ the convention plugins under [`basekit-gradle-plugin/`](basekit-gradle-plugin/sr
 | `@NavigateTo(target)` | navigation | function | Declares a navigation edge from this action to `target` |
 | `@ViewModelSpec(webPath)` | viewmodel | interface | Marks a ViewModel; drives the platform binding codegen |
 | `@ViewModelList(possibleTypes)` | viewmodel | property | A `Flow<Delta<ChildVm>>`; `possibleTypes` is the exact, non-overlapping closed child set used for list-specific Apple enums and React `kind` handles |
-| `@ChildViewModel` | viewmodel | property | A single nested child ViewModel |
+| `@ChildViewModel` | viewmodel | property | A stable, non-null, read-only nested child ViewModel |
 | `@ViewModelInject` | viewmodel | class | Wires a concrete impl into the generated kotlin-inject module |
 | `@ViewModelModule` | viewmodel | interface | App-supplied kotlin-inject providers the component includes |
 | `@TuiScreen(destination, implementation)` | tui | interface | Binds a ViewModel to a destination as a terminal screen |
@@ -306,7 +306,7 @@ maven("https://central.sonatype.com/repository/maven-snapshots/") { mavenContent
 ```
 ```kotlin
 // build.gradle.kts (a JVM module)
-implementation("com.latenighthack.basekit:basekit-tui:0.2.6")
+implementation("com.latenighthack.basekit:basekit-tui:0.3.0")
 implementation("dev.tamboui:tamboui-toolkit:0.5.0-SNAPSHOT")
 runtimeOnly("dev.tamboui:tamboui-jline3-backend:0.5.0-SNAPSHOT")
 ```
@@ -343,3 +343,176 @@ Always use a new version for changed artifacts.
 ## License
 
 [Apache 2.0](LICENSE).
+
+## Binding contracts in 0.3
+
+Specifications are public interfaces. Their implementations remain handwritten. Public suspend
+functions return `Unit`: zero arguments declare an action; one argument declares a mutator or immutable
+command. Overloads, generics, extensions, varargs, and additional parameters are errors. Mark intentional
+platform-only methods with `@CodegenIgnore`. Ignored specifications and state properties are excluded too.
+Nullable mutators retain their nullability on every platform.
+
+Declare domain identity explicitly when wrappers or children can be replaced:
+
+```kotlin
+@ViewModelSpec
+interface ItemViewModel : ViewModel<ItemViewModel.State> {
+    @ViewModelIdentity val key: String
+    data class State(val title: String)
+}
+```
+
+The implementation provides a canonical, immutable key from its domain ID. Keys are unique within a
+list; generated bindings namespace them by concrete child type. Unannotated specifications retain the
+legacy scalar `State.id` or object-identity fallback. Object identity cannot preserve a row across
+replacement. Identity does not imply durable ownership of a draft: retain domain children in Kotlin
+when their state must survive filtering or viewport changes.
+
+### Typed React bindings
+
+In the module that generates bindings, configure:
+
+```kotlin
+kotlin {
+    js {
+        useEsModules()
+        generateTypeScriptDefinitions()
+        compilations["main"].packageJson { customField("type", "module") }
+    }
+}
+ksp {
+    arg("basekit.viewmodel.reactModule", "my-client") // actual Kotlin/JS npm package name
+    arg("basekit.viewmodel.reactPackageVersion", "1.0.0") // defaults to 0.0.0 for local use
+}
+```
+
+`collectBasekitReact` collects an ESM package into `build/generated/basekit-react`, containing
+`basekit-react.js`, declarations, and package metadata. Package or install this directory alongside
+`my-client`; its default name is `my-client-bindings`. Kotlin compiler output is never rewritten.
+The facade currently targets ESM exports. File-linked npm consumers may need TypeScript
+`preserveSymlinks: true` so the facade resolves its peer dependency in the consuming workspace.
+
+Export references from handwritten Kotlin/JS client factories:
+
+```kotlin
+@JsExport
+fun rootReference(): HomeViewModelReactRef = client.present().reactReference()
+```
+
+Then import `useHomeViewModel` from the generated bindings package and pass that reference. The hook
+returns typed state, `Promise<void>` actions/mutators, stable delegated lists, and closed child unions.
+Switch on `child.kind` in a row component and call `child.use()` there. Raw child ViewModels and their
+`initialState` are not part of this contract. Numeric indexed list access can return `undefined`;
+`map` visits loaded rows and `visibleRange(start, endInclusive)` controls positional loading.
+
+Primitives, nullable values, lists, enum case strings, and exported custom JS classes are supported.
+For a custom browser representation, annotate its state property and mutator parameter with
+`@ReactBindingAdapter(toJs = "app.encodeMessage", exportedType = "BrowserMessage",
+fromJs = "app.decodeMessage")`. Supply qualified conversion functions in Kotlin/JS and an `@JsExport`
+result type in the runtime module. `fromJs` is required for mutators. Kotlin compiles the conversions;
+TypeScript verifies the exported contract. Unsupported types fail typed-package generation.
+The older raw Kotlin/JS hooks remain available for migration, without a type-safety guarantee.
+
+### Swift 6 consumers
+
+Use Swift 6 language mode with Swift 6.2 / Xcode 26 or newer. Compile and link a consumer: `swiftc
+-typecheck` alone does not run all concurrency diagnostics. The viewmodel convention plugin configures
+SKIE's async extensions to inherit caller isolation when SKIE is applied. Manual-KSP consumers must
+configure their final framework module equivalently:
+
+```kotlin
+skie {
+    build {
+        freeSwiftCompilerArgs.addAll("-enable-upcoming-feature", "NonisolatedNonsendingByDefault")
+    }
+}
+```
+
+This retains SKIE's cancellation bridge. KVO wrappers and their runtime are main-actor isolated;
+create, use, and unbind them on that actor. Custom exported classes retain concrete Swift types and
+nullability. SwiftUI exposes SKIE enums; KVO exposes their Objective-C `__Enum` counterpart (convert
+with `toSwiftEnum()`). Non-null state is initialized from the actual initial snapshot.
+Non-exportable value classes and arbitrary generic custom types need an exported boundary class or
+`@CodegenIgnore`. `NavigatorArgs` can hold typed in-memory values; only `@RouteArg` requires strings.
+Automatic restoration and query decoding are not provided.
+
+For initially empty `Form`/`List` containers, collection belongs to the mounted container:
+
+```swift
+@StateObject private var rows = DeltaList<ChildViewModel>()
+
+var body: some View {
+    Form {
+        DeltaForEach(model.items, observing: rows) { child in ChildRow(model: child) }
+    }
+    .task(id: ObjectIdentifier(model.items)) { await model.items.collect(into: rows) }
+}
+```
+
+The row view uses `@ObservedObject` for its generated child wrapper so state changes redraw it.
+`DeltaListView(model.items)` and `DeltaLazyListView(model.items)` own their containers and collect
+internally. Prefer `DeltaLazyListView` for paginated lists; it retains slot metadata and mounted rows
+instead of the compatibility store's loaded-items projection. The self-collecting `DeltaForEach(model.items)` initializer is for compatible custom
+containers; a row-resolving container cannot depend on an existing row to start collection.
+
+The generated `observeItems(into:)` compatibility collectors remain supported during the DeltaList
+migration. Keep screen-level `.task` ownership and retained row wrappers when using them. Their
+availability does not qualify the separate convenience-view lifecycle.
+
+### Generated Android Compose hosts
+
+Compose is optional. Apply Kotlin's Compose compiler plugin, add
+`com.latenighthack.basekit:basekit-viewmodel-compose:0.3.0` to `androidMain`, and set
+`arg("basekit.viewmodel.compose", "true")`. In a KMP module, restrict the compiler plugin to Android:
+
+```kotlin
+composeCompiler {
+    targetKotlinPlatforms.set(setOf(org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType.androidJvm))
+}
+```
+
+Each spec gets `{Vm}Host`, `{Vm}Binding`, and `bind{Vm}`. Supply an explicit owner key and
+`ViewModelStoreOwner`, a suspend factory returning `PreparedViewModel(vm) { client.dispose() }`,
+loading/failure/ready composable slots, and an action-error handler. The generated host retains the
+prepared resource across Activity recreation. Retry follows preparation failure. Clearing the owner
+cancels preparation/actions and closes the resource exactly once; process recreation starts anew.
+A factory owns resources until it returns them, and must clean up partial preparation on failure.
+Use a stable owner key for a lifetime; changing a factory lambda does not replace its retained owner.
+
+Ready content reads `binding.state`, awaits its typed methods, or launches them with
+`binding.launch { onSave() }`. Generated list methods accept one named composable per declared child
+type and an optional placeholder. Collection follows the started lifecycle; the DeltaList adapter
+owns row acquisition/release. Existing generated Activities remain the View/RecyclerView integration.
+
+`@ViewModelList` is flat. Use heterogeneous heading/row children for ordinary groups; sticky sections
+need a custom adapter over DeltaList's sectioned API. `@ChildViewModel` is stable and non-null; use a
+destination or a zero/one list for switching children. No extra collection semantics are invented
+in the platform bindings.
+
+### Asynchronous text input
+
+The generated scalar `Binding` optimistically echoes edits, but shared asynchronous snapshots can
+still arrive after newer input. See [AcknowledgedTextInput.swift](examples/text-input/AcknowledgedTextInput.swift)
+for an application-owned adapter: each edit gets a distinct monotonic revision, dispatch is serialized,
+only unacknowledged text is buffered, and Save/Reset first await `flush()`. The shared model echoes the
+revision even for repeated identical strings; Reset preserves it. Call `acknowledge(text:revision:)`
+for shared snapshots, display dispatch errors, and cancel the adapter on teardown. Error recovery
+belongs to the application; a failed queue must be reconciled before a new editing session.
+
+### Consumer verification
+
+- `python3 scripts/verify-binding-diagnostics.py` compiles real positive/negative KSP consumers.
+- `./gradlew :basekit-viewmodel-compose:testDebugUnitTest` runs preparation and generated-host tests,
+  including Activity recreation.
+- Build `:demo-core:jsBrowserProductionLibraryDistribution :demo-core:collectBasekitReact`, then run
+  `npm ci && npm test` in `integration/react`. Install Chromium with `npx playwright install chromium`
+  if needed. This runs strict consumer TypeScript and real browser tests, independently of disabled
+  KMP JS test tasks.
+- `python3 scripts/verify-apple-bindings.py --simulator UUID` builds and runs a Swift 6 iOS application,
+  binding tests, and the initially-empty Form regression. Requires `xcodegen` and an owned simulator.
+  `--unit-only` intentionally excludes convenience-list UI qualification.
+- Keep running plugin release validation and Fullhouse consumer verification in isolated repositories.
+
+Basekit pins DeltaList 0.3.2.
+Final qualification includes the generated convenience-list regression suite and the upstream
+ownership/delivery tests; external publication remains separate from local verification.
