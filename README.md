@@ -16,6 +16,24 @@ independent KSP codegen **slices** you adopt à la carte:
 
 A generated **test harness** lets you drive whole navigation journeys in a plain unit test.
 
+For the complete application structure, follow the
+[end-to-end multiplatform architecture](docs/multiplatform-architecture.md): strict MVVM with
+use cases and repository/store pairs, protobuf records in ktstore, DeltaList collections,
+ktbuf API contracts, a Kotlin server with scoped services and extension composition,
+and native app/design/museum projects for each platform.
+Every identifier uses a concrete ID wrapper throughout the system; raw strings and byte
+arrays are confined to the wrapper's serialization adapters.
+
+Implementation guides cover [IDs](docs/guides/ids.md),
+[storage and repositories](docs/guides/storage-and-repositories.md),
+[DeltaList collections](docs/guides/delta-lists.md),
+[testing with full servers and multiple clients](docs/guides/testing.md),
+[platform providers and injection defaults](docs/guides/platform-providers.md),
+[child viewmodels](docs/guides/child-viewmodels.md),
+[typed navigation](docs/guides/navigation.md),
+[composition, startup and lifecycle](docs/guides/composition-startup-and-lifecycle.md), and
+[use cases and mutation workflows](docs/guides/use-cases-and-mutation-workflows.md).
+
 ## Status
 
 Pre-1.0 (`0.3.0`). No binary-compatibility guarantee yet; the public API may change between minor
