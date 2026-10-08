@@ -166,11 +166,15 @@ and observations preserve what actually happened.
 6. The use case interprets the complete workflow outcome. The viewmodel updates
    draft/feedback and navigates only when the outcome permits it.
 
-Do not hold a viewmodel state-update lock, lifecycle lock or database transaction
-across network/provider work. Capture a valid command under a short local transition,
-perform the effect outside it, then apply the result only if the owning intent and
-generation still match. `StatefulViewModel.update` runs under a mutex; using it for
-long remote calls blocks unrelated state transitions even though its updater runs once.
+This is state-driven coroutine coordination: no application locks, mutexes or
+semaphores. `StatefulViewModel.update` accepts a short, pure, non-suspending reducer
+and delegates to StateFlow's atomic update. Its reducer may be evaluated again;
+never put I/O, navigation, operation-ID allocation or any effect inside it. Capture
+the command, perform the effect in the caller's coroutine, then merge its immutable
+result only if the owning intent and generation still match. Do not keep a database
+transaction open across network/provider work either. The
+[viewmodel guide](viewmodels-state-and-flows.md) specifies both update-driven state
+and direct `Flow<State>` implementations, with complete examples and tests.
 
 Repository publication follows successful outer commit. An accepted server response
 followed by local persistence failure needs reconciliation; it is not a rejected
@@ -184,10 +188,13 @@ scope or workflow identity. A busy Boolean on one button cannot prevent another
 screen or client from racing. Client coordination prevents avoidable local races;
 server revision checks remain authoritative across clients.
 
-Do not serialize unrelated mutations under one application-wide mutex. If a flow
-acquires several local resource locks, define a consistent ordering or use one
-explicit workflow coordinator. Avoid dependency cycles and locks held across
-arbitrary callbacks. Retire account-bound coordinators with their account scope.
+Use an explicit coroutine-owned workflow state for conflicting local work. Confine
+decision handling to that owner, share an in-flight result where appropriate, and
+use structured cancellation or latest-intent Flow composition for replaceable
+observations. Do not introduce local resource locks, mutexes or semaphores. Avoid
+dependency cycles; retire account-bound work with its account scope. Server
+transactions, revisions and durable operation receipts establish cross-client
+correctness; a client coroutine alone cannot provide that guarantee.
 
 Keep operation identity stable when retrying/reconciling the same frozen command.
 The server binds idempotency to actor, operation and canonical request content;
@@ -250,8 +257,10 @@ the entire batch with fresh identities is not a safe retry strategy.
 
 ## Separate reusable flow lifetime from presentation lifetime
 
-A use case is not inherently a coroutine scope. Inject execution ownership or
-accept a workflow-owned context when work must outlive a caller. Stateless methods
+A use case is not inherently a coroutine scope. A cold observation inherits the
+lifetime of its collecting viewmodel binding; a suspend command inherits its caller.
+Prefer those structured lifetimes. For work intentionally outliving a binding,
+inject execution ownership or accept a workflow-owned context. Stateless methods
 can run in the caller's scope; do not create a hidden perpetual scope for each
 use-case object.
 

@@ -17,6 +17,13 @@ The [child-viewmodel guide](child-viewmodels.md) expands stable composition,
 draft/selection ownership and child disposal. The [navigation guide](navigation.md)
 specifies how row actions reach scoped destinations and consume typed results.
 
+Viewmodels are driven by state updates or directly composed state Flows. The
+[state/Flow guide](viewmodels-state-and-flows.md) has complete search and filtering
+implementations with scalar input state, DeltaList child rows, empty-state children and
+[runnable tests](viewmodel-testing.md). Cold list/state pipelines belong to the
+coroutine of the caller that binds them. Compose them directly; do not add locks,
+mutexes, semaphores or a hidden scope to keep a list synchronized with input.
+
 ## Observable collections have one contract
 
 ```kotlin
@@ -27,21 +34,22 @@ typealias SectionedDeltaList<S, T> = Flow<SectionedDelta<S, T>>
 
 Do not expose `Flow<List<Row>>`, `StateFlow<List<Row>>`, arrays of children or
 `State.rows` as competing presentation collection contracts. Parent state carries
-scalar metadata and eligibility; the list stream carries children. A zero/one
+scalar metadata, input and eligibility; the list stream carries children. A zero/one
 collection remains a DeltaList when used for observable optional content.
 
-Ordinary immutable lists are valid inside protobuf messages, passive store values,
-commands, internal snapshots, diff inputs and test expectations. Convert repository
-snapshots at the observable boundary. This does not make generated RPC messages
-reactive or permit stores to emit deltas.
+Do not manage list snapshots in viewmodels or turn a DeltaList into copied lists
+to filter, sort, cache or rediff. This is an antipattern even for small collections.
+Compose the DeltaList directly. Ordinary lists can occur in wire messages, passive
+store results, fixed construction inputs and test expectations; they do not become
+observable application list state. Stores remain passive.
 
-## Snapshot and change
+## List content and changes
 
-A `Delta<T>` carries `items: SoftList<T>` and a `Change`. The snapshot is the new
-authoritative content. The change explains how to reach it from the preceding
+A `Delta<T>` carries the current `items: SoftList<T>` and a `Change`. The change
+explains how to reach that content from the preceding
 emission received by that particular collector:
 
-- `Change.Reload` replaces the preceding snapshot. Initial delivery, query
+- `Change.Reload` replaces the adapter's previous content. Initial delivery, query
   replacement, lost history and structural discontinuities can legitimately reload.
 - `Change.Mutations` contains ordered insert/remove/update/move operations. Apply
   each against the running list after the earlier operations in that batch.
@@ -51,7 +59,7 @@ index 1. The second operation addresses C at its new index. Do not reorder opera
 or pass these coordinates unchanged to a UI API that uses pre-batch coordinates.
 
 If mutations cannot reconstruct the adapter's current content, reload from the
-snapshot. Never guess coordinates, drop an invalid edit or keep an inconsistent
+delta's current SoftList. Never guess coordinates, drop an invalid edit or keep an inconsistent
 view. A new collector cannot start with another collector's last mutation.
 
 ## Ownership from server to view
@@ -73,13 +81,12 @@ receives a valid local history. Rows do not open sockets or fetch the entire lis
 Server resource patches and local DeltaList mutation coordinates are separate
 protocols. List changes are neither a durable event log nor an offline command queue.
 
-The simplest repository boundary retains immutable snapshots:
+Keep the DeltaList contract across the repository/use-case boundary:
 
 ```kotlin
-private val snapshots = MutableStateFlow<List<ItemSummary>>(emptyList())
-
-fun observeItems(): DeltaList<ItemSummary> =
-    snapshots.asDeltaList { item -> item.itemId }
+interface ItemRepository {
+    fun observeItems(query: ItemQuery): DeltaList<ItemSummary>
+}
 
 class ObserveItemsUseCase(private val repository: ItemRepository) {
     operator fun invoke(query: ItemQuery): DeltaList<ItemSummary> =
@@ -87,21 +94,19 @@ class ObserveItemsUseCase(private val repository: ItemRepository) {
 }
 ```
 
-The first empty snapshot is unresolved until load metadata says otherwise. The
-real observation is account/query scoped. `asDeltaList` diffs the snapshots each
-collector actually receives: coalescing ordinary snapshots is safe because that
-collector recomputes its own history. Conflating already computed mutations is not.
-
-Use the keyed overload. Retained IDs identify content updates/moves. Keys must be
-unique; a duplicate-key reload fallback is recovery, not permission for duplicate
-identity. Do not deduplicate only by count or IDs: values may change under retained IDs.
+The repository owns accepted collection edits and publishes them after commit.
+The observation is account/query scoped, starts each subscriber with a valid reload,
+and preserves subsequent list changes. Use cases filter/compose this stream; a
+viewmodel maps it to children without a whole-list state cache or rediff layer.
+Keep IDs unique and typed. Content can change under a retained ID, so comparing
+only counts or IDs is not sufficient. Unresolved loading is not a successful empty
+collection; expose its defined loading presentation before asserting absence.
 
 ## Choosing a construction API
 
 | Need | API | Ownership |
 | --- | --- | --- |
 | Fixed content | `listOf(...).toDeltaList()` | Static choices/headers converted to child contracts |
-| Immutable snapshot changes | `snapshots.asDeltaList { it.id }` | Repository or destination-owned snapshot publisher |
 | Cold sequential edits | `deltaList(initial) { list -> ... }` | Per-collector construction with bounded work |
 | Coherent edits | `list.batch { ... }` in the builder | Running-coordinate edit batch |
 | Imperative flat holder | `mutableDeltaListOf(...)` | Serialized writers and subscriber-safe delivery |
@@ -124,6 +129,10 @@ At generated spec boundaries use `Flow<Delta<Child>>` explicitly and declare the
 exact closed child set with `@ViewModelList`. Domain/use-case contracts can use
 the alias. Each concrete child is a `@ViewModelSpec` with its own immutable state.
 The shared list marker is not `ViewModel<Any>`.
+
+Declare each `State` class inside its own spec interface (`ItemRowViewModel.State`,
+`EmptyItemsViewModel.State`, `ItemsViewModel.State`). Destination `Args` classes
+follow the same interface nesting rule. Implementations use those nested types.
 
 ```kotlin
 interface ItemListChild
@@ -192,8 +201,9 @@ cancel owned jobs and clear the registry on destination disposal.
 
 Filtering a child out of the viewport or list need not discard a draft when policy
 requires retaining it. Store off-page draft/selection state in its explicit owner.
-For small bounded lists, retaining child instances and diffing their immutable
-snapshot is often simpler than attaching their lifetime to viewport caching.
+Keep that lifetime ownership separate from collection membership. Continue to
+publish membership through DeltaList; do not introduce a copied list/rediff layer
+to retain children.
 
 Composition preserves acquisition/release when the pinned library supports the
 required lifecycle contract. Two useful patterns are:
@@ -241,9 +251,10 @@ permit zero rows; do not substitute a placeholder for their absence.
 | Next page fails | Existing rows + page-error/retry child |
 | Access revoked | Typed permission/session transition, not known empty |
 
-Gate empty presentation on resolved load state. A projection can choose typed row
-descriptions from one coherent load/content snapshot, then diff and map them. This
-avoids empty flashes and inconsistent separately observed status/membership.
+Gate empty presentation on resolved load state. The observation contract should
+publish loading/content/error consistently; compose those typed child streams and
+apply `ifEmpty` only to resolved content. Do not collect the source into a whole-list
+state object to derive feedback. This avoids empty flashes and a second list authority.
 Retry calls the load use case; an error row emitted by an already completed cold
 flow does not make that flow restart itself. Prefer recoverable typed observation
 state rather than terminating content observation for ordinary network failures.
@@ -253,6 +264,14 @@ observes the current typed reason, or query replacement owns a new pipeline. A
 changed message can update child state even when repeated emptiness emits no delta.
 
 ## Filtering and search
+
+Search text and filter settings are state. A suspend `updateText(text)` mutator
+performs a pure `update { copy(text = text) }`, or updates an input StateFlow for a
+direct `ViewModel.state` pipeline. `filters` below is derived from that state with
+`map` (and `distinctUntilChanged` where useful), not maintained by a second background
+collector. The binding collects the resulting list; cancelling that cold collection
+cancels its upstream work. Use the [complete example](viewmodels-state-and-flows.md)
+for all definitions, binding ownership and text/empty-state tests.
 
 ```kotlin
 val visible = items.filterItems { it.visible }
@@ -332,10 +351,11 @@ source under any query and no empty flash before resolution.
 
 ## Ordering, concatenation and sections
 
-Preserve server ordering for authoritative feeds. For local sorting, sort immutable
-snapshots by a deterministic total comparator before keyed diffing. Equal labels
-need a stable tie-break. Never sort a delta snapshot and reuse its old coordinates.
-`asSortedDeltaList` requires a comparable ID type; do not unwrap IDs to satisfy it.
+Preserve server ordering for authoritative feeds. Request the required order from
+the repository/use-case collection contract, with a deterministic typed tie-break.
+Order changes must produce correct DeltaList moves/reloads in that projection.
+Do not copy a viewmodel's list into a sorted snapshot and rediff it, or reorder a
+delta's items while keeping its previous mutation coordinates.
 
 `withStableIds` provides adapter-local integer bookkeeping that can regenerate on
 reload. Those values remain internal; retained selection/navigation/drafts use
@@ -350,16 +370,17 @@ val sections = sectionedDeltaList(
 )
 ```
 
-Each source emits an initial snapshot. Combination waits for all sources, so do not
-delay a source's first presentation until its network request finishes. Each body
+Each source has a defined initial presentation. Combination waits for all sources;
+an unresolved body can expose a loading child instead of fabricating empty content.
+Each body
 owns its load/empty policy before composition. `concat` offsets second-source edits
 by the first source's current size and does not reapply stale edits from another
 source. Soft snapshots, simultaneous changes or unreconstructable edits can reload.
 Accept correct reloads; do not demand mutations at the expense of correctness.
 
 Operator bookkeeping belongs inside each collection. Compose operators directly;
-application wrappers are not needed merely to isolate history. Sharing domain
-snapshots does not require sharing raw mutation histories. Concat/sections do not
+application wrappers are not needed merely to isolate history. Share repository
+work under its owner while preserving per-subscriber delivery. Concat/sections do not
 sort or deduplicate overlapping entity pages; repositories do that by typed identity.
 
 A SectionedDelta distinguishes section insert/remove/move/header changes from
@@ -478,16 +499,23 @@ hooks inside stable row components; the platform view does not own domain filter
 
 ## Verification and museum coverage
 
-Use a fully loaded oracle to reconstruct every emitted snapshot:
+Drive real DeltaList edits and verify every delivered change. Plain lists are only
+assertion values inside the oracle. The complete [search tests](viewmodel-testing.md)
+also acquire/release real children and test their actions and binding lifetimes.
 
 ```kotlin
 // Fixtures return domain values with concrete ItemIds, never raw identifier keys.
-val snapshots = listOf(
-    Fixtures.itemsAB(), Fixtures.itemsBCWithUpdatedB(), emptyList<ItemSummary>(),
-)
+val source = deltaList<ItemSummary> { items ->
+    items.add(Fixtures.itemA())
+    items.add(Fixtures.itemB())
+    items.set(1, Fixtures.updatedItemB())
+    items.move(1, 0)
+    items.removeAt(1)
+    items.clear()
+}
 var previous = emptyList<ItemSummary>()
 var first = true
-snapshots.asFlow().asDeltaList { it.itemId }.collect { delta ->
+source.collect { delta ->
     val expected = delta.items.softLoadedItems()
     if (first) assertEquals(Change.Reload, delta.change)
     assertEquals(expected, applyChange(previous, delta.change, expected))

@@ -71,22 +71,26 @@ class RealDetailViewModel @Inject constructor(
 
     override suspend fun onIncrement() {
         store.incrementCount(args.id)
-        update { store.detail(args.id).toState() }
+        val snapshot = store.detail(args.id).toState()
+        update { snapshot }
     }
 
     override suspend fun onReset() {
         store.resetCount(args.id)
-        update { store.detail(args.id).toState() }
+        val snapshot = store.detail(args.id).toState()
+        update { snapshot }
     }
 
     override suspend fun onSetNote(note: String) {
         store.setNote(args.id, note)
-        update { store.detail(args.id).toState() }
+        val snapshot = store.detail(args.id).toState()
+        update { snapshot }
     }
 
     override suspend fun onSetFlagged(flagged: Boolean) {
         store.setFlagged(args.id, flagged)
-        update { store.detail(args.id).toState() }
+        val snapshot = store.detail(args.id).toState()
+        update { snapshot }
     }
 }
 

@@ -13,6 +13,13 @@ server uses scoped service modules, `ServerCore`, extension composition and sepa
 run/test projects. Product-specific features, deployment identities and OS minimums
 belong to the application.
 
+This is a state-driven system built deeply on coroutines and Flow. Drive viewmodels
+through `StatefulViewModel.update` with pure immutable transitions, or implement
+`ViewModel<State>` directly with a composed `Flow<State>`. The binding caller owns
+collection and its cold upstream coroutine lifetime. A viewmodel does not implicitly
+own a scope or start background work. Coordinate through state, Flow and structured
+cancellation; no application locks, mutexes or semaphores.
+
 Every ID is a concrete ID class throughout this architecture. Raw strings and byte
 arrays are never substitutes for IDs in application contracts, records or queries.
 
@@ -20,6 +27,8 @@ arrays are never substitutes for IDs in application contracts, records or querie
 
 | Guide | Implementation detail |
 | --- | --- |
+| [Viewmodel state and Flows](guides/viewmodels-state-and-flows.md) | Stateful updates or direct state Flows, caller-owned binding lifetime, complete search/filter/list/empty-state examples |
+| [Testing viewmodels](guides/viewmodel-testing.md) | Executable tests for both implementations, source changes, cancellation, independent collectors and recollection |
 | [IDs and semantic types](guides/ids.md) | Canonical wrappers, protobuf fields, equality, immutability, adapters and enforcement |
 | [Protobuf storage and repositories](guides/storage-and-repositories.md) | Generated records, typed stores/indexes, cache ownership, commits, migrations and lifecycle |
 | [DeltaList collections and child viewmodels](guides/delta-lists.md) | Deep collection recipes, search, feedback children, composition, sections, paging, leases and bindings |
@@ -115,7 +124,7 @@ supplies persistence. DeltaList supplies the local incremental collection contra
 | Module | Owns | Feature code may call |
 | --- | --- | --- |
 | `:client` | Production graph, provider injection, application/account scopes, startup, headless entry points, exported bindings | Module-owned construction/lifecycle factories; exported viewmodel coordination |
-| `:viewmodel` | Basekit specs and implementations, scalar state, drafts, actions, row children, typed navigation | Use cases and generated scoped navigators |
+| `:viewmodel` | Basekit specs and implementations, immutable state, drafts, actions, row children, typed navigation | Use cases and generated scoped navigators |
 | `:usecase` | Application commands, cross-repository workflows, reusable observation projections | Repository interfaces |
 | `:repository` | Domain observations, cache/read-through, synchronization, freshness, materialized projections | Typed API facade, paired stores, platform provider interfaces |
 | `:api` | Generated protobuf models, canonical semantic types, service clients/server interfaces/descriptors, transport integration | ktbuf runtime and injected RPC transport/session capabilities |
@@ -511,9 +520,14 @@ provided current-state recovery is guaranteed. Durable business events and push
 delivery use separate server receipts/outbox processing.
 
 All observable collections use DeltaList, including static menus, selected chips,
-domain observations and viewmodel children. Plain immutable lists remain valid in
-wire messages, passive store results, internal snapshots and test expectations.
-Scalar metadata belongs in state; collections belong in their list streams.
+domain observations and viewmodel children. Parent state contains scalar input and
+metadata; lists remain in their streams. Do not manage list snapshots, keep
+`allItems`/`filteredItems` in viewmodel state, or copy collections into a rediff layer.
+That is an antipattern even for a bounded screen. Plain lists in wire messages,
+passive store results, fixed construction inputs and test expectations are not
+observable application list state. The complete
+[search example](guides/viewmodels-state-and-flows.md) follows Fullhouse's state-driven
+observation, DeltaList filtering, child mapping and empty-child pipeline.
 
 At the Basekit spec boundary declare `Flow<Delta<Child>>` with `@ViewModelList`
 and enumerate the exact closed child types. Loading, empty, error, header and
@@ -522,8 +536,8 @@ use a destination or zero/one delta list for switching children. Basekit's gener
 lists are flat; true sticky sections need an explicit tested sectioned adapter.
 
 Every collector receives a valid initial reload and subsequent history relative to
-its own preceding snapshot. Prefer immutable snapshots diffed per collector with
-`asDeltaList { it.key }`. Do not conflate precomputed mutations or assume mutable
+its preceding delivery. Compose the repository's DeltaList directly through use cases
+and child viewmodels. Do not conflate precomputed mutations or assume mutable
 holders provide a lossless edit log. Invalid/skipped coordinates reload from the
 authoritative snapshot. Apply mutation batches in their sequential coordinates.
 Compatible mutable holders normalize initial delivery and missed publications to
@@ -543,10 +557,30 @@ lifetimes.
 
 ## MVVM, navigation and injected providers
 
-Viewmodels expose immutable scalar state, typed children and actions. They own
+Viewmodels expose immutable state, typed children and explicit suspend actions. They own
 drafts, validation feedback, selection and pending-action eligibility. Reusable use
 cases own application decisions and cross-repository orchestration. Repositories
 own content truth. The server independently validates all authoritative decisions.
+
+`State` and `Args` classes are always nested inside their owning specification
+interface. A spec uses `ViewModel<ExampleViewModel.State>` and, when navigable,
+`NavigationDestination<ExampleViewModel.Args>`. Implementations and callers use
+those nested types; there are no top-level or implementation-owned State/Args classes.
+
+`StatefulViewModel` retains current state and accepts short pure `update` reducers;
+reducers cannot suspend or perform effects and may run again under contention.
+Alternatively, compose observations and input StateFlows into `ViewModel.state`
+directly with `combine`, `map` or `flatMapLatest`. The interface accepts cold or hot
+Flows; only the stateful base class promises replaying, conflated state. `initialState`
+is the construction fallback, not a current-state accessor.
+
+Actions inherit their caller's coroutine. Cold observations start when bound and
+stop when that collection is cancelled. An explicit hot producer has its own
+declared caller/owner; cancelling one binding does not stop a
+shared repository. `stateIn`/`shareIn` assign producer lifetime to their supplied
+scope. Do not add locks, mutexes, semaphores or an unowned viewmodel scope. See the
+[state/Flow guide](guides/viewmodels-state-and-flows.md) and its
+[executable tests](guides/viewmodel-testing.md).
 
 Reuse complete workflows through use cases rather than rebuilding their steps in
 each caller. One use case may contain several related logical groupings of

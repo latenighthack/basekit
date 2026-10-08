@@ -135,6 +135,23 @@ own platform tests.
 
 ## Viewmodel components and navigation
 
+Begin with the [complete viewmodel testing guide](viewmodel-testing.md). It includes
+compiled search/filter implementations using both `StatefulViewModel.update` and a
+direct `Flow<State>`, plus the full shared test suite for DeltaList mutations, text
+changes, item/empty-child actions, source edits, cancellation and recollection.
+Lists stay in their DeltaList properties; tests bind those streams and their real
+children. Do not test a copied result array or a list getter in parent state.
+
+Viewmodels are state-driven coroutine/Flow components: no locks, mutexes or
+semaphores. Tests act as binding callers and own collection in `backgroundScope`;
+use controlled sources and `runCurrent`, then cancel/join and assert upstream cleanup.
+A cold flow needs an active collector to run. Stateful updates can happen without
+one; their latest value replays when bound. `initialState` is only the synchronous
+construction fallback. An explicitly shared hot producer needs its own declared
+owner; cancelling a binding does not stop unrelated
+repository work. Assert these distinct lifetimes rather than assuming a private
+scope exists in every viewmodel.
+
 Use the [child-viewmodel](child-viewmodels.md) and [navigation](navigation.md)
 guides to define the identity, disposal, result and host contracts under test.
 
@@ -169,8 +186,10 @@ wait if no new event position is checked.
 
 The application harness should therefore track a history position before each
 navigation action, wait for a matching event after that position, and construct
-each destination once with its own scope. Cache by an explicit typed entry identity
-inside the harness, not by destination type. Preserve exact generated edge/source
+each destination once with explicit lifetime ownership. A scope is needed for
+entry-owned work; a directly exposed cold Flow uses its binding's coroutine. Cache
+by an explicit typed entry identity inside the harness, not by destination type.
+Preserve exact generated edge/source
 enums, typed args, result responder and context. Handle multiple synchronous
 navigation events without dropping intermediate destinations.
 

@@ -26,7 +26,7 @@ kotlin {
         }
         val commonTest by getting {
             dependencies {
-                // Virtual-time scheduler (runTest) for the StatefulViewModel update/serialization tests.
+                // Deterministic state, action and binding-lifecycle tests, including the guide examples.
                 implementation(libs.kotlinx.coroutines.test)
             }
         }

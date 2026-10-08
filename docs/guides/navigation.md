@@ -16,8 +16,12 @@ account transitions that own these navigation entries.
 
 ## Declare destinations and permitted edges
 
-A destination can also be its viewmodel spec. Its nested `Args` extends
-`NavigatorArgs`; a normal destination implements `NavigationDestination<Args>`.
+A destination can also be its viewmodel spec. **`State` and `Args` classes always
+belong inside the owning specification interface.** Use `ItemDetailViewModel.State`
+and `ItemDetailViewModel.Args` from implementations and call sites; never declare
+these classes at the top level or inside the implementation. The nested `Args`
+extends `NavigatorArgs`; a normal destination implements
+`NavigationDestination<ItemDetailViewModel.Args>`.
 
 ```kotlin
 @Destination
@@ -134,6 +138,13 @@ Basekit does not prescribe a universal viewmodel disposal hook. The navigation
 host and application factory must agree on an explicit close handle. Closing a
 destination stops its collectors, child registry, timers and pending waits; it
 does not dispose shared account repositories needed by other destinations.
+
+This does not require a private scope in each viewmodel. A direct cold `state` Flow
+inherits its binding caller's lifetime, and suspend actions/result waits inherit
+their callers. Detaching the binding cancels that collection's structured upstream
+work. Explicit entry-owned drivers/jobs are needed only when work should outlive one
+binding. Coordinate through state and coroutines, without locks, mutexes or
+semaphores; see [viewmodel state and Flows](viewmodels-state-and-flows.md).
 
 Keep platform `context: Any?` escape hatches inside adapters. They must not become
 a shared string-keyed bag of IDs or a place to pass Activities/DOM objects through

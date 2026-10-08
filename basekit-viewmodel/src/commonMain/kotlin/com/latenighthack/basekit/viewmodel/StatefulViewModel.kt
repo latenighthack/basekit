@@ -2,37 +2,38 @@ package com.latenighthack.basekit.viewmodel
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.flow.update
 
 /**
- * Base [ViewModel] backed by a [MutableStateFlow]. Subclasses evolve state with [update] and read
- * the current snapshot with [withState]; both are suspend so state transitions can await work.
+ * State-driven [ViewModel] backed by a hot, conflated [MutableStateFlow]. Subclasses evolve immutable
+ * state with short, pure [update] calls. Perform suspending work in the calling action before
+ * applying its result, never inside an updater. This class creates no coroutine scope or jobs;
+ * actions run in their caller's coroutine and bindings own collection of [state].
+ *
+ * Alternatively implement [ViewModel] directly with a composed Flow. Cold upstream work then runs
+ * for each binding's collection and is cancelled with that collection.
  */
 public abstract class StatefulViewModel<State>(initialState: State) : ViewModel<State> {
     override val initialState: State = initialState
 
     private val internalState = MutableStateFlow(initialState)
 
-    // Serializes [update] so a suspending updater runs exactly once. StateFlow.getAndUpdate is a CAS
-    // retry loop and would re-invoke a suspending updater under contention (re-running its side
-    // effects), so a mutex — not getAndUpdate — is what makes "runs once" true.
-    private val updateMutex = Mutex()
-
     override val state: Flow<State> get() = internalState
 
     /**
-     * Applies [updater] to the current state and stores the result. Serialized against other
-     * [update] calls: the updater body runs exactly once, and concurrent updates observe each
-     * other's writes in order.
+     * Atomically transforms the current state using StateFlow's update operation. [updater]
+     * cannot suspend and may be evaluated more than once under contention: it must be pure and
+     * free of I/O, navigation, launches and other side effects. No application lock is required.
+     * Equal states do not emit; slow collectors can skip intermediate state values.
      */
-    protected suspend fun update(updater: suspend State.() -> State) {
-        updateMutex.withLock {
-            internalState.value = internalState.value.updater()
-        }
+    protected suspend fun update(updater: State.() -> State) {
+        internalState.update { current -> current.updater() }
     }
 
-    /** Reads the current state snapshot without mutating it. */
+    /**
+     * Reads the current state without reserving it. If [inspector] suspends, newer updates may
+     * arrive in the meantime; use [update] to derive a change from the latest state on completion.
+     */
     protected suspend fun withState(inspector: suspend (State) -> Unit) {
         inspector(internalState.value)
     }

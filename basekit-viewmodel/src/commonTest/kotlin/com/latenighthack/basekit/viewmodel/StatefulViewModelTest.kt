@@ -1,18 +1,19 @@
 package com.latenighthack.basekit.viewmodel
 
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 
-/** Exposes the protected [update]/[withState] surface so the tests can drive it directly. */
+/** Exposes the protected state API so the tests can drive it directly. */
 private class CounterViewModel : StatefulViewModel<Int>(0) {
-    suspend fun apply(updater: suspend Int.() -> Int) = update(updater)
+    suspend fun apply(updater: Int.() -> Int) = update(updater)
+    suspend fun inspect(inspector: suspend (Int) -> Unit) = withState(inspector)
     suspend fun current(): Int {
         var value = 0
         withState { value = it }
@@ -20,15 +21,15 @@ private class CounterViewModel : StatefulViewModel<Int>(0) {
     }
 }
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class StatefulViewModelTest {
-
     @Test
     fun update_applies_and_withState_reads_the_result() = runTest {
         val vm = CounterViewModel()
         vm.apply { this + 5 }
         vm.apply { this + 3 }
         assertEquals(8, vm.current())
+        assertEquals(8, vm.state.first()) // late bindings receive current state
+        assertEquals(0, vm.initialState) // initialState is the construction fallback
     }
 
     @Test
@@ -38,37 +39,45 @@ class StatefulViewModelTest {
         assertEquals(0, vm.current())
     }
 
-    // A second update must not enter while the first is still running its (suspending) body. This is
-    // deterministic even single-threaded: it asserts mutual exclusion via suspension ordering, not a
-    // thread race. It fails on the old getAndUpdate implementation (no lock; the second body runs
-    // immediately and a CAS race can drop an increment), and passes on the Mutex-serialized version.
     @Test
-    fun update_serializes_a_suspending_body_so_it_runs_exactly_once() = runTest {
+    fun concurrent_pure_updates_do_not_lose_increments() = runTest {
         val vm = CounterViewModel()
-        val firstEntered = CompletableDeferred<Unit>()
-        val release = CompletableDeferred<Unit>()
-
-        val first = launch(UnconfinedTestDispatcher(testScheduler)) {
-            vm.apply {
-                firstEntered.complete(Unit)
-                release.await() // hold the update lock until the test releases it
-                this + 1
+        coroutineScope {
+            repeat(8) {
+                launch(Dispatchers.Default) {
+                    repeat(1_000) { vm.apply { this + 1 } }
+                }
             }
         }
-        firstEntered.await()
+        assertEquals(8_000, vm.current())
+    }
 
-        var secondEntered = false
-        val second = launch(UnconfinedTestDispatcher(testScheduler)) {
-            vm.apply { secondEntered = true; this + 1 }
+    @Test
+    fun suspending_snapshot_inspection_does_not_prevent_new_updates() = runTest {
+        val vm = CounterViewModel()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val inspection = launch {
+            vm.inspect { captured ->
+                entered.complete(Unit)
+                release.await()
+                assertEquals(0, captured) // a captured snapshot is not a reservation
+            }
         }
-
-        assertFalse(secondEntered, "the second update must wait for the first to release the lock")
-
+        entered.await()
+        vm.apply { this + 1 }
+        assertEquals(1, vm.current())
         release.complete(Unit)
-        first.join()
-        second.join()
+        inspection.join()
+    }
 
-        assertTrue(secondEntered, "the second update runs once the first completes")
-        assertEquals(2, vm.current(), "each update body applied exactly once, in order")
+    @Test
+    fun a_failed_reducer_keeps_the_previous_snapshot() = runTest {
+        val vm = CounterViewModel()
+        vm.apply { 7 }
+        assertFailsWith<IllegalArgumentException> {
+            vm.apply { throw IllegalArgumentException("invalid transition") }
+        }
+        assertEquals(7, vm.state.first())
     }
 }

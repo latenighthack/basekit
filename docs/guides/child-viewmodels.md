@@ -29,6 +29,11 @@ Choose composition according to behavior, not the current layout breakpoint.
 
 ## Declare stable child specs
 
+Every child's `State` class is nested inside its specification interface, as
+`ItemSummaryViewModel.State` below. This is the rule for every viewmodel, including
+parents and empty-state children. A destination's `Args` class also belongs inside
+its owning interface. Neither class belongs at the top level or in an implementation.
+
 Basekit requires an annotated child to be a non-null, read-only property whose
 declared type is a generated `@ViewModelSpec`. A `val` getter that constructs a
 new child each time violates stability even if it passes the property-shape check.
@@ -57,10 +62,16 @@ state when its observed projection changes; retain the instance while its identi
 and semantic role remain the same. Do not put the child object inside the parent's
 scalar `State`, or publish a second scalar copy of its entire state.
 
-Each spec supplies immutable `initialState` and `Flow<State>`. `StatefulViewModel`
-provides replaying, conflated current state; it does not provide disposal, a
-coroutine scope or an event queue. Actions are explicit calls. Do not encode
-navigation or other one-shot effects as Boolean state toggles.
+Each spec supplies immutable `initialState` and `Flow<State>`. Drive a child with
+`StatefulViewModel.update { copy(...) }`, or implement `ViewModel` directly with a
+composed state Flow. The stateful base provides replaying, conflated current state;
+the interface also supports cold flows whose work belongs to the binding collector.
+Neither requires a private coroutine scope or supplies disposal/an event queue.
+Use state, Flow composition and structured cancellation: no application locks,
+mutexes or semaphores. Actions are explicit suspend calls in their caller's coroutine.
+Do not encode navigation or other one-shot effects as Boolean state toggles. See the
+[complete state/Flow examples](viewmodels-state-and-flows.md) and
+[tests](viewmodel-testing.md).
 
 Prefer zero-argument suspend actions and one-argument suspend mutators, which the
 current generated bindings support. Capture a row's ID at construction instead of
@@ -182,9 +193,12 @@ specific presented entry, never a singleton injected into all children.
 
 ## Own jobs and binding subscriptions explicitly
 
-The application factory supplies destination/child execution ownership. Create a
-child job under the destination job when the child has owned collectors or work;
-parent disposal cancels descendants. A supervisor policy, if used, must still
+For directly exposed cold state Flows, the binding already owns the collection
+and its structured upstream work. Do not create a child scope just because an object
+is a viewmodel. If extra work must outlive one binding, the application factory
+supplies explicit destination/child execution ownership. Create a child job under
+the destination job only for that owned work; parent disposal cancels descendants.
+A supervisor policy, if used, must still
 report failures and expose recovery rather than swallow exceptions.
 
 Basekit's `ViewModel` contract has no universal `dispose()` method. Define an

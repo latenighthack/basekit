@@ -77,6 +77,17 @@ Activity can reattach to a retained entry. Conversely, a popped entry must close
 even if its scene remains alive. Keep jobs under an explicit owning parent and
 document supervisor/error reporting policy; supervised failures still need recovery.
 
+Scopes describe ownership, not a requirement to inject a new scope into every
+viewmodel. Viewmodels are driven through pure state updates or directly expose
+`Flow<State>`. Cold upstream work belongs to whoever collects/binds that flow:
+collection starts it, and cancellation stops it. An action similarly runs in its
+caller's coroutine. Prefer direct Flow composition and structured child work over
+constructor-launched collectors. `stateIn`/`shareIn` are explicit exceptions: their
+producer belongs to the supplied scope. A stateful VM's list properties are directly
+composed DeltaList pipelines, with no driver collecting list copies into state. See the
+complete
+[state and binding examples](viewmodels-state-and-flows.md).
+
 Record whether each resource is owned or borrowed. The owner closes it exactly
 once. Client shutdown closes client-owned transports/storage/provider registrations;
 host-owned SDK objects remain the host's responsibility. A child view releasing
@@ -105,10 +116,13 @@ identity observation may start before an account exists; protected subscriptions
 start after an eligible account graph exists. Offline reading starts local
 observations without waiting for a successful socket handshake.
 
-Hold lifecycle locks only for short state transitions. Do not hold them across
-network refresh, provider presentation, database migration or host installation.
-Use single-flight jobs and generation checks to serialize decisions while keeping
-cancellation, shutdown and host replacement responsive.
+Use no application locks, mutexes or semaphores for lifecycle coordination. Confine
+lifecycle decisions to their owning coroutine/executor, represent phases in state,
+and use structured jobs plus generation checks to reject stale completions. Keep
+state transitions short and pure. Network refresh, provider presentation, database
+migration and host installation suspend outside transitions, so cancellation,
+shutdown and host replacement remain responsive. An owner can share one in-flight
+job/Deferred explicitly; merely marking a function `suspend` does not serialize calls.
 
 ## Resolve launch through use cases
 

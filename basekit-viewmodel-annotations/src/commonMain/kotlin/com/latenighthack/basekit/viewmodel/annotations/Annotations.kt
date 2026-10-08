@@ -9,6 +9,9 @@ import kotlin.reflect.KClass
  * React `use{ViewModel}` hook). Zero-arg suspend functions are exposed as actions; single-arg suspend
  * functions as mutators (which additionally back a two-way SwiftUI `Binding` when their noun matches a
  * State property).
+ * Declare `State` inside this interface (`ExampleViewModel.State`). Destination `Args` classes
+ * also belong inside their spec interface (`ExampleViewModel.Args`), never in the implementation
+ * or at the top level.
  *
  * Named `ViewModelSpec` (not `ViewModel`) so it does not collide with the `ViewModel<State>`
  * runtime interface that annotated types also implement — both can be imported without an alias.

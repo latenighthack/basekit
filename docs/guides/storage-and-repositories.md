@@ -166,9 +166,11 @@ IndexedDB conformance. Library client conformance is not proof of server durabil
 
 ## Read-through and observation
 
-Repositories keep immutable internal snapshots and convert collection observations
-to [DeltaList](delta-lists.md) at their public boundary. Scalar load/freshness metadata
-uses typed state. Share work by account/resource/query identity, not by screen instance.
+Repositories own live [DeltaList](delta-lists.md) collections and publish accepted
+edits after persistence succeeds. Keep that contract through use cases and viewmodels;
+do not create whole-list state caches that are repeatedly copied and rediffed for
+presentation. Scalar load/freshness metadata uses typed state. Share work by
+account/resource/query identity, not by screen instance.
 
 On a memory miss, read through the store, validate account and version, hydrate memory
 and expose the content. An online refresh can proceed while cached data remains visible.

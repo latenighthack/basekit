@@ -24,7 +24,20 @@ and native app/design/museum projects for each platform.
 Every identifier uses a concrete ID wrapper throughout the system; raw strings and byte
 arrays are confined to the wrapper's serialization adapters.
 
-Implementation guides cover [IDs](docs/guides/ids.md),
+**Basekit is state driven and built on coroutines and Flow.** Drive viewmodels with
+`StatefulViewModel.update { copy(...) }`, or implement `ViewModel<State>` directly with
+a composed `Flow<State>`. The caller that binds a cold flow owns its collection and
+upstream coroutine lifetime. Viewmodels do not need their own scope. Use immutable
+state, pure updates and structured cancellation: no application locks, mutexes or semaphores.
+Parent state holds scalar input such as search text and filters. Observable lists stay
+in DeltaList streams, mapped to typed children, including empty-state children. Do not
+copy lists into parent state or manage list snapshots for search/filtering.
+
+Start with [viewmodel state and Flows](docs/guides/viewmodels-state-and-flows.md) for
+complete implementations of search, favorite filtering, DeltaList rows and empty children, and
+[testing viewmodels](docs/guides/viewmodel-testing.md) for runnable behavior and lifecycle tests.
+
+Other implementation guides cover [IDs](docs/guides/ids.md),
 [storage and repositories](docs/guides/storage-and-repositories.md),
 [DeltaList collections](docs/guides/delta-lists.md),
 [testing with full servers and multiple clients](docs/guides/testing.md),
@@ -97,6 +110,10 @@ The plugins resolve from Maven Central (add it to `pluginManagement.repositories
 
 Declare a screen as one interface that is at once the navigation destination, the view model, and
 (optionally) its own terminal screen:
+
+`State` and `Args` classes always live inside that specification interface. Implementations,
+factories and callers refer to `HomeViewModel.State` and `HomeViewModel.Args`; these classes
+are never top-level declarations or nested inside the implementation.
 
 ```kotlin
 @Destination
@@ -508,6 +525,12 @@ destination or a zero/one list for switching children. No extra collection seman
 in the platform bindings.
 
 ### Asynchronous text input
+
+Shared text handlers are state transitions: `suspend fun updateText(text: String)`
+calls `update { copy(text = text) }`, or updates the input StateFlow of a composed
+state pipeline. Keep network work outside the reducer. See the complete
+[search/filter example and binding lifecycle](docs/guides/viewmodels-state-and-flows.md)
+and [tests](docs/guides/viewmodel-testing.md).
 
 The generated scalar `Binding` optimistically echoes edits, but shared asynchronous snapshots can
 still arrive after newer input. See [AcknowledgedTextInput.swift](examples/text-input/AcknowledgedTextInput.swift)

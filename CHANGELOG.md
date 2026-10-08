@@ -4,6 +4,24 @@ All notable changes to basekit are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor versions may break API).
 
+## Next
+
+- State and Args classes are always nested in their owning specification interface;
+  examples, tests and guides use interface-qualified types such as `SearchViewModel.State`.
+- Viewmodels are explicitly state driven: use pure `StatefulViewModel.update` calls or
+  expose `Flow<State>` directly. Cold upstream work belongs to the binding collector;
+  the interface does not require a hot StateFlow or a viewmodel-owned coroutine scope.
+- Removed the state-update mutex. **Breaking:** `update` remains declared `suspend`,
+  but its reducer is now a regular, non-suspending function and may be retried by StateFlow's
+  atomic update. Move effects/suspension outside reducers and recompile subclasses.
+  This supersedes the earlier mutex/exactly-once updater behavior described below.
+- Added complete stateful and direct-Flow search/filter examples following Fullhouse's
+  DeltaList pipelines, with scalar input state and typed item/empty children. Executable
+  tests cover list mutations, child actions, source changes and binding cancellation/recollection. Aligned
+  architecture, lifecycle, child and mutation guides: no application locks, mutexes or semaphores.
+- Collection guidance rejects viewmodel list snapshots and copy/rediff caches; observable
+  collections remain DeltaList streams throughout filtering, mapping and binding.
+
 ## [0.3.0] — 2026-10-02
 
 - Typed generated React package, opaque typed references, exhaustive child unions, and explicit
@@ -76,8 +94,10 @@ All notable changes to basekit are documented here. The format follows
   `collectBasekitAppleSwift` task; the previous viewmodel-named task remains compatible.
 - `StatefulViewModel.update` now serializes via a `Mutex`, so a suspending updater body runs exactly
   once (the previous `getAndUpdate` CAS loop could re-run it under contention).
+  Historical behavior, superseded by the pure reducer API in **Next** above.
 - `BaseActivity` collects state under `repeatOnLifecycle(STARTED)` instead of a bare `lifecycleScope`.
-- Corrected the `ViewModel.state` KDoc: it is a hot, conflated `MutableStateFlow`, not cold.
+- Described `ViewModel.state` as a hot, conflated `MutableStateFlow`. **Next** above corrects
+  that description: only `StatefulViewModel` guarantees this; the interface also accepts cold flows.
 
 ### Fixed
 - The generated `TestClientNavigator.close()` no longer hangs a suspended responding-destination
