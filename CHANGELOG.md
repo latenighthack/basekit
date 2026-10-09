@@ -22,6 +22,12 @@ All notable changes to basekit are documented here. The format follows
 - Collection guidance rejects viewmodel list snapshots and copy/rediff caches; observable
   collections remain DeltaList streams throughout filtering, mapping and binding.
 
+## [0.3.1] — 2026-10-09
+
+- Add optional navigation metrics and PostHog adapters for Kotlin, Swift and React consumers.
+- Generate observing ViewModel wrappers and validate action observation across platform bindings.
+- Align DeltaList on 0.3.3 and verify all published processor/plugin coordinates.
+
 ## [0.3.0] — 2026-10-02
 
 - Typed generated React package, opaque typed references, exhaustive child unions, and explicit

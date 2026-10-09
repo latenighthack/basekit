@@ -26,6 +26,7 @@ ksp {
     // what lets CI run `swiftc -typecheck` over them.
     arg("basekit.viewmodel.swiftFrameworkImports", "DemoCore")
     arg("basekit.navigation.swiftFrameworkImports", "DemoCore")
+    arg("basekit.navigation.posthog", "true")
 }
 
 dependencies {
@@ -43,6 +44,7 @@ kotlin {
     appleXcframework("DemoCore", isStatic = true) {
         export(project(":basekit-navigation"))
         export(project(":basekit-viewmodel"))
+        export(project(":basekit-navigation-metrics"))
         // Re-export deltalist so Swift sees Delta and the collection-view data sources the
         // generated Kvo wrappers use (UICollectionView on iOS, NSCollectionView on macOS).
         export(libs.deltalist.core)
@@ -50,10 +52,12 @@ kotlin {
 
     sourceSets {
         androidMain.dependencies { implementation(project(":basekit-viewmodel-compose")) }
+        jsMain.dependencies { api(project(":basekit-navigation-posthog")) }
         val commonMain by getting {
             dependencies {
                 api(project(":basekit-navigation"))
                 api(project(":basekit-viewmodel"))
+                api(project(":basekit-navigation-metrics"))
                 implementation(project(":basekit-annotations"))
                 implementation(project(":basekit-viewmodel-annotations"))
                 implementation(project(":basekit-tui-annotations"))

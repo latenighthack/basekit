@@ -251,6 +251,9 @@ class NavigationProcessor(
                     .orEmpty()
             val dependencies = Dependencies(aggregating = true, *sourceFiles.toTypedArray())
             AppleSwiftNavigationGenerator(codeGenerator, dependencies, imports).generate(destinations)
+            if (options["basekit.navigation.posthog"] == "true") {
+                ApplePostHogBridgeGenerator(codeGenerator, dependencies, imports).generate()
+            }
             return
         }
         if (!marker.isMetadataPass()) return

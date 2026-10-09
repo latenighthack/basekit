@@ -54,6 +54,7 @@ class ViewModelProcessor(
     private val viewModels = mutableListOf<VmInfo>()
     private var sourceFiles: List<KSFile> = emptyList()
     private var platformCollected = false
+    private val existingActionDecorators = mutableSetOf<String>()
 
     // Interface->impl bindings collected from @ViewModelInject, emitted into commonMain on the metadata
     // pass. Only VMs WITHOUT an `@Assisted` (per-screen navigator) parameter get a module binding: those
@@ -73,6 +74,12 @@ class ViewModelProcessor(
 
             sourceFiles = symbols.mapNotNull { it.containingFile }
             symbols.mapNotNullTo(viewModels) { buildViewModel(it) }
+            viewModels.forEach { vm ->
+                val decoratorName = listOf(vm.packageName, "Observing${vm.simpleName}").filter { it.isNotEmpty() }.joinToString(".")
+                if (resolver.getClassDeclarationByName(resolver.getKSNameFromString(decoratorName)) != null) {
+                    existingActionDecorators.add(vm.qualifiedName)
+                }
+            }
         }
 
         for (impl in resolver.getSymbolsWithAnnotation(VIEWMODEL_INJECT_ANNOTATION).filterIsInstance<KSClassDeclaration>().filterNot { it.hasAnnotation(CODEGEN_IGNORE_ANNOTATION) }) {
@@ -398,6 +405,11 @@ class ViewModelProcessor(
         codeGenerator.createNewFile(Dependencies(false), MARKER_PACKAGE, "basekit_viewmodel_marker", "log").close()
         val marker = codeGenerator.generatedFile.firstOrNull() ?: return
         val pass = marker.pass()
+
+        if (viewModels.isNotEmpty() && (pass == Pass.METADATA || pass == Pass.OTHER)) {
+            ObservingViewModelGenerator(codeGenerator, Dependencies(aggregating = true, *sourceFiles.toTypedArray()))
+                .generate(if (pass == Pass.METADATA) viewModels else viewModels.filterNot { it.qualifiedName in existingActionDecorators })
+        }
 
         // The kotlin-inject bindings module is platform-agnostic: emit it once, on the metadata pass, so
         // it lands in commonMain. (The jvm target is also Pass.OTHER, so keying on METADATA avoids a dup.)

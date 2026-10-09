@@ -63,6 +63,9 @@ jobs:
       - name: Build and test all targets
         run: ./gradlew build --stacktrace
 
+      - name: Test native PostHog Swift package
+        run: swift test --scratch-path build/posthog-swift
+
       # Explicitly cover the frameworks whose bundled Swift and generated consumers are checked below.
       - name: Link debug frameworks (compiles the bundled Swift)
         run: >
@@ -94,22 +97,27 @@ jobs:
 
       - name: Typecheck generated Swift against the macOS framework
         run: |
+          # The optional SDK bridge is compiled and linked in the real consumer below.
+          sources=()
+          while IFS= read -r source; do sources+=("$source"); done < <(find demo-core/build/generated/basekit-apple/swift -type f -name '*.swift' ! -name 'BasekitPostHogBridge.swift')
           xcrun swiftc -typecheck \
             -swift-version 6 \
             -target arm64-apple-macos15.0 \
             -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
             -F demo-core/build/bin/macosArm64/debugFramework \
-            demo-core/build/generated/basekit-apple/swift/*.swift \
+            "${sources[@]}" \
             demo-core/src/appleTest/swift/AppleNavigationFixture.swift
 
       - name: Typecheck generated Swift against the iOS-simulator framework
         run: |
+          sources=()
+          while IFS= read -r source; do sources+=("$source"); done < <(find demo-core/build/generated/basekit-apple/swift -type f -name '*.swift' ! -name 'BasekitPostHogBridge.swift')
           xcrun swiftc -typecheck \
             -swift-version 6 \
             -target arm64-apple-ios18.0-simulator \
             -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
             -F demo-core/build/bin/iosSimulatorArm64/debugFramework \
-            demo-core/build/generated/basekit-apple/swift/*.swift \
+            "${sources[@]}" \
             demo-core/src/appleTest/swift/AppleNavigationFixture.swift
 
       - name: Verify iOS framework deployment minimum
@@ -122,7 +130,7 @@ jobs:
 
       - name: Test typed React package in Chromium
         run: |
-          ./gradlew :demo-core:jsBrowserProductionLibraryDistribution :demo-core:collectBasekitReact
+          ./gradlew :demo-core:jsBrowserProductionLibraryDistribution :demo-core:collectBasekitReact :basekit-navigation-posthog:collectBasekitPostHogJavaScript
           cd integration/react
           npm ci
           npx playwright install chromium

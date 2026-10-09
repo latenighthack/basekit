@@ -63,6 +63,8 @@ include(":basekit-navigation")  // navigation runtime + routing (KMP, SKIE)
 include(":basekit-ksp")         // KSP processor + generators (JVM)
 // Test harness runtime for the generated TestClientNavigator + registry (KMP, commonMain).
 include(":basekit-navigation-test")
+include(":basekit-navigation-metrics") // optional SDK-independent PostHog event collector
+include(":basekit-navigation-posthog") // optional native Android / JavaScript adapters
 
 // ViewModel binding slice — the second codegen slice.
 include(":basekit-viewmodel-annotations") // viewmodel annotations (KMP)

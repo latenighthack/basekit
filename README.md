@@ -49,7 +49,7 @@ Other implementation guides cover [IDs](docs/guides/ids.md),
 
 ## Status
 
-Pre-1.0 (`0.3.0`). No binary-compatibility guarantee yet; the public API may change between minor
+Pre-1.0 (`0.3.1`). No binary-compatibility guarantee yet; the public API may change between minor
 versions. Supported targets: `jvm`, `android`, `iosArm64`, `iosX64`, `iosSimulatorArm64`,
 `macosArm64`, `macosX64`, `js` (IR). The `tui` slice is a preview and depends on a snapshot build of
 TamboUI (see below).
@@ -86,13 +86,13 @@ Apply the convention plugin for each slice you use — it turns on KSP and wires
 // build.gradle.kts (a KMP module)
 plugins {
     kotlin("multiplatform")
-    id("com.latenighthack.basekit.navigation") version "0.3.0"
-    id("com.latenighthack.basekit.viewmodel") version "0.3.0"
+    id("com.latenighthack.basekit.navigation") version "0.3.1"
+    id("com.latenighthack.basekit.viewmodel") version "0.3.1"
 }
 kotlin {
     sourceSets.commonMain.dependencies {
-        implementation("com.latenighthack.basekit:basekit-navigation:0.3.0")
-        implementation("com.latenighthack.basekit:basekit-viewmodel:0.3.0")
+        implementation("com.latenighthack.basekit:basekit-navigation:0.3.1")
+        implementation("com.latenighthack.basekit:basekit-viewmodel:0.3.1")
     }
 }
 ksp {
@@ -253,7 +253,7 @@ this only if you need to customize it. This is not more than the plugins do:
 **navigation** (pure common types, generated in the metadata pass):
 
 ```kotlin
-dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-ksp:0.3.0") }
+dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-ksp:0.3.1") }
 kotlin.sourceSets.named("commonMain") {
     kotlin.srcDir(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/kotlin"))
 }
@@ -266,11 +266,11 @@ tasks.matching { it.name.startsWith("ksp") && it.name != "kspCommonMainKotlinMet
 **viewmodel** (per-platform code, so add to every target's ksp configuration):
 
 ```kotlin
-dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-viewmodel-ksp:0.3.0") }
+dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-viewmodel-ksp:0.3.1") }
 kotlin.targets.configureEach {
     if (name == "metadata") return@configureEach
     project.dependencies.add("ksp" + name.replaceFirstChar { it.uppercase() },
-        "com.latenighthack.basekit:basekit-viewmodel-ksp:0.3.0")
+        "com.latenighthack.basekit:basekit-viewmodel-ksp:0.3.1")
 }
 ```
 
@@ -312,6 +312,16 @@ the convention plugins under [`basekit-gradle-plugin/`](basekit-gradle-plugin/sr
 | `basekit.viewmodel.swiftFrameworkImports` | viewmodel | Comma-separated frameworks the generated Swift should `import` |
 | `basekit.navigation.swiftFrameworkImports` | navigation | Comma-separated frameworks the generated Apple navigation Swift should `import` |
 
+## Optional PostHog metrics
+
+`basekit-navigation-metrics` observes navigation and zero-argument ViewModel actions without an SDK
+dependency. `basekit-navigation-posthog` adds native Android and JavaScript SDK adapters; the
+`BasekitNavigationPostHog` Swift Package adds the iOS adapter. Supply your configured PostHog client
+and install the generated decorators in your factories. Mutators remain untracked.
+
+See [the setup guide](docs/guides/navigation-metrics.md) for drop-in examples, property providers,
+the generated Swift bridge, and the unified `$screen` event convention.
+
 ## Testing navigation journeys
 
 With `Basekit_GenerateTestNavigator=true`, basekit generates a `TestViewModelRegistry` (one factory
@@ -341,7 +351,7 @@ maven("https://central.sonatype.com/repository/maven-snapshots/") { mavenContent
 ```
 ```kotlin
 // build.gradle.kts (a JVM module)
-implementation("com.latenighthack.basekit:basekit-tui:0.3.0")
+implementation("com.latenighthack.basekit:basekit-tui:0.3.1")
 implementation("dev.tamboui:tamboui-toolkit:0.5.0-SNAPSHOT")
 runtimeOnly("dev.tamboui:tamboui-jline3-backend:0.5.0-SNAPSHOT")
 ```
@@ -497,7 +507,7 @@ availability does not qualify the separate convenience-view lifecycle.
 ### Generated Android Compose hosts
 
 Compose is optional. Apply Kotlin's Compose compiler plugin, add
-`com.latenighthack.basekit:basekit-viewmodel-compose:0.3.0` to `androidMain`, and set
+`com.latenighthack.basekit:basekit-viewmodel-compose:0.3.1` to `androidMain`, and set
 `arg("basekit.viewmodel.compose", "true")`. In a KMP module, restrict the compiler plugin to Android:
 
 ```kotlin
@@ -554,6 +564,6 @@ belongs to the application; a failed queue must be reconciled before a new editi
   `--unit-only` intentionally excludes convenience-list UI qualification.
 - Keep running plugin release validation and Fullhouse consumer verification in isolated repositories.
 
-Basekit pins DeltaList 0.3.2.
+Basekit pins DeltaList 0.3.3.
 Final qualification includes the generated convenience-list regression suite and the upstream
 ownership/delivery tests; external publication remains separate from local verification.

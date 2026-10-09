@@ -6,6 +6,8 @@ xcuserdata
 .kotlin
 .idea
 .gradle
+.build
+.swiftpm
 
 # Isolated Fullhouse paired-build state
 .fh/

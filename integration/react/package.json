@@ -6,6 +6,8 @@
     "test": "tsc --noEmit && playwright test"
   },
   "dependencies": {
+    "@latenighthack/basekit-navigation-posthog": "file:../../basekit-navigation-posthog/build/generated/basekit-posthog-js",
+    "posthog-js": "1.438.1",
     "basekit-demo-core": "file:../../demo-core/build/dist/js/productionLibrary",
     "basekit-react": "file:../../demo-core/build/generated/basekit-react",
     "react": "19.1.0",

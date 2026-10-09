@@ -28,13 +28,15 @@ class GeneratedHostTest {
         var disposals = 0
         val failures = mutableListOf<Throwable>()
         val raw = RealBindingProbeViewModel()
+        val actions = mutableListOf<String>()
+        val observed = raw.observingActions(com.latenighthack.basekit.viewmodel.ViewModelActionObserver { actions += it.actionName })
         val content: @Composable () -> Unit = {
             BindingProbeViewModelHost(
                 ownerKey = "probe", storeOwner = compose.activity,
                 prepare = {
                     preparations++
                     if (preparations == 1) error("offline")
-                    PreparedViewModel(raw) { disposals++ }
+                    PreparedViewModel(observed) { disposals++ }
                 },
                 onActionError = failures::add,
                 loading = { BasicText("loading") },
@@ -62,6 +64,7 @@ class GeneratedHostTest {
         compose.onNodeWithText("fail").performClick()
         compose.waitUntil { failures.size == 1 }
         assertEquals("probe failure", failures.single().message)
+        assertEquals(listOf("fail"), actions)
         compose.runOnIdle { raw.replaceRows() }
         compose.onNodeWithText("Row child").performClick()
         compose.onNodeWithText("Selected child").assertExists()

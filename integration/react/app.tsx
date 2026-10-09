@@ -2,9 +2,24 @@ import React, { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserBindingProbe, BrowserProbeMessage as ProbeMessage } from 'basekit-demo-core';
 import { useBindingProbeViewModel, type BindingProbeViewModelRowsElement } from 'basekit-react';
-const probe = new BrowserBindingProbe();
+import posthog from 'posthog-js';
+import { createPostHogMetrics } from '@latenighthack/basekit-navigation-posthog';
+const metricsEvents: Array<{ event: string; properties: Record<string, unknown> }> = [];
+const metricsErrors: string[] = [];
+posthog.init('phc_basekit_test', {
+  api_host: window.location.origin, autocapture: false, capture_pageview: false,
+  capture_pageleave: false, disable_session_recording: true, persistence: 'memory',
+  opt_out_useragent_filter: true, // Headless Chromium is intentionally part of this SDK acceptance fixture.
+  advanced_disable_feature_flags: true,
+  before_send: event => { if (event) metricsEvents.push({ event: event.event, properties: event.properties }); return null; },
+});
+const metrics = createPostHogMetrics(posthog, {
+  properties: { app: 'browser-fixture', nested: { number: 2, flag: true } },
+  onError: error => metricsErrors.push(String(error)),
+});
+const probe = new BrowserBindingProbe(metrics);
 const reference = probe.reference;
-Object.assign(window, { bindingProbe: probe });
+Object.assign(window, { bindingProbe: probe, metricsEvents, metricsErrors, basekitMetrics: metrics });
 function Row({ item }: { item: BindingProbeViewModelRowsElement }) {
   const child = item.use();
   return <button data-testid="row" data-key={item.key} onClick={() => void child.select()}>{child.title}</button>;

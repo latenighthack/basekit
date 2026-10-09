@@ -16,9 +16,9 @@ includeBuild("{root}")
 plugins { kotlin("jvm") version "2.3.10"; id("com.google.devtools.ksp") version "2.3.10" }
 repositories { mavenCentral(); google() }
 dependencies {
-    implementation("com.latenighthack.basekit:basekit-viewmodel-annotations:0.3.0")
-    implementation("com.latenighthack.basekit:basekit-viewmodel:0.3.0")
-    ksp("com.latenighthack.basekit:basekit-viewmodel-ksp:0.3.0")
+    implementation("com.latenighthack.basekit:basekit-viewmodel-annotations:0.3.1")
+    implementation("com.latenighthack.basekit:basekit-viewmodel:0.3.1")
+    ksp("com.latenighthack.basekit:basekit-viewmodel-ksp:0.3.1")
 }
 kotlin { jvmToolchain(17) }
 ''')
@@ -47,13 +47,20 @@ import com.latenighthack.basekit.viewmodel.annotations.*
     specimen.write_text('''
 import com.latenighthack.basekit.viewmodel.ViewModel
 import com.latenighthack.basekit.viewmodel.annotations.*
-@ViewModelSpec interface Valid : ViewModel<Valid.State> {
+interface ParentActions { suspend fun refresh() }
+@ViewModelSpec interface Valid : ViewModel<Valid.State>, ParentActions {
     data class State(val note: String?)
     @ViewModelIdentity val key: String
     @CodegenIgnore @ViewModelIdentity val ignoredKey: Int
     suspend fun setNote(value: String?)
     @CodegenIgnore suspend fun deliberatelyUnbound(a: String, b: Int)
+    @CodegenIgnore suspend fun ignoredAction()
+    suspend fun `save$draft`()
 }
 @CodegenIgnore @ViewModelSpec interface Ignored
 ''')
     subprocess.run([str(root / 'gradlew'), '-p', str(work), 'compileKotlin', '--console=plain'], check=True)
+    generated = next((work / 'build/generated/ksp').rglob('ObservingValid.kt')).read_text()
+    assert 'override suspend fun `refresh`' in generated
+    assert 'override suspend fun `save$draft`' in generated
+    assert 'override suspend fun `ignoredAction`' not in generated

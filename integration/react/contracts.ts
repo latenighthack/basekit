@@ -1,5 +1,15 @@
 import { createBindingProbe, createBindingChild, BrowserProbeMessage as ProbeMessage } from 'basekit-demo-core';
 import { useBindingProbeViewModel, type BindingProbeViewModelBinding, type PickerViewModelOptionsElement } from 'basekit-react';
+import posthog from 'posthog-js';
+import { createPostHogMetrics } from '@latenighthack/basekit-navigation-posthog';
+import { BrowserBindingProbe } from 'basekit-demo-core';
+
+const metrics = createPostHogMetrics(posthog, { propertyProviders: [event => ({ kind: event.kind })] });
+new BrowserBindingProbe(metrics);
+// @ts-expect-error client must expose the real SDK capture contract
+createPostHogMetrics({});
+// @ts-expect-error domain objects cannot be automatically serialized
+createPostHogMetrics(posthog, { properties: { date: new Date() } });
 
 function contracts() {
   const state = useBindingProbeViewModel(createBindingProbe());

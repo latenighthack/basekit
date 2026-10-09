@@ -75,6 +75,24 @@ final class BindingTests: XCTestCase {
         model.unbind()
     }
 
+    func testObservedActionsThroughSwiftWrappersPreserveCancellationAndExcludeMutators() async throws {
+        let raw = RealBindingProbeViewModel()
+        let observer = RecordingActionObserver()
+        let observed = ObservingBindingProbeViewModel(delegate: raw, actionObserver: observer)
+        let model = ObservableBindingProbeViewModel(observed)
+        try await model.setNote("edited")
+        do { try await model.fail(); XCTFail("Expected Kotlin error") } catch {}
+        let kvo = KvoBindingProbeViewModel(observed)
+        do { try await kvo.fail(); XCTFail("Expected Kotlin error") } catch {}
+        let action = Task { try await model.waitUntilCancelled() }
+        try await eventually { raw.startedActions == 1 }
+        action.cancel()
+        do { try await action.value; XCTFail("Expected cancellation") } catch is CancellationError {}
+        XCTAssertEqual(observer.names, ["fail", "fail", "waitUntilCancelled"])
+        XCTAssertEqual(raw.cancelledActions, 1)
+        kvo.unbind()
+    }
+
     private func eventually(_ condition: () -> Bool) async throws {
         for _ in 0..<200 {
             if condition() { return }
@@ -87,4 +105,9 @@ final class BindingTests: XCTestCase {
 private final class RecordingResponder: NSObject, NavigationResponder {
     var results: [Any?] = []
     func respond(response: Any?) { results.append(response) }
+}
+
+private final class RecordingActionObserver: NSObject, ViewModelActionObserver {
+    var names: [String] = []
+    func onAction(event: ViewModelActionEvent) { names.append(event.actionName) }
 }

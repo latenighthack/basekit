@@ -61,6 +61,8 @@ jobs:
           :basekit-annotations:publishAndReleaseToMavenCentral
           :basekit-navigation:publishAndReleaseToMavenCentral
           :basekit-navigation-test:publishAndReleaseToMavenCentral
+          :basekit-navigation-metrics:publishAndReleaseToMavenCentral
+          :basekit-navigation-posthog:publishAndReleaseToMavenCentral
           :basekit-ksp:publishAndReleaseToMavenCentral
           :basekit-viewmodel-annotations:publishAndReleaseToMavenCentral
           :basekit-viewmodel:publishAndReleaseToMavenCentral
@@ -87,6 +89,15 @@ jobs:
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+
+      - name: Package JavaScript PostHog integration
+        run: ./gradlew :basekit-navigation-posthog:collectBasekitPostHogJavaScript
+
+      - name: Upload JavaScript PostHog package
+        uses: actions/upload-artifact@v4
+        with:
+          name: basekit-navigation-posthog-js
+          path: basekit-navigation-posthog/build/generated/basekit-posthog-js
 
       # A successful upload is not proof that Central serves the expected coordinates. Wait for
       # propagation, then resolve all markers and processor jars from an external consumer.
