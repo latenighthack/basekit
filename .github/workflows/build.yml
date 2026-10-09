@@ -61,7 +61,9 @@ jobs:
         run: python3 scripts/verify-plugin-release.py
 
       - name: Build and test all targets
-        run: ./gradlew build --stacktrace
+        # Native linking across every Apple target exceeds the hosted runner's memory
+        # when combined with parallel Gradle builds. Serialize the cold build.
+        run: ./gradlew build --stacktrace --no-parallel --max-workers=1
 
       - name: Test native PostHog Swift package
         run: swift test --scratch-path build/posthog-swift
