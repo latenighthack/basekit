@@ -327,11 +327,15 @@ class TuiProcessor(
     private fun resolveImplementation(vm: KSClassDeclaration, vmQn: String, declarations: List<KSClassDeclaration>): KSClassDeclaration? {
         val override = vm.classArgument(TUISCREEN_ANNOTATION, "implementation")?.declaration as? KSClassDeclaration
         if (override != null && override.qualifiedName?.asString() != "kotlin.Unit") return override
-        return declarations.firstOrNull { candidate ->
+        val candidates = declarations.filter { candidate ->
+            // Observing decorators require an existing delegate; they are not factories.
+            candidate.simpleName.asString() != "Observing${vm.simpleName.asString()}" &&
             candidate.classKind == ClassKind.CLASS &&
                 !candidate.modifiers.contains(Modifier.ABSTRACT) &&
                 candidate.getAllSuperTypes().any { it.declaration.qualifiedName?.asString() == vmQn }
         }
+        return candidates.firstOrNull { it.hasAnnotation(VIEWMODEL_INJECT_ANNOTATION) }
+            ?: candidates.firstOrNull()
     }
 
     private fun buildList(prop: KSPropertyDeclaration, keys: KeyAllocator, owner: String): ListInfo? {
