@@ -20,3 +20,17 @@ allprojects {
         dependsOn(tasks.matching { it.name.startsWith("ksp") && it.name.endsWith("KotlinMetadata") })
     }
 }
+
+// Kotlin/JS test linkers write transitive project packages into the same shared
+// package directories read by library distributions. Order them when both are
+// scheduled, without making production distributions depend on test compilation.
+gradle.projectsEvaluated {
+    val testSyncs = allprojects.map { project ->
+        project.tasks.matching { it.name.endsWith("TestDevelopmentExecutableCompileSync") }
+    }
+    allprojects.forEach { project ->
+        project.tasks.matching { it.name.endsWith("LibraryDistribution") }.configureEach {
+            mustRunAfter(testSyncs)
+        }
+    }
+}
