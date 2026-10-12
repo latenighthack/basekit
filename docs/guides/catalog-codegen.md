@@ -27,7 +27,8 @@ basekitCatalogCodegen {
 ./gradlew generateFromBasekitCatalog -Pbasekit.catalog.input=docs/catalog.yaml -Pbasekit.catalog.force=true
 ```
 
-The task is not part of `build`. Without Gradle, run the jar
+The task is not part of `build`. The same tool also writes the [navigation graph page](catalog-graph.md)
+(`basekit-catalog-codegen graph`). Without Gradle, run the jar
 (`com.latenighthack.basekit:basekit-catalog-codegen`) or its application distribution:
 
 ```

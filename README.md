@@ -46,6 +46,7 @@ Other implementation guides cover [IDs](docs/guides/ids.md),
 [typed navigation](docs/guides/navigation.md),
 [the generated screen catalog](docs/guides/catalog.md),
 [generating code from a catalog](docs/guides/catalog-codegen.md),
+[the navigation graph page](docs/guides/catalog-graph.md),
 [composition, startup and lifecycle](docs/guides/composition-startup-and-lifecycle.md), and
 [use cases and mutation workflows](docs/guides/use-cases-and-mutation-workflows.md).
 

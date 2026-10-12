@@ -3,6 +3,7 @@ package com.latenighthack.basekit.catalog.tool
 import org.yaml.snakeyaml.LoaderOptions
 import org.yaml.snakeyaml.Yaml
 import org.yaml.snakeyaml.constructor.SafeConstructor
+import org.yaml.snakeyaml.error.YAMLException
 
 /** A catalog that cannot be generated from; [message] names the YAML path at fault. */
 class CatalogException(message: String) : Exception(message)
@@ -13,14 +14,20 @@ object CatalogReader {
     const val SCHEMA = "catalog/v1"
 
     fun read(text: String): CatalogDocument {
-        val root = Yaml(SafeConstructor(LoaderOptions())).load<Any?>(text)
-            as? Map<*, *> ?: throw CatalogException("the catalog must be a YAML map")
+        val root = loadYaml(text) as? Map<*, *> ?: throw CatalogException("the catalog must be a YAML map")
         val schema = root["schema"]
         if (schema != SCHEMA) throw CatalogException("schema: expected $SCHEMA, found ${schema ?: "nothing"}")
         val screens = entries(root, "screens").map { (name, body) -> vm(name, body, "screens.$name", screen = true) }
         val components = entries(root, "components").map { (name, body) -> vm(name, body, "components.$name", screen = false) }
         val types = entries(root, "types").map { (name, body) -> type(name, body, "types.$name") }
         return CatalogDocument(screens, components, types)
+    }
+
+    /** Parses YAML 1.1, reporting syntax errors as a [CatalogException]. */
+    fun loadYaml(text: String): Any? = try {
+        Yaml(SafeConstructor(LoaderOptions())).load<Any?>(text)
+    } catch (error: YAMLException) {
+        throw CatalogException("not valid YAML: ${error.message?.trim()}")
     }
 
     private fun entries(map: Map<*, *>, key: String): List<Pair<String, Map<*, *>>> {

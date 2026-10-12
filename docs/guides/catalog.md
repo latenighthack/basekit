@@ -20,6 +20,8 @@ The processor runs on the common metadata pass only, so the catalog covers `comm
 declarations. Kotlin creates that pass only when `commonMain` is shared by two or more targets.
 
 To go the other way, from a catalog to Kotlin, see [generating code from a catalog](catalog-codegen.md).
+`assemble` also writes `catalog.sources.yaml` (where each entry is declared) and `catalog.html`, an
+interactive [navigation graph page](catalog-graph.md).
 
 ## File layout
 

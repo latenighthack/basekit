@@ -6,6 +6,13 @@ All notable changes to basekit are documented here. The format follows
 
 ## Next
 
+- Added the navigation graph page. `basekit-catalog-codegen graph` turns a catalog into one
+  self-contained HTML file: every screen, the components in it that navigate, and one edge per event
+  (actions, mutations, rows and children). Clicking a screen shows its route, args, full state with
+  types expanded, actions, mutations, lists and children, each linked to its declaration. The catalog
+  processor now also writes `catalog.sources.yaml` (file and line per catalog entry), and the catalog
+  plugin's `assemble` writes `build/generated/basekit-catalog/catalog.html`. Links open IntelliJ /
+  Android Studio by default; `sourceLink` takes any template. See [the guide](docs/guides/catalog-graph.md).
 - `basekit-viewmodel-ksp` generates `GeneratedViewModelFactories` in commonMain: one kotlin-inject
   factory per `@ViewModelInject` implementation, named after its destination and taking its
   `@Assisted` parameters (`val homeFactory: (HomeNavigator) -> HomeViewModel`). An app component

@@ -5,6 +5,7 @@ import com.google.devtools.ksp.getDeclaredProperties
 import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.ClassKind
+import com.google.devtools.ksp.symbol.FileLocation
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFile
 import com.google.devtools.ksp.symbol.KSNode
@@ -31,8 +32,18 @@ private const val SECTIONED_DELTA = "com.latenighthack.deltalist.SectionedDelta"
 private const val DELTA_LIST = "com.latenighthack.deltalist.DeltaList"
 private const val SECTIONED_DELTA_LIST = "com.latenighthack.deltalist.SectionedDeltaList"
 
-/** The catalog and the source files it was read from (the output's KSP dependencies). */
-data class CatalogExtraction(val catalog: Catalog, val sourceFiles: List<KSFile>)
+/**
+ * The catalog, the source files it was read from (the output's KSP dependencies), and where each entry
+ * is declared: catalog path (`Home`, `Home.actions.onRefresh`, `types.PickResult`) -> `path:line`.
+ */
+data class CatalogExtraction(
+    val catalog: Catalog,
+    val sourceFiles: List<KSFile>,
+    val locations: CatalogLocations = CatalogLocations(null, emptyMap()),
+)
+
+/** Source locations, relative to [root] when it is set. */
+data class CatalogLocations(val root: String?, val entries: Map<String, String>)
 
 /**
  * Reads every `@Destination` and `@ViewModelSpec` in a compilation into a [Catalog].
@@ -41,7 +52,12 @@ data class CatalogExtraction(val catalog: Catalog, val sourceFiles: List<KSFile>
  * run here with a silent logger; [logger] only receives catalog warnings: code that catalog/v1 does
  * not allow, such as a mutator with `@NavigateTo`, which is still written as the code declares it.
  */
-class CatalogExtractor(private val resolver: Resolver, private val logger: KSPLogger) {
+class CatalogExtractor(
+    private val resolver: Resolver,
+    private val logger: KSPLogger,
+    /** Source locations are written relative to this directory when set (the root project). */
+    private val sourceRoot: String? = null,
+) {
 
     private class Spec(val declaration: KSClassDeclaration, val info: VmInfo)
 
@@ -99,7 +115,46 @@ class CatalogExtractor(private val resolver: Resolver, private val logger: KSPLo
                 .sortedBy { it.name },
         )
         val sources = (graph.sourceFiles + specDeclarations.mapNotNull { it.containingFile }).distinct()
-        return CatalogExtraction(catalog, sources)
+        return CatalogExtraction(catalog, sources, locations(screens + components))
+    }
+
+    // ---- source locations ----
+
+    /** Where each screen, component, member and type is declared, keyed by its catalog path. */
+    private fun locations(vms: List<CatalogViewModel>): CatalogLocations {
+        val entries = LinkedHashMap<String, String>()
+        fun record(key: String, node: KSNode?) {
+            val location = node?.location as? FileLocation ?: return
+            entries[key] = "${relative(location.filePath)}:${location.lineNumber}"
+        }
+        vms.forEach { vm ->
+            val declaration = specs[vm.spec]?.declaration ?: classDeclaration(vm.spec) ?: return@forEach
+            record(vm.name, declaration)
+            val properties = declaration.getAllProperties().associateBy { it.simpleName.asString() }
+            val functions = declaration.getAllFunctions().associateBy { it.simpleName.asString() }
+            destinations[vm.spec]?.argsQualifiedName?.let(::classDeclaration)?.let { args ->
+                val argProperties = args.getDeclaredProperties().associateBy { it.simpleName.asString() }
+                vm.navigation?.args?.forEach { record("${vm.name}.navigation.args.${it.name}", argProperties[it.name]) }
+            }
+            specs[vm.spec]?.info?.stateQualifiedName?.let(::classDeclaration)?.let { state ->
+                val stateProperties = state.getAllProperties().associateBy { it.simpleName.asString() }
+                vm.state.forEach { record("${vm.name}.state.${it.name}", stateProperties[it.name]) }
+            }
+            vm.identity?.let { record("${vm.name}.identity", properties[it]) }
+            vm.actions.forEach { record("${vm.name}.actions.${it.name}", functions[it.name]) }
+            vm.mutations.forEach { record("${vm.name}.mutations.${it.name}", functions[it.name]) }
+            vm.lists.forEach { record("${vm.name}.lists.${it.name}", properties[it.name]) }
+            vm.children.forEach { record("${vm.name}.children.${it.name}", properties[it.name]) }
+        }
+        typeDeclarations.keys.forEach { qualifiedName ->
+            record("types.${typeNames.getValue(qualifiedName)}", classDeclaration(qualifiedName))
+        }
+        return CatalogLocations(sourceRoot, entries)
+    }
+
+    private fun relative(path: String): String {
+        val root = sourceRoot?.trimEnd('/') ?: return path
+        return if (path.startsWith("$root/")) path.removePrefix("$root/") else path
     }
 
     // ---- names ----

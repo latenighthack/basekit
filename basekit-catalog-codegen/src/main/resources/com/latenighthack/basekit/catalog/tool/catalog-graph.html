@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="basekit-catalog-codegen">
+<title>__CATALOG_TITLE__</title>
+<style>
+:root {
+  --bg: #f6f6f8; --panel: #ffffff; --text: #1d1d22; --muted: #686876; --border: #d8d8e0;
+  --node: #ffffff; --node-head: #edf1fb; --accent: #3466d6; --accent-soft: rgba(52, 102, 214, .12);
+  --edge: #9b9bab; --mutation: #b36b1e; --match: #d9541e; --chip: #eef0f6;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141418; --panel: #1d1d23; --text: #ececf1; --muted: #9c9cab; --border: #33333d;
+    --node: #1f1f26; --node-head: #262b3b; --accent: #7ea4ff; --accent-soft: rgba(126, 164, 255, .16);
+    --edge: #6d6d7c; --mutation: #e3a253; --match: #ff8a55; --chip: #2a2a33;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.45 var(--font); }
+header {
+  position: fixed; inset: 0 0 auto 0; height: 50px; display: flex; align-items: center; gap: 14px;
+  padding: 0 16px; background: var(--panel); border-bottom: 1px solid var(--border); z-index: 2;
+}
+header h1 { font-size: 15px; font-weight: 600; margin: 0; white-space: nowrap; }
+header .stats, header .legend { color: var(--muted); white-space: nowrap; }
+header .legend svg { vertical-align: middle; margin: 0 4px 0 10px; }
+header .spacer { flex: 1; }
+input[type=search] {
+  width: 220px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font: inherit;
+}
+button {
+  font: inherit; color: var(--text); background: var(--chip); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 10px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+#canvas { position: fixed; inset: 50px 0 0 0; touch-action: none; cursor: grab; }
+#canvas.dragging { cursor: grabbing; }
+#canvas svg { width: 100%; height: 100%; display: block; }
+#empty { position: fixed; inset: 50px 0 0 0; display: grid; place-items: center; color: var(--muted); }
+#empty[hidden] { display: none; }
+svg text { fill: var(--text); font-family: var(--font); }
+.node { cursor: pointer; }
+.node .box { fill: var(--node); stroke: var(--border); stroke-width: 1; }
+.node .head { fill: var(--node-head); }
+.node.orphan .box { stroke-dasharray: 5 4; }
+.node .title { font-size: 13px; font-weight: 600; }
+.node .route { font-size: 11px; fill: var(--muted); font-family: var(--mono); }
+.node .item-label { font-size: 11px; fill: var(--muted); }
+.node .event { font-size: 12px; font-family: var(--mono); }
+.node .empty { font-size: 11px; fill: var(--muted); font-style: italic; }
+.node .row-bg { fill: transparent; }
+.node .event-row.hl .row-bg { fill: var(--accent-soft); }
+.node .port { fill: var(--edge); }
+.node .event-row.mutation .port { fill: var(--mutation); }
+.node:hover .box, .node.hl .box { stroke: var(--accent); stroke-width: 2; }
+.node.match .box { stroke: var(--match); stroke-width: 3; }
+.dim { opacity: .2; }
+.edge path.line { fill: none; stroke: var(--edge); stroke-width: 1.4; }
+.edge.mutation path.line { stroke: var(--mutation); stroke-dasharray: 6 4; }
+.edge.orphan path.line { stroke-dasharray: 2 4; }
+.edge.hl path.line { stroke: var(--accent); stroke-width: 2.6; }
+.edge path.hit { fill: none; stroke: transparent; stroke-width: 12; cursor: pointer; }
+#tooltip {
+  position: fixed; pointer-events: none; padding: 4px 8px; border-radius: 4px; font-size: 12px;
+  background: var(--text); color: var(--bg); display: none; z-index: 5; font-family: var(--mono);
+}
+#backdrop {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, .35); display: none; z-index: 10;
+  align-items: flex-start; justify-content: center; padding: 6vh 16px;
+}
+#backdrop.open { display: flex; }
+#modal {
+  width: min(860px, 100%); max-height: 88vh; display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .25);
+}
+#modal .modal-head {
+  display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border);
+}
+#modal .modal-head h2 { margin: 0; font-size: 18px; }
+#modal .modal-head .spec { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+#modal .modal-head .grow { flex: 1; min-width: 0; }
+#modal .modal-body { overflow: auto; padding: 6px 18px 18px; }
+.badge { font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--chip); color: var(--muted); }
+.badge.screen { background: var(--accent-soft); color: var(--accent); }
+section h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 18px 0 6px; }
+table { width: 100%; border-collapse: collapse; }
+td { padding: 5px 8px 5px 0; border-top: 1px solid var(--border); vertical-align: top; }
+td.name { font-family: var(--mono); white-space: nowrap; width: 1%; }
+td.src { text-align: right; white-space: nowrap; width: 1%; }
+code, .mono { font-family: var(--mono); font-size: 12px; }
+a.src { color: var(--accent); font-size: 12px; text-decoration: none; }
+a.src:hover { text-decoration: underline; }
+.chip {
+  display: inline-block; font: 12px var(--mono); padding: 1px 8px; margin: 1px 4px 1px 0; border-radius: 10px;
+  background: var(--chip); border: 1px solid var(--border); color: var(--text); cursor: pointer;
+}
+.chip.nav { color: var(--accent); }
+.chip.nav::before { content: "\2192\00a0"; }
+.muted { color: var(--muted); }
+details { margin: 4px 0; }
+details > summary { cursor: pointer; }
+details.vm { border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; margin: 6px 0; }
+details.vm > summary { font-family: var(--mono); padding: 3px 0; }
+details.vm[open] { background: var(--bg); }
+details.type { margin: 2px 0 2px 2px; }
+details.type > summary { font-size: 12px; color: var(--accent); }
+details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10px; margin: 2px 0 2px 4px; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 4px 0; }
+.kv > :nth-child(odd) { color: var(--muted); }
+.flash { animation: flash 1.2s ease-out; }
+@keyframes flash { from { box-shadow: 0 0 0 3px var(--match); } to { box-shadow: 0 0 0 0 transparent; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>__CATALOG_TITLE__</h1>
+  <span class="stats" id="stats"></span>
+  <span class="legend">
+    <svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="var(--edge)" stroke-width="1.6"/></svg>action
+    <svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="var(--mutation)" stroke-width="1.6" stroke-dasharray="6 4"/></svg>mutation
+    <svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="var(--edge)" stroke-width="1.6" stroke-dasharray="2 4"/></svg>no navigator
+  </span>
+  <span class="spacer"></span>
+  <input type="search" id="search" placeholder="Find a screen…" autocomplete="off">
+  <button id="fit" title="Fit the graph to the window">Fit</button>
+</header>
+<div id="canvas"></div>
+<div id="empty" hidden>This catalog has no screens.</div>
+<div id="tooltip"></div>
+<div id="backdrop">
+  <div id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-head">
+      <button id="modal-back" title="Back" hidden>&larr;</button>
+      <div class="grow">
+        <h2 id="modal-title"></h2>
+        <div class="spec" id="modal-spec"></div>
+      </div>
+      <span id="modal-link"></span>
+      <button id="modal-close" title="Close (Esc)">&times;</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+<script type="application/json" id="catalog-data">__CATALOG_DATA__</script>
+<script>
+(() => {
+  "use strict";
+  const data = JSON.parse(document.getElementById("catalog-data").textContent);
+  const NS = "http://www.w3.org/2000/svg";
+  const HEAD = 40, ROW = 22, LABEL = 20, PAD = 12, MIN_WIDTH = 170, GAP_X = 170, GAP_Y = 34;
+
+  // ---------- helpers ----------
+  const el = (tag, attrs = {}, ...children) => {
+    const node = document.createElement(tag);
+    for (const [key, value] of Object.entries(attrs)) {
+      if (value == null || value === false) continue;
+      if (key === "class") node.className = value;
+      else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+      else node.setAttribute(key, value);
+    }
+    for (const child of children.flat()) {
+      if (child == null || child === false) continue;
+      node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+    }
+    return node;
+  };
+  const svg = (tag, attrs = {}, ...children) => {
+    const node = document.createElementNS(NS, tag);
+    for (const [key, value] of Object.entries(attrs)) if (value != null) node.setAttribute(key, value);
+    for (const child of children) node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+    return node;
+  };
+  const measure = (() => {
+    const context = document.createElement("canvas").getContext("2d");
+    const style = getComputedStyle(document.documentElement);
+    const sans = style.getPropertyValue("--font"), mono = style.getPropertyValue("--mono");
+    return (text, font) => {
+      context.font = font === "title" ? `600 13px ${sans}` : font === "mono" ? `12px ${mono}` : `11px ${sans}`;
+      return context.measureText(text).width;
+    };
+  })();
+  const eventText = (event) => `${event.method}${event.kind === "mutation" ? "(…)" : "()"} → ${event.target}`;
+
+  // ---------- graph model ----------
+  const nodes = data.nodes.map((source) => ({ ...source, rows: [], incoming: [] }));
+  const byName = new Map(nodes.map((node) => [node.name, node]));
+  const events = [];
+  for (const node of nodes) {
+    let y = HEAD;
+    let width = Math.max(measure(node.name, "title") + 2 * PAD + 20, MIN_WIDTH);
+    if (node.route) width = Math.max(width, measure(node.route, "label") + 2 * PAD);
+    for (const item of node.items) {
+      if (!item.self) {
+        node.rows.push({ type: "label", text: item.vm, y });
+        width = Math.max(width, measure(item.vm, "label") + 2 * PAD);
+        y += LABEL;
+      }
+      for (const event of item.events) {
+        const row = { type: "event", event, item, y };
+        node.rows.push(row);
+        const edge = { ...event, node, row, item, target: byName.get(event.target) };
+        row.edge = edge;
+        events.push(edge);
+        width = Math.max(width, measure(eventText(event), "mono") + 2 * PAD + 14);
+        y += ROW;
+      }
+    }
+    if (!node.rows.some((row) => row.type === "event")) {
+      node.rows.push({ type: "empty", y });
+      y += ROW;
+    }
+    node.width = Math.ceil(width);
+    node.height = y + 8;
+  }
+  for (const edge of events) if (edge.target) edge.target.incoming.push(edge);
+  const totalEvents = events.length;
+  document.getElementById("stats").textContent =
+    `${data.nodes.filter((n) => n.screen).length} screens · ${totalEvents} events`;
+
+  // ---------- layout: layered, left to right ----------
+  const successors = new Map(nodes.map((node) => [node, [...new Set(events.filter((e) => e.node === node && e.target).map((e) => e.target))]]));
+  const indegree = new Map(nodes.map((node) => [node, 0]));
+  for (const [, targets] of successors) for (const target of targets) indegree.set(target, indegree.get(target) + 1);
+  const roots = [
+    ...nodes.filter((node) => node.route === "/"),
+    ...nodes.filter((node) => indegree.get(node) === 0),
+    ...nodes,
+  ].filter((node, index, all) => all.indexOf(node) === index);
+
+  // Depth-first from the roots: edges back onto the current path close a cycle and are left out of layering.
+  const state = new Map(), discovery = [], back = new Set();
+  const visit = (node) => {
+    state.set(node, 1);
+    discovery.push(node);
+    for (const next of successors.get(node)) {
+      if (state.get(next) === 1) back.add(`${node.name}>${next.name}`);
+      else if (!state.has(next)) visit(next);
+    }
+    state.set(node, 2);
+  };
+  for (const root of roots) if (!state.has(root)) visit(root);
+  const forward = (from, to) => from !== to && !back.has(`${from.name}>${to.name}`);
+
+  // Longest path from the roots, so every forward edge points right.
+  const layer = new Map(nodes.map((node) => [node, 0]));
+  const remaining = new Map(nodes.map((node) => [node, 0]));
+  for (const node of nodes) for (const next of successors.get(node)) if (forward(node, next)) remaining.set(next, remaining.get(next) + 1);
+  const queue = nodes.filter((node) => remaining.get(node) === 0);
+  while (queue.length) {
+    const node = queue.shift();
+    for (const next of successors.get(node)) {
+      if (!forward(node, next)) continue;
+      layer.set(next, Math.max(layer.get(next), layer.get(node) + 1));
+      remaining.set(next, remaining.get(next) - 1);
+      if (remaining.get(next) === 0) queue.push(next);
+    }
+  }
+  const layerCount = Math.max(0, ...layer.values()) + 1;
+  const layers = Array.from({ length: layerCount }, () => []);
+  for (const node of discovery) layers[layer.get(node)].push(node);
+  const predecessors = new Map(nodes.map((node) => [node, []]));
+  for (const node of nodes) for (const next of successors.get(node)) if (forward(node, next)) predecessors.get(next).push(node);
+
+  // Barycenter passes reduce crossings.
+  const position = new Map();
+  const index = () => layers.forEach((nodesInLayer) => nodesInLayer.forEach((node, i) => position.set(node, i)));
+  index();
+  const sweep = (neighbours, order) => {
+    for (const nodesInLayer of order) {
+      const weight = new Map(nodesInLayer.map((node) => {
+        const linked = neighbours(node).filter((other) => position.has(other));
+        return [node, linked.length ? linked.reduce((sum, other) => sum + position.get(other), 0) / linked.length : position.get(node)];
+      }));
+      nodesInLayer.sort((a, b) => weight.get(a) - weight.get(b));
+      nodesInLayer.forEach((node, i) => position.set(node, i));
+    }
+  };
+  const successorsForward = (node) => successors.get(node).filter((next) => forward(node, next));
+  for (let pass = 0; pass < 12; pass++) {
+    sweep((node) => predecessors.get(node), layers.slice(1));
+    sweep(successorsForward, layers.slice(0, -1).reverse());
+  }
+
+  const columns = [];
+  let x = 0;
+  for (const nodesInLayer of layers) {
+    const columnWidth = Math.max(0, ...nodesInLayer.map((node) => node.width));
+    const columnHeight = nodesInLayer.reduce((sum, node) => sum + node.height, 0) + GAP_Y * Math.max(0, nodesInLayer.length - 1);
+    let y = -columnHeight / 2;
+    for (const node of nodesInLayer) {
+      node.x = x + (columnWidth - node.width) / 2;
+      node.y = y;
+      y += node.height + GAP_Y;
+    }
+    columns.push({ x, width: columnWidth, nodes: nodesInLayer });
+    x += columnWidth + GAP_X;
+  }
+
+  // A forward edge that skips columns passes each column in between through a gap between boxes.
+  const crossings = new Map();
+  function passThrough(column, wantedY) {
+    const used = crossings.get(column) || 0;
+    crossings.set(column, used + 1);
+    const obstacles = column.nodes.map((node) => [node.y - 14, node.y + node.height + 14]);
+    let y = wantedY;
+    const blocking = obstacles.find(([top, bottom]) => y > top && y < bottom);
+    if (blocking) {
+      const [top, bottom] = blocking;
+      y = (y - top < bottom - y) ? top - (used % 4) * 7 : bottom + (used % 4) * 7;
+    }
+    return y;
+  }
+
+  // Incoming edges share the target's left side, ordered by where they come from.
+  for (const node of nodes) {
+    node.incoming.sort((a, b) => (a.node.y + a.row.y) - (b.node.y + b.row.y) || a.node.x - b.node.x);
+    const top = 14, span = Math.max(node.height - 2 * top, 1);
+    node.incoming.forEach((edge, i) => { edge.entryY = node.y + top + span * (i + 0.5) / node.incoming.length; });
+  }
+
+  // ---------- drawing ----------
+  const canvas = document.getElementById("canvas");
+  if (!nodes.length) {
+    document.getElementById("empty").hidden = false;
+    return;
+  }
+  const root = svg("svg");
+  const defs = svg("defs");
+  for (const [id, color] of [["arrow", "var(--edge)"], ["arrow-mutation", "var(--mutation)"], ["arrow-hl", "var(--accent)"]]) {
+    defs.append(svg("marker", { id, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" },
+      svg("path", { d: "M0,0 L10,5 L0,10 z", fill: color })));
+  }
+  root.append(defs);
+  const viewport = svg("g");
+  const edgeLayer = svg("g"), nodeLayer = svg("g");
+  viewport.append(edgeLayer, nodeLayer);
+  root.append(viewport);
+  canvas.append(root);
+
+  const rounded = (points, radius = 12) => {
+    let d = `M${points[0][0]},${points[0][1]}`;
+    for (let i = 1; i < points.length - 1; i++) {
+      const [px, py] = points[i - 1], [cx, cy] = points[i], [nx, ny] = points[i + 1];
+      const r = Math.min(radius, Math.hypot(cx - px, cy - py) / 2, Math.hypot(nx - cx, ny - cy) / 2);
+      const ax = cx + (Math.sign(px - cx) * r), ay = cy + (Math.sign(py - cy) * r);
+      const bx = cx + (Math.sign(nx - cx) * r), by = cy + (Math.sign(ny - cy) * r);
+      d += ` L${ax},${ay} Q${cx},${cy} ${bx},${by}`;
+    }
+    const last = points[points.length - 1];
+    return d + ` L${last[0]},${last[1]}`;
+  };
+
+  let detour = 0;
+  for (const edge of events) {
+    if (!edge.target) continue;
+    const x1 = edge.node.x + edge.node.width, y1 = edge.node.y + edge.row.y + ROW / 2;
+    const x2 = edge.target.x, y2 = edge.entryY;
+    let d;
+    const from = layer.get(edge.node), to = layer.get(edge.target);
+    if (x2 > x1 + 30) {
+      // Waypoints at both sides of every column the edge crosses, joined by horizontal-tangent curves.
+      const points = [[x1, y1]];
+      for (let l = from + 1; l < to; l++) {
+        const column = columns[l];
+        const t = (column.x + column.width / 2 - x1) / (x2 - x1);
+        const y = passThrough(column, y1 + (y2 - y1) * t);
+        points.push([column.x - 10, y], [column.x + column.width + 10, y]);
+      }
+      points.push([x2, y2]);
+      d = `M${x1},${y1}`;
+      for (let i = 1; i < points.length; i++) {
+        const [px, py] = points[i - 1], [qx, qy] = points[i];
+        if (py === qy && i % 2 === 0 && i < points.length - 1) { d += ` L${qx},${qy}`; continue; }
+        const dx = Math.max(30, (qx - px) / 2);
+        d += ` C${px + dx},${py} ${qx - dx},${qy} ${qx},${qy}`;
+      }
+    } else {
+      // Back edges, self edges and edges within a column run below every box in the columns they span.
+      const low = Math.min(from, to), high = Math.max(from, to);
+      const spanned = columns.slice(low, high + 1).flatMap((column) => column.nodes);
+      const below = Math.max(...spanned.map((node) => node.y + node.height)) + 22 + (detour++ % 8) * 9;
+      d = rounded([[x1, y1], [x1 + 26 + (detour % 4) * 6, y1], [x1 + 26 + (detour % 4) * 6, below], [x2 - 26, below], [x2 - 26, y2], [x2, y2]]);
+    }
+    const marker = edge.kind === "mutation" ? "arrow-mutation" : "arrow";
+    const line = svg("path", { class: "line", d, "marker-end": `url(#${marker})` });
+    const hit = svg("path", { class: "hit", d });
+    const group = svg("g", { class: `edge ${edge.kind}${edge.node.reachable ? "" : " orphan"}` }, line, hit);
+    edge.group = group;
+    edge.line = line;
+    edge.marker = marker;
+    group.addEventListener("mouseenter", (e) => { highlightEdges([edge]); tooltip(e, `${edge.item.vm}.${eventText(edge.row.event)}`); });
+    group.addEventListener("mousemove", (e) => tooltip(e));
+    group.addEventListener("mouseleave", () => { clearHighlight(); tooltip(null); });
+    group.addEventListener("click", () => { if (!moved) openModal(edge.node.name, edge.item.self ? null : edge.item.vm); });
+    edgeLayer.append(group);
+  }
+
+  for (const node of nodes) {
+    const group = svg("g", { class: `node${node.reachable ? "" : " orphan"}`, transform: `translate(${node.x},${node.y})` });
+    group.append(svg("rect", { class: "box", width: node.width, height: node.height, rx: 8 }));
+    group.append(svg("path", { class: "head", d: `M0,8 a8,8 0 0 1 8,-8 h${node.width - 16} a8,8 0 0 1 8,8 v${HEAD - 12} h${-node.width} z` }));
+    group.append(svg("text", { class: "title", x: PAD, y: node.route || !node.screen ? 18 : 24 }, node.name));
+    if (node.route) group.append(svg("text", { class: "route", x: PAD, y: 32 }, node.route));
+    else if (!node.screen) group.append(svg("text", { class: "route", x: PAD, y: 32 }, "component · no navigator"));
+    for (const row of node.rows) {
+      if (row.type === "label") {
+        group.append(svg("text", { class: "item-label", x: PAD, y: row.y + 14 }, row.text));
+      } else if (row.type === "empty") {
+        group.append(svg("text", { class: "empty", x: PAD, y: row.y + 15 }, "no navigation events"));
+      } else {
+        const indent = row.item.self ? PAD : PAD + 8;
+        const rowGroup = svg("g", { class: `event-row ${row.event.kind}` },
+          svg("rect", { class: "row-bg", x: 1, y: row.y, width: node.width - 2, height: ROW }),
+          svg("text", { class: "event", x: indent, y: row.y + 15 }, eventText(row.event)),
+          svg("circle", { class: "port", cx: node.width, cy: row.y + ROW / 2, r: 3 }));
+        row.group = rowGroup;
+        rowGroup.addEventListener("mouseenter", () => highlightEdges([row.edge]));
+        rowGroup.addEventListener("mouseleave", clearHighlight);
+        rowGroup.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (!moved) openModal(node.name, row.item.self ? null : row.item.vm);
+        });
+        group.append(rowGroup);
+      }
+    }
+    node.group = group;
+    group.addEventListener("mouseenter", () => highlightNode(node));
+    group.addEventListener("mouseleave", clearHighlight);
+    group.addEventListener("click", () => { if (!moved) openModal(node.name); });
+    nodeLayer.append(group);
+  }
+
+  // ---------- highlighting ----------
+  const tooltipElement = document.getElementById("tooltip");
+  function tooltip(event, text) {
+    if (!event) { tooltipElement.style.display = "none"; return; }
+    if (text != null) tooltipElement.textContent = text;
+    tooltipElement.style.display = "block";
+    tooltipElement.style.left = `${event.clientX + 12}px`;
+    tooltipElement.style.top = `${event.clientY + 12}px`;
+  }
+  function highlightEdges(edges) {
+    const nodesInvolved = new Set(edges.flatMap((edge) => [edge.node, edge.target]));
+    for (const edge of events) {
+      if (!edge.group) continue;
+      const on = edges.includes(edge);
+      edge.group.classList.toggle("hl", on);
+      edge.group.classList.toggle("dim", !on);
+      edge.line.setAttribute("marker-end", `url(#${on ? "arrow-hl" : edge.marker})`);
+      edge.row.group?.classList.toggle("hl", on);
+    }
+    for (const node of nodes) {
+      node.group.classList.toggle("hl", nodesInvolved.has(node));
+      node.group.classList.toggle("dim", !nodesInvolved.has(node));
+    }
+  }
+  function highlightNode(node) {
+    highlightEdges(events.filter((edge) => edge.node === node || edge.target === node));
+    node.group.classList.remove("dim");
+  }
+  function clearHighlight() {
+    for (const edge of events) {
+      if (!edge.group) continue;
+      edge.group.classList.remove("hl", "dim");
+      edge.line.setAttribute("marker-end", `url(#${edge.marker})`);
+      edge.row.group?.classList.remove("hl");
+    }
+    for (const node of nodes) node.group.classList.remove("hl", "dim");
+    applySearch();
+  }
+
+  // ---------- pan and zoom ----------
+  const view = { x: 0, y: 0, k: 1 };
+  const apply = () => viewport.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.k})`);
+  const zoomAt = (factor, cx, cy) => {
+    const k = Math.min(3, Math.max(0.15, view.k * factor));
+    view.x = cx - (cx - view.x) * (k / view.k);
+    view.y = cy - (cy - view.y) * (k / view.k);
+    view.k = k;
+    apply();
+  };
+  function fit() {
+    const box = viewport.getBBox(), width = canvas.clientWidth, height = canvas.clientHeight;
+    const k = Math.min(1.25, (width - 60) / box.width, (height - 60) / box.height);
+    view.k = Math.max(0.15, k);
+    view.x = (width - box.width * view.k) / 2 - box.x * view.k;
+    view.y = (height - box.height * view.k) / 2 - box.y * view.k;
+    apply();
+  }
+  function center(node) {
+    view.x = canvas.clientWidth / 2 - (node.x + node.width / 2) * view.k;
+    view.y = canvas.clientHeight / 2 - (node.y + node.height / 2) * view.k;
+    apply();
+  }
+  canvas.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    if (event.ctrlKey || event.metaKey || event.deltaMode === 1) {
+      zoomAt(Math.exp(-event.deltaY * (event.deltaMode === 1 ? 0.05 : 0.0025)), event.clientX - rect.left, event.clientY - rect.top);
+    } else {
+      view.x -= event.deltaX;
+      view.y -= event.deltaY;
+      apply();
+    }
+  }, { passive: false });
+  let drag = null, moved = false;
+  const pointers = new Map();
+  canvas.addEventListener("pointerdown", (event) => {
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    drag = { x: event.clientX, y: event.clientY, vx: view.x, vy: view.y };
+    moved = false;
+  });
+  window.addEventListener("pointermove", (event) => {
+    if (!pointers.has(event.pointerId)) return;
+    const previous = pointers.get(event.pointerId);
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      const other = [...pointers.entries()].find(([id]) => id !== event.pointerId)[1];
+      const before = Math.hypot(previous.x - other.x, previous.y - other.y);
+      const after = Math.hypot(a.x - b.x, a.y - b.y);
+      const rect = canvas.getBoundingClientRect();
+      if (before > 0) zoomAt(after / before, (a.x + b.x) / 2 - rect.left, (a.y + b.y) / 2 - rect.top);
+      moved = true;
+      return;
+    }
+    if (!drag) return;
+    const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+    if (!moved && Math.hypot(dx, dy) < 4) return;
+    if (!moved) canvas.setPointerCapture?.(event.pointerId);
+    moved = true;
+    canvas.classList.add("dragging");
+    view.x = drag.vx + dx;
+    view.y = drag.vy + dy;
+    apply();
+  });
+  const release = (event) => {
+    pointers.delete(event.pointerId);
+    if (pointers.size === 0) { drag = null; canvas.classList.remove("dragging"); }
+  };
+  window.addEventListener("pointerup", release);
+  window.addEventListener("pointercancel", release);
+  document.getElementById("fit").addEventListener("click", fit);
+
+  // ---------- search ----------
+  const search = document.getElementById("search");
+  function applySearch() {
+    const query = search.value.trim().toLowerCase();
+    for (const node of nodes) {
+      const match = query !== "" && (node.name.toLowerCase().includes(query) || node.items.some((item) => item.vm.toLowerCase().includes(query)));
+      node.group.classList.toggle("match", match);
+      if (query !== "" && !match) node.group.classList.add("dim");
+    }
+    if (query !== "") for (const edge of events) edge.group?.classList.add("dim");
+  }
+  search.addEventListener("input", () => { clearHighlight(); });
+  search.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    const query = search.value.trim().toLowerCase();
+    const node = nodes.find((n) => n.name.toLowerCase().includes(query));
+    if (node) { center(node); openModal(node.name); }
+  });
+
+  // ---------- modal ----------
+  const backdrop = document.getElementById("backdrop");
+  const body = document.getElementById("modal-body");
+  const history = [];
+  let current = null;
+
+  const sourceLink = (link) => link ? el("a", { class: "src", href: link.href, title: link.href }, link.label) : null;
+  const navChips = (targets) => targets.map((target) =>
+    el("button", { class: "chip nav", title: `Open ${target}`, onclick: () => openModal(target) }, target));
+
+  // A type string with an expandable block for every catalog type it names.
+  // State types start expanded one level, so the full state is visible without clicking.
+  function typeView(type, seen = [], expanded = false) {
+    const wrapper = el("div", {}, el("code", {}, type));
+    const names = [...new Set(type.match(/[A-Za-z_][A-Za-z0-9_.]*/g) || [])].filter((name) => data.types[name]);
+    for (const name of names) wrapper.append(typeDetails(name, seen, expanded));
+    return wrapper;
+  }
+  function typeDetails(name, seen, expanded = false) {
+    const type = data.types[name];
+    const details = el("details", { class: "type" }, el("summary", {}, name));
+    if (seen.includes(name)) {
+      details.append(el("div", { class: "muted" }, "(already expanded above)"));
+      return details;
+    }
+    details.addEventListener("toggle", () => {
+      if (!details.open || details.dataset.filled) return;
+      details.dataset.filled = "1";
+      const content = el("div");
+      const link = sourceLink(type.link);
+      if (link) content.append(el("div", {}, link));
+      if (type.external) content.append(el("div", { class: "muted" }, "external: ", el("code", {}, type.external)));
+      if (type.enum) content.append(el("div", {}, "enum ", type.enum.map((c) => el("span", { class: "chip" }, c))));
+      if (type.subtypes) {
+        content.append(el("div", {}, "subtypes ", type.subtypes.map((s) => el("span", { class: "chip" }, s))));
+        for (const subtype of type.subtypes) if (data.types[subtype]) content.append(typeDetails(subtype, [...seen, name]));
+      }
+      if (type.fields && type.fields.length) {
+        content.append(el("table", {}, type.fields.map((field) =>
+          el("tr", {}, el("td", { class: "name" }, field.name), el("td", {}, typeView(field.type, [...seen, name]))))));
+      } else if (type.fields) {
+        content.append(el("div", { class: "muted" }, "no fields"));
+      }
+      details.append(content);
+    });
+    if (expanded) details.open = true;
+    return details;
+  }
+
+  function section(title, content) {
+    if (!content || (Array.isArray(content) && !content.length)) return null;
+    return el("section", {}, el("h3", {}, title), content);
+  }
+  const table = (rows) => rows.length ? el("table", {}, rows) : null;
+
+  function vmView(vm, depth) {
+    const parts = [];
+    const navigation = vm.navigation;
+    if (navigation) {
+      parts.push(section("Navigation", el("div", {},
+        el("div", { class: "kv" },
+          el("span", {}, "Route"), navigation.route ? el("code", {}, navigation.route) : el("span", { class: "muted" }, "not deep-linkable"),
+          el("span", {}, "Route args"), navigation.routeArgs.length ? el("code", {}, navigation.routeArgs.join(", ")) : el("span", { class: "muted" }, "none"),
+          el("span", {}, "Response"), navigation.response ? typeView(navigation.response) : el("span", { class: "muted" }, "none")),
+        table(navigation.args.map((arg) => el("tr", {},
+          el("td", { class: "name" }, arg.name), el("td", {}, typeView(arg.type)), el("td", { class: "src" }, sourceLink(arg.link))))))));
+    }
+    if (!vm.screen && depth === 0 && vm.embeddedBy.length) {
+      parts.push(section("Embedded by", el("div", {}, navChips(vm.embeddedBy))));
+    }
+    if (vm.identity) {
+      parts.push(section("Identity", table([el("tr", {}, el("td", { class: "name" }, vm.identity.name), el("td", {}, el("code", {}, "String")), el("td", { class: "src" }, sourceLink(vm.identity.link)))])));
+    }
+    parts.push(section("State", table(vm.state.map((field) => el("tr", {},
+      el("td", { class: "name" }, field.name), el("td", {}, typeView(field.type, [], true)), el("td", { class: "src" }, sourceLink(field.link)))))));
+    parts.push(section("Actions", table(vm.actions.map((action) => el("tr", {},
+      el("td", { class: "name" }, `${action.name}()`), el("td", {}, navChips(action.navigatesTo)), el("td", { class: "src" }, sourceLink(action.link)))))));
+    parts.push(section("Mutations", table(vm.mutations.map((mutation) => el("tr", {},
+      el("td", { class: "name" }, `${mutation.name}(${mutation.param.name}: ${mutation.param.type})`),
+      el("td", {},
+        mutation.binds ? el("div", { class: "muted" }, "binds ", el("code", {}, mutation.binds)) : null,
+        navChips(mutation.navigatesTo)),
+      el("td", { class: "src" }, sourceLink(mutation.link)))))));
+    parts.push(section("Lists", vm.lists.map((list) => el("div", {},
+      el("div", { class: "kv" },
+        el("span", {}, "List"), el("span", {}, el("code", {}, list.name), " ", el("span", { class: "badge" }, list.kind), " ", sourceLink(list.link)),
+        list.sections.length ? el("span", {}, "Sections") : null, list.sections.length ? el("span", {}, list.sections.map((s) => el("span", { class: "chip" }, s))) : null,
+        el("span", {}, "Element"), el("code", {}, list.element)),
+      list.rows.map((row) => componentDetails(row, depth))))));
+    parts.push(section("Children", vm.children.map((child) => componentDetails(child.type, depth, child.name, child.link))));
+    const filled = parts.filter(Boolean);
+    return filled.length ? filled : [el("p", { class: "muted" }, "No state, actions, mutations, lists or children.")];
+  }
+
+  function componentDetails(name, depth, property, link) {
+    const vm = data.vms[name];
+    const summary = el("summary", {}, property ? `${property}: ${name}` : name, " ",
+      vm ? sourceLink(link || vm.link) : null);
+    const details = el("details", { class: "vm", "data-vm": name }, summary);
+    if (!vm) return details;
+    details.addEventListener("toggle", () => {
+      if (!details.open || details.dataset.filled) return;
+      details.dataset.filled = "1";
+      details.append(el("div", {}, vmView(vm, depth + 1)));
+    });
+    return details;
+  }
+
+  function openModal(name, focus = null, push = true) {
+    const vm = data.vms[name];
+    if (!vm) return;
+    if (push && current && current !== name) history.push(current);
+    current = name;
+    document.getElementById("modal-title").textContent = vm.name;
+    document.getElementById("modal-title").append(" ", el("span", { class: `badge${vm.screen ? " screen" : ""}` }, vm.screen ? "screen" : "component"));
+    document.getElementById("modal-spec").textContent = vm.spec;
+    const link = document.getElementById("modal-link");
+    link.replaceChildren(sourceLink(vm.link) || "");
+    document.getElementById("modal-back").hidden = history.length === 0;
+    body.replaceChildren(...vmView(vm, 0));
+    backdrop.classList.add("open");
+    body.scrollTop = 0;
+    if (focus) {
+      const target = body.querySelector(`details.vm[data-vm="${CSS.escape(focus)}"]`);
+      if (target) {
+        target.open = true;
+        target.dispatchEvent(new Event("toggle"));
+        target.scrollIntoView({ block: "center" });
+        target.classList.add("flash");
+      }
+    }
+  }
+  function closeModal() {
+    backdrop.classList.remove("open");
+    history.length = 0;
+    current = null;
+  }
+  document.getElementById("modal-close").addEventListener("click", closeModal);
+  document.getElementById("modal-back").addEventListener("click", () => {
+    const previous = history.pop();
+    if (previous) openModal(previous, null, false);
+  });
+  backdrop.addEventListener("click", (event) => { if (event.target === backdrop) closeModal(); });
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && backdrop.classList.contains("open")) closeModal();
+    else if (event.key === "/" && document.activeElement !== search) { event.preventDefault(); search.focus(); }
+  });
+
+  fit();
+  const initial = new URLSearchParams(location.hash.slice(1)).get("screen");
+  if (initial) openModal(initial);
+})();
+</script>
+</body>
+</html>

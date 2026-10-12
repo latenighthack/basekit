@@ -6,5 +6,5 @@ import com.google.devtools.ksp.processing.SymbolProcessorProvider
 
 class CatalogProcessorProvider : SymbolProcessorProvider {
     override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor =
-        CatalogProcessor(environment.codeGenerator, environment.logger)
+        CatalogProcessor(environment.codeGenerator, environment.logger, environment.options)
 }

@@ -27,10 +27,15 @@ dependencies {
     add("kspCommonMainMetadata", basekitProcessor(":basekit-catalog-ksp", "basekit-catalog-ksp"))
 }
 
+// catalog.sources.yaml records where each entry is declared, relative to the root project.
+extensions.configure<KspExtension> {
+    arg("basekit.catalog.sourceRoot", rootDir.absolutePath)
+}
+
 val generateCatalog = tasks.register<Copy>("generateBasekitCatalog") {
     dependsOn(tasks.matching { it.name == "kspCommonMainKotlinMetadata" })
     from(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/resources")) {
-        include("catalog.yaml")
+        include("catalog.yaml", "catalog.sources.yaml")
     }
     into(layout.buildDirectory.dir("generated/basekit-catalog"))
 }
@@ -48,6 +53,12 @@ val codegen = extensions.create<BasekitCatalogCodegenExtension>("basekitCatalogC
     navigationPackage.convention(
         providers.provider { extensions.getByType<KspExtension>().arguments["Basekit_NavigationPackage"] },
     )
+    graphCatalog.convention(
+        providers.gradleProperty("basekit.catalog.graphInput")
+            .map { layout.projectDirectory.file(it) }
+            .orElse(layout.buildDirectory.file("generated/basekit-catalog/catalog.yaml")),
+    )
+    sourceLink.convention(providers.gradleProperty("basekit.catalog.sourceLink"))
 }
 
 val codegenClasspath = configurations.create("basekitCatalogCodegen") {
@@ -61,6 +72,34 @@ val codegenClasspath = configurations.create("basekitCatalogCodegen") {
     }
 }
 dependencies.add(codegenClasspath.name, basekitProcessor(":basekit-catalog-codegen", "basekit-catalog-codegen"))
+
+// build/generated/basekit-catalog/catalog.html: the navigation graph with every screen, the items in it
+// that navigate and every event; clicking a screen shows its details with links to the source.
+val generateGraph = tasks.register<JavaExec>("generateBasekitCatalogGraph") {
+    group = "basekit"
+    description = "Writes the navigation graph page, catalog.html, from the catalog."
+    classpath = codegenClasspath
+    mainClass.set("com.latenighthack.basekit.catalog.tool.MainKt")
+    dependsOn(generateCatalog)
+    val output = layout.buildDirectory.file("generated/basekit-catalog/catalog.html")
+    val title = project.path.removePrefix(":").ifEmpty { project.name }
+    inputs.file(codegen.graphCatalog).optional()
+    inputs.property("sourceLink", codegen.sourceLink.orElse(""))
+    outputs.file(output)
+    // The processor writes no catalog for a module without screens or components.
+    onlyIf { codegen.graphCatalog.get().asFile.isFile }
+    argumentProviders.add(CommandLineArgumentProvider {
+        buildList {
+            add("graph")
+            add("--catalog"); add(codegen.graphCatalog.get().asFile.absolutePath)
+            add("--out"); add(output.get().asFile.absolutePath)
+            add("--title"); add(title)
+            codegen.sourceLink.orNull?.let { add("--source-link"); add(it) }
+        }
+    })
+}
+
+tasks.matching { it.name == "assemble" }.configureEach { dependsOn(generateGraph) }
 
 tasks.register<JavaExec>("generateFromBasekitCatalog") {
     group = "basekit"
