@@ -71,6 +71,7 @@ include(":basekit-viewmodel-annotations") // viewmodel annotations (KMP)
 include(":basekit-viewmodel-compose") // optional generated Compose host runtime
 include(":basekit-viewmodel")             // viewmodel runtime + platform bindings (KMP, SKIE)
 include(":basekit-viewmodel-ksp")         // KSP processor + platform generators (JVM)
+include(":basekit-catalog-ksp")           // KSP processor writing catalog.yaml (JVM)
 
 // TUI slice — the third codegen slice: generates a TamboUI terminal UI from the ViewModels.
 include(":basekit-tui-annotations") // @TuiScreen / @TuiNavigatesTo link annotations (KMP)

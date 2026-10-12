@@ -6,6 +6,14 @@ All notable changes to basekit are documented here. The format follows
 
 ## Next
 
+- Added the `com.latenighthack.basekit.catalog` plugin and the `basekit-catalog-ksp` processor.
+  `assemble` writes `build/generated/basekit-catalog/catalog.yaml` (schema `catalog/v1`): every
+  screen, component, list, child, navigation edge and referenced type, read from the
+  `@ViewModelSpec` and `@Destination` declarations. Code that catalog/v1 does not allow, such as a
+  mutator with `@NavigateTo`, is written as declared and logged as a warning. See
+  [the catalog guide](docs/guides/catalog.md).
+- `basekit-viewmodel-ksp` and `basekit-ksp` expose `ViewModelExtractor` and `NavigationExtractor`,
+  which build the models their processors generate from. The generated code is unchanged.
 - State and Args classes are always nested in their owning specification interface;
   examples, tests and guides use interface-qualified types such as `SearchViewModel.State`.
 - Viewmodels are explicitly state driven: use pure `StatefulViewModel.update` calls or

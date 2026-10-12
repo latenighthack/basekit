@@ -68,6 +68,7 @@ jobs:
           :basekit-viewmodel:publishAndReleaseToMavenCentral
           :basekit-viewmodel-compose:publishAndReleaseToMavenCentral
           :basekit-viewmodel-ksp:publishAndReleaseToMavenCentral
+          :basekit-catalog-ksp:publishAndReleaseToMavenCentral
           :basekit-tui-annotations:publishAndReleaseToMavenCentral
           :basekit-tui:publishAndReleaseToMavenCentral
           :basekit-tui-ksp:publishAndReleaseToMavenCentral

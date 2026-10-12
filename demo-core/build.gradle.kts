@@ -6,6 +6,7 @@ plugins {
     id("basekit.kmp-library")
     id("com.latenighthack.basekit.navigation")
     id("com.latenighthack.basekit.viewmodel")
+    id("com.latenighthack.basekit.catalog")
     alias(libs.plugins.ksp)
     alias(libs.plugins.skie)
     alias(libs.plugins.compose.compiler)
@@ -79,3 +80,22 @@ kotlin {
 composeCompiler {
     targetKotlinPlatforms.set(setOf(org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType.androidJvm))
 }
+
+// The demo's catalog.yaml is checked in as catalog.golden.yaml; `check` fails when the generated
+// catalog differs. After an intended change, copy build/generated/basekit-catalog/catalog.yaml over it.
+val verifyDemoCatalog = tasks.register("verifyDemoCatalog") {
+    val generated = layout.buildDirectory.file("generated/basekit-catalog/catalog.yaml")
+    val golden = layout.projectDirectory.file("catalog.golden.yaml")
+    dependsOn("generateBasekitCatalog")
+    inputs.file(generated)
+    inputs.file(golden)
+    doLast {
+        if (generated.get().asFile.readText() != golden.asFile.readText()) {
+            throw GradleException(
+                "Generated catalog.yaml differs from demo-core/catalog.golden.yaml; diff " +
+                    "${generated.get().asFile} against it",
+            )
+        }
+    }
+}
+tasks.named("check") { dependsOn(verifyDemoCatalog) }

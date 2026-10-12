@@ -74,8 +74,8 @@ kotlin.sourceSets.named("main") {
     kotlin.srcDir(generateVersions)
 }
 
-// The three consumer plugins are precompiled script plugins under src/main/kotlin
-// (com.latenighthack.basekit.{navigation,viewmodel,tui}.gradle.kts); `kotlin-dsl` registers each as
+// The four consumer plugins are precompiled script plugins under src/main/kotlin
+// (com.latenighthack.basekit.{navigation,viewmodel,tui,catalog}.gradle.kts); `kotlin-dsl` registers each as
 // a plugin whose id is its file name, so no explicit gradlePlugin { plugins { } } block is needed.
 
 // Publish the plugin jar + one marker artifact per plugin id, signed, to Maven Central — the same
