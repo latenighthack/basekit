@@ -13,7 +13,7 @@ With the catalog plugin applied:
 ```kotlin
 plugins {
     kotlin("multiplatform")
-    id("com.latenighthack.basekit.catalog") version "0.3.2"
+    id("com.latenighthack.basekit.catalog") version "0.4.0"
 }
 
 basekitCatalogCodegen {

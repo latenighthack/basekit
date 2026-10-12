@@ -8,7 +8,7 @@ and child panes, where each action navigates, and the types those refer to. It i
 ```kotlin
 plugins {
     kotlin("multiplatform")
-    id("com.latenighthack.basekit.catalog") version "0.3.2"
+    id("com.latenighthack.basekit.catalog") version "0.4.0"
 }
 ```
 

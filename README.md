@@ -52,7 +52,7 @@ Other implementation guides cover [IDs](docs/guides/ids.md),
 
 ## Status
 
-Pre-1.0 (`0.3.2`). No binary-compatibility guarantee yet; the public API may change between minor
+Pre-1.0 (`0.4.0`). No binary-compatibility guarantee yet; the public API may change between minor
 versions. Supported targets: `jvm`, `android`, `iosArm64`, `iosX64`, `iosSimulatorArm64`,
 `macosArm64`, `macosX64`, `js` (IR). The `tui` slice is a preview and depends on a snapshot build of
 TamboUI (see below).
@@ -90,13 +90,13 @@ Apply the convention plugin for each slice you use — it turns on KSP and wires
 // build.gradle.kts (a KMP module)
 plugins {
     kotlin("multiplatform")
-    id("com.latenighthack.basekit.navigation") version "0.3.2"
-    id("com.latenighthack.basekit.viewmodel") version "0.3.2"
+    id("com.latenighthack.basekit.navigation") version "0.4.0"
+    id("com.latenighthack.basekit.viewmodel") version "0.4.0"
 }
 kotlin {
     sourceSets.commonMain.dependencies {
-        implementation("com.latenighthack.basekit:basekit-navigation:0.3.2")
-        implementation("com.latenighthack.basekit:basekit-viewmodel:0.3.2")
+        implementation("com.latenighthack.basekit:basekit-navigation:0.4.0")
+        implementation("com.latenighthack.basekit:basekit-viewmodel:0.4.0")
     }
 }
 ksp {
@@ -262,7 +262,7 @@ this only if you need to customize it. This is not more than the plugins do:
 **navigation** (pure common types, generated in the metadata pass):
 
 ```kotlin
-dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-ksp:0.3.2") }
+dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-ksp:0.4.0") }
 kotlin.sourceSets.named("commonMain") {
     kotlin.srcDir(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/kotlin"))
 }
@@ -275,11 +275,11 @@ tasks.matching { it.name.startsWith("ksp") && it.name != "kspCommonMainKotlinMet
 **viewmodel** (per-platform code, so add to every target's ksp configuration):
 
 ```kotlin
-dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-viewmodel-ksp:0.3.2") }
+dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-viewmodel-ksp:0.4.0") }
 kotlin.targets.configureEach {
     if (name == "metadata") return@configureEach
     project.dependencies.add("ksp" + name.replaceFirstChar { it.uppercase() },
-        "com.latenighthack.basekit:basekit-viewmodel-ksp:0.3.2")
+        "com.latenighthack.basekit:basekit-viewmodel-ksp:0.4.0")
 }
 ```
 
@@ -360,7 +360,7 @@ maven("https://central.sonatype.com/repository/maven-snapshots/") { mavenContent
 ```
 ```kotlin
 // build.gradle.kts (a JVM module)
-implementation("com.latenighthack.basekit:basekit-tui:0.3.2")
+implementation("com.latenighthack.basekit:basekit-tui:0.4.0")
 implementation("dev.tamboui:tamboui-toolkit:0.5.0-SNAPSHOT")
 runtimeOnly("dev.tamboui:tamboui-jline3-backend:0.5.0-SNAPSHOT")
 ```
@@ -516,7 +516,7 @@ availability does not qualify the separate convenience-view lifecycle.
 ### Generated Android Compose hosts
 
 Compose is optional. Apply Kotlin's Compose compiler plugin, add
-`com.latenighthack.basekit:basekit-viewmodel-compose:0.3.2` to `androidMain`, and set
+`com.latenighthack.basekit:basekit-viewmodel-compose:0.4.0` to `androidMain`, and set
 `arg("basekit.viewmodel.compose", "true")`. In a KMP module, restrict the compiler plugin to Android:
 
 ```kotlin
