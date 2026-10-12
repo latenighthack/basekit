@@ -35,7 +35,7 @@ class SwiftUIObservableGenerator(
             val className = "Observable${vm.simpleName}"
 
             val publishedProps = vm.stateProperties.joinToString("\n") {
-                val st = it.swiftBindingType()
+                val st = it.swiftObservableBindingType()
                 "    @Published public private(set) var ${it.name.swiftDeclName()}: ${st.type}"
             }
 
@@ -56,7 +56,7 @@ class SwiftUIObservableGenerator(
             }
 
             val mutatorMethods = vm.mutators.joinToString("\n\n") { mutator ->
-                val st = swiftType(mutator.type)
+                val st = swiftObservableType(mutator.type)
                 """
                 |    public func ${mutator.name.swiftDeclName()}(_ ${mutator.paramName.swiftDeclName()}: ${st.type}) async throws {
                 |        try await viewModel.${mutator.name.swiftSourceRef()}(${mutator.paramName.swiftSourceRef()}: ${mutator.paramName.swiftDeclName()})
@@ -77,7 +77,7 @@ class SwiftUIObservableGenerator(
                         // its `[String]` read side can't pair with a mutator whose param is still erased.
                         it.listElementQualifiedName == null
                 } ?: return@mapNotNull null
-                val st = prop.swiftBindingType()
+                val st = prop.swiftObservableBindingType()
                 val declProp = prop.name.swiftDeclName()
                 val declMutator = mutator.name.swiftDeclName()
                 """

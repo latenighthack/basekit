@@ -169,16 +169,21 @@ fun String.toListCaseName(): String =
     removeSuffix("ViewModel").replaceFirstChar { it.lowercase() }
 
 /** Precise mapping for resolved exported types. Collection mappings mirror Kotlin/Native bridges. */
-fun swiftType(type: VmType): SwiftType {
+fun swiftType(type: VmType): SwiftType = swiftType(type, enhancedEnumLists = false)
+
+/** SwiftUI reads SKIE-enhanced state and calls enhanced methods; KVO retains Objective-C arrays. */
+fun swiftObservableType(type: VmType): SwiftType = swiftType(type, enhancedEnumLists = true)
+
+private fun swiftType(type: VmType, enhancedEnumLists: Boolean): SwiftType {
     val qn = type.qualifiedName
     if (qn in setOf("kotlin.collections.List", "kotlin.collections.MutableList")) {
         val element = type.arguments.singleOrNull() ?: error("Missing list element type")
         require(!element.nullable && element.arguments.isEmpty()) { "Nullable or nested Swift collection elements require an exported boundary type" }
         val mapped = when {
-            element.enumCases != null -> "__" + element.swiftName
+            element.enumCases != null -> if (enhancedEnumLists) element.swiftName else "__" + element.swiftName
             element.qualifiedName in setOf("kotlin.Int", "kotlin.Long", "kotlin.Short", "kotlin.Byte", "kotlin.Boolean", "kotlin.Float", "kotlin.Double") ->
                 swiftType(element.qualifiedName, true).type.removeSuffix("?")
-            else -> swiftType(element).type
+            else -> swiftType(element, enhancedEnumLists).type
         }
         return SwiftType("[$mapped]" + if (type.nullable) "?" else "", "nil")
     }
@@ -191,6 +196,10 @@ fun swiftType(type: VmType): SwiftType {
     return SwiftType(type.swiftName + if (type.nullable) "?" else "", "nil")
 }
 
-fun VmStateProperty.swiftBindingType(): SwiftType =
-    swiftType(if (type.arguments.isEmpty() && listElementQualifiedName != null)
-        type.copy(arguments = listOf(VmType(listElementQualifiedName))) else type)
+private fun VmStateProperty.swiftBindingTypeInput(): VmType =
+    if (type.arguments.isEmpty() && listElementQualifiedName != null)
+        type.copy(arguments = listOf(VmType(listElementQualifiedName))) else type
+
+fun VmStateProperty.swiftBindingType(): SwiftType = swiftType(swiftBindingTypeInput())
+
+fun VmStateProperty.swiftObservableBindingType(): SwiftType = swiftObservableType(swiftBindingTypeInput())

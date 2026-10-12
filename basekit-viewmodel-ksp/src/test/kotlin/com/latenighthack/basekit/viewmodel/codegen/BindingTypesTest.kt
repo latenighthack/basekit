@@ -3,6 +3,38 @@ package com.latenighthack.basekit.viewmodel.codegen
 import kotlin.test.*
 
 class BindingTypesTest {
+    @Test fun swiftUiEnumListsKeepEnhancedElementsAndKvoKeepsObjectiveCElements() {
+        val tier = VmType("sample.AuthorizationTier", swiftName = "AuthorizationTier", enumCases = listOf("ALWAYS", "ONCE", "NEVER"))
+        for (collection in listOf("kotlin.collections.List", "kotlin.collections.MutableList")) {
+            for (nullable in listOf(false, true)) {
+                val type = VmType(collection, nullable = nullable, arguments = listOf(tier))
+                val suffix = if (nullable) "?" else ""
+                assertEquals("[AuthorizationTier]$suffix", swiftObservableType(type).type)
+                assertEquals("[__AuthorizationTier]$suffix", swiftType(type).type)
+            }
+        }
+    }
+
+    @Test fun swiftUiCollectionMappingPreservesBoxingAndElementGuards() {
+        val stringList = VmType("kotlin.collections.List", arguments = listOf(VmType("kotlin.String")))
+        assertEquals(swiftType(stringList), swiftObservableType(stringList))
+        for (primitive in listOf("kotlin.Int", "kotlin.Long", "kotlin.Short", "kotlin.Byte", "kotlin.Boolean", "kotlin.Float", "kotlin.Double")) {
+            val list = VmType("kotlin.collections.List", arguments = listOf(VmType(primitive)))
+            assertEquals(swiftType(list), swiftObservableType(list))
+        }
+        val tier = VmType("sample.Tier", enumCases = listOf("ON", "OFF"))
+        assertEquals(swiftType(tier), swiftObservableType(tier))
+        assertFailsWith<IllegalArgumentException> {
+            swiftObservableType(VmType("kotlin.collections.List", arguments = listOf(tier.copy(nullable = true))))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            swiftObservableType(VmType("kotlin.collections.List", arguments = listOf(stringList)))
+        }
+        assertFailsWith<IllegalStateException> {
+            swiftObservableType(VmType("kotlin.collections.List"))
+        }
+    }
+
     @Test fun exportedSwiftTypesPreserveNamesAndNullability() {
         val custom = VmType("sample.Outer.Message", swiftName = "OuterMessage")
         assertEquals("OuterMessage", swiftType(custom).type)
