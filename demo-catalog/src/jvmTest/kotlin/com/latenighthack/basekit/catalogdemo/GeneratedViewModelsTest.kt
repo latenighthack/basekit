@@ -15,7 +15,7 @@ import kotlin.test.assertIs
  */
 class GeneratedViewModelsTest {
 
-    private class RecordingNavigator : HomeNavigator, RoomNavigator {
+    private class RecordingNavigator : HomeNavigator, RoomNavigator, SettingsNavigator {
         val calls = mutableListOf<String>()
 
         override fun close(context: Any?) {
@@ -24,6 +24,10 @@ class GeneratedViewModelsTest {
 
         override fun navigateToRoom(args: IRoomViewModel.Args, source: RoomNavigationTarget.RoomSource, context: Any?) {
             calls += "Room(${args.roomId}) from $source"
+        }
+
+        override fun navigateToHome(args: IHomeViewModel.Args, context: Any?) {
+            calls += "Home"
         }
 
         override fun navigateToSettings(args: ISettingsViewModel.Args, context: Any?) {
@@ -101,6 +105,14 @@ class GeneratedViewModelsTest {
         val settings = component.createSettingsViewModel(navigator)
         assertEquals(Text(value = "", style = Text.Style.BODY), settings.profile.initialState.name)
         assertEquals(Button.Style.PRIMARY, settings.initialState.signOutButton.style)
+    }
+
+    @Test
+    fun redirectsCallTheNavigatorWithTheRedirectSource() = runTest {
+        val navigator = RecordingNavigator()
+        (component.createRoomViewModel(IRoomViewModel.Args("room-1", null), navigator) as RoomViewModel).redirectToHome()
+        (component.createSettingsViewModel(navigator) as SettingsViewModel).redirectToRoom()
+        assertEquals(listOf("Home", "Room() from SETTINGS_REDIRECT"), navigator.calls)
     }
 
     @Test

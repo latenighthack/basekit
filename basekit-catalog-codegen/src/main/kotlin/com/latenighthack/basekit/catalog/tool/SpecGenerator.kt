@@ -36,6 +36,10 @@ class SpecGenerator(private val analysis: CatalogAnalysis, private val types: Ty
             imports += Symbols.DESTINATION
             val derived = spec.toCatalogName()
             if (derived == vm.name) appendLine("@Destination") else appendLine("@Destination(navName = ${kotlinString(vm.name.toNavName())})")
+            if (vm.redirectsTo.isNotEmpty()) {
+                imports += Symbols.REDIRECTS_TO
+                appendLine("@RedirectsTo(${vm.redirectsTo.joinToString(", ") { "${specReference(it, imports)}::class" }})")
+            }
         }
         imports += Symbols.VIEWMODEL_SPEC
         appendLine("@ViewModelSpec")

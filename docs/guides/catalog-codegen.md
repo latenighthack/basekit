@@ -121,6 +121,9 @@ class HomeViewModel @Inject constructor(
   - The `<Target>Source` argument is passed when the target has more than one call site, as in
     basekit's generated navigators.
 - A mutation with `binds` updates that State property.
+- A screen with `redirects_to` gets `@RedirectsTo` on its spec and a `redirectTo<Target>()` function
+  per target that makes the navigator call. Nothing calls it: when to redirect is the ViewModel's
+  decision.
 - Other actions and mutations do nothing.
 - Initial State uses defaults: `""`, `0`, `false`, `null`, empty collections, the first enum
   entry or sealed case, and a constructor call for data classes. External types get

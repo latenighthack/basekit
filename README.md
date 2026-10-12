@@ -297,6 +297,7 @@ the convention plugins under [`basekit-gradle-plugin/`](basekit-gradle-plugin/sr
 | `@Route(path)` | navigation | `Args` class | Deep-link template, e.g. `/detail/{id}` |
 | `@RouteArg` | navigation | `Args` property | Binds a path param from the URL (must be `String`) |
 | `@NavigateTo(target)` | navigation | function | Declares a navigation edge from this action to `target` |
+| `@RedirectsTo(targets)` | navigation | interface | Destinations this `@Destination` may replace itself with, without a user action; each joins its navigator with source `<SCREEN>_REDIRECT` |
 | `@ViewModelSpec(webPath)` | viewmodel | interface | Marks a ViewModel; drives the platform binding codegen |
 | `@ViewModelList(possibleTypes)` | viewmodel | property | A `Flow<Delta<ChildVm>>`; `possibleTypes` is the exact, non-overlapping closed child set used for list-specific Apple enums and React `kind` handles |
 | `@ChildViewModel` | viewmodel | property | A stable, non-null, read-only nested child ViewModel |

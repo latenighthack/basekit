@@ -112,6 +112,18 @@ class ImplGenerator(
             val bound = mutation.binds?.takeIf { binds -> vm.state.any { it.name == binds && it.type == mutation.param.type } }
             add(function(vm, mutation.name, mutation.param, bound, if (hasNavigator) mutation.navigatesTo else emptyList(), imports))
         }
+        if (hasNavigator) vm.redirectsTo.forEach { add(redirect(vm, analysis.vm(it), imports)) }
+    }
+
+    /**
+     * `redirectTo<Target>()`: the navigator call for one `@RedirectsTo` target. Nothing calls it; the
+     * ViewModel decides when to replace itself.
+     */
+    private fun redirect(vm: CatalogVm, target: CatalogVm, imports: MutableSet<String>): String {
+        val call = navigate(vm, REDIRECT_METHOD, target, imports)
+        val body = if ("current." in call) "withState { current ->\n${call.indent(4)}\n}" else call
+        return "/** Replaces this screen with ${target.name}; call it when the ViewModel decides to redirect. */\n" +
+            "suspend fun redirectTo${target.name}() {\n${body.indent(4)}\n}"
     }
 
     private fun list(vm: CatalogVm, list: ListDef, imports: MutableSet<String>): String {

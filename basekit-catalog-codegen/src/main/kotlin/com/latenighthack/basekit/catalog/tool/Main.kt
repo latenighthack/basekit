@@ -88,10 +88,14 @@ private fun parse(args: List<String>, options: Set<String>): Arguments {
     return Arguments(values, force)
 }
 
-private fun read(catalog: File): CatalogDocument = try {
-    CatalogReader.read(catalog.readText())
-} catch (error: CatalogException) {
-    throw CatalogException("$catalog: ${error.message}")
+private fun read(catalog: File): CatalogDocument {
+    val document = try {
+        CatalogReader.read(catalog.readText())
+    } catch (error: CatalogException) {
+        throw CatalogException("$catalog: ${error.message}")
+    }
+    document.warnings.forEach { System.err.println("$catalog: warning: ignored unknown key $it") }
+    return document
 }
 
 private fun generate(arguments: Arguments) {

@@ -29,6 +29,15 @@ public annotation class RouteArg
 @Repeatable
 public annotation class NavigateTo(val target: KClass<*>)
 
+/**
+ * Declares the destinations this `@Destination` may replace itself with without a user action, such as
+ * an entry screen that sends the user to the right first step, or a screen that leaves when what it
+ * shows is deleted. Each target joins the destination's generated navigator like a `@NavigateTo`
+ * edge, with the source entry `<SCREEN>_REDIRECT`; which target to open is the ViewModel's decision.
+ */
+@Target(AnnotationTarget.CLASS)
+public annotation class RedirectsTo(vararg val targets: KClass<*>)
+
 /** Excludes an element from codegen. */
 @Target(AnnotationTarget.FUNCTION, AnnotationTarget.PROPERTY, AnnotationTarget.CLASS)
 public annotation class CodegenIgnore

@@ -26,6 +26,7 @@ import com.latenighthack.basekit.navigation.codegen.toUpperCamelCase as snakeToU
 private const val VIEWMODEL_SPEC = "com.latenighthack.basekit.viewmodel.annotations.ViewModelSpec"
 private const val VIEWMODEL_LIST = "com.latenighthack.basekit.viewmodel.annotations.ViewModelList"
 private const val CODEGEN_IGNORE = "com.latenighthack.basekit.viewmodel.annotations.CodegenIgnore"
+private const val REDIRECTS_TO = "com.latenighthack.basekit.navigation.annotations.RedirectsTo"
 private const val FLOW = "kotlinx.coroutines.flow.Flow"
 private const val DELTA = "com.latenighthack.deltalist.Delta"
 private const val SECTIONED_DELTA = "com.latenighthack.deltalist.SectionedDelta"
@@ -130,6 +131,14 @@ class CatalogExtractor(
         vms.forEach { vm ->
             val declaration = specs[vm.spec]?.declaration ?: classDeclaration(vm.spec) ?: return@forEach
             record(vm.name, declaration)
+            if (vm.redirectsTo.isNotEmpty()) {
+                record(
+                    "${vm.name}.redirects_to",
+                    declaration.annotations.firstOrNull {
+                        it.annotationType.resolve().declaration.qualifiedName?.asString() == REDIRECTS_TO
+                    },
+                )
+            }
             val properties = declaration.getAllProperties().associateBy { it.simpleName.asString() }
             val functions = declaration.getAllFunctions().associateBy { it.simpleName.asString() }
             destinations[vm.spec]?.argsQualifiedName?.let(::classDeclaration)?.let { args ->
@@ -204,11 +213,12 @@ class CatalogExtractor(
                 spec = destination.qualifiedName,
                 navigation = navigation,
                 actions = destination.edges
-                    .filter { it.sourceNavName == destination.navName }
+                    .filter { it.sourceNavName == destination.navName && !it.redirect }
                     .groupBy { it.methodName }
                     .map { (method, methodEdges) -> CatalogAction(method, targets(methodEdges)) },
+                redirectsTo = targets(destination.edges.filter { it.redirect }),
             )
-        return viewModel(spec, edgesBySource, navigation)
+        return viewModel(spec, edgesBySource, navigation).copy(redirectsTo = targets(destination.edges.filter { it.redirect }))
     }
 
     private fun viewModel(
@@ -217,7 +227,7 @@ class CatalogExtractor(
         navigation: CatalogNavigation?,
     ): CatalogViewModel {
         val vm = spec.info
-        val ownEdges = edgesBySource[navName(vm.qualifiedName, vm.simpleName)].orEmpty()
+        val ownEdges = edgesBySource[navName(vm.qualifiedName, vm.simpleName)].orEmpty().filterNot { it.redirect }
         val edgesByMethod = ownEdges.groupBy { it.methodName }
 
         val actions = vm.actions.map { CatalogAction(it.name, targets(edgesByMethod[it.name].orEmpty())) }

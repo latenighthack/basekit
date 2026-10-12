@@ -4,6 +4,25 @@ All notable changes to basekit are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor versions may break API).
 
+## Next
+
+- Added `@RedirectsTo(targets)` for a `@Destination` that replaces itself with another screen without
+  a user action, such as an entry screen sending the user to the right first step. Each target joins
+  the destination's generated navigator like a `@NavigateTo` edge, with source entry
+  `<SCREEN>_REDIRECT`. The catalog writes it as `redirects_to`; the code generator emits the
+  annotation and a `redirectTo<Target>()` function per target; the navigation graph page draws each
+  redirect as its own edge and lists them in the screen details.
+- The catalog tools warn about keys they don't know instead of ignoring them silently.
+- The navigation graph page places screens by tap distance from the entry screen instead of by
+  longest path. On Picnic's catalog this cuts 36 mostly single-screen columns to 17, and the canvas
+  goes from about 10,700 × 1,200 to about 3,400 × 3,200. In graphs of 12 or more boxes, edges into
+  a screen opened by 6 or more events become short `→ Name` stubs; the full lines show on hover or
+  with **All edges**.
+- Clicking a screen in the navigation graph page redraws the graph around it: the screens that open it
+  on the left (only their relevant rows), the screen in the middle, the screens it opens on the right.
+  **Reset view** returns to the whole graph and **Details** opens the screen's details; each focus is
+  a `#focus=Name` URL, so the back button and links work.
+
 ## [0.4.0] — 2026-10-12
 
 - Added the navigation graph page. `basekit-catalog-codegen graph` turns a catalog into one

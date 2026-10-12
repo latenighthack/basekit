@@ -91,6 +91,32 @@ repository, or store navigator closures in immutable state. A list row or child
 declares `@NavigateTo` on its own action and receives its destination's navigator;
 see [child viewmodels](child-viewmodels.md#declare-navigation-on-the-row-that-triggers-it).
 
+### Redirects
+
+Some navigation happens without a user action: an entry screen that sends the user
+to the right first step, or a screen that leaves when what it shows is deleted.
+Declare those targets on the destination with `@RedirectsTo`:
+
+```kotlin
+@Destination
+@RedirectsTo(SignInPasskeyViewModel::class, SignInEmailViewModel::class)
+@ViewModelSpec
+interface SignInViewModel : NavigationDestination<SignInViewModel.Args>, ViewModel<SignInViewModel.State>
+```
+
+Each target joins the destination's generated navigator like a `@NavigateTo` edge.
+Its call site is the destination's `redirect`, so where the target has several call
+sites the source entry is `<SCREEN>_REDIRECT`:
+
+```kotlin
+navigator.navigateToSignInPasskey(SignInPasskeyViewModel.Args(), SignInPasskeyNavigationTarget.SignInPasskeySource.SIGN_IN_REDIRECT)
+```
+
+Which target to open, and when, is the ViewModel's decision; like `@NavigateTo`, the
+annotation only permits the edge. `@RedirectsTo` belongs on a `@Destination`; on any
+other type it has no effect and the build warns. The catalog records it as
+`redirects_to`.
+
 ## Keep arguments and results typed
 
 Arguments carry minimal typed context such as `ItemId`, not an entire mutable

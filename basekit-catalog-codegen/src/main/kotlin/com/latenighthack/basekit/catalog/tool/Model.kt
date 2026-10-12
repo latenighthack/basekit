@@ -5,6 +5,8 @@ data class CatalogDocument(
     val screens: List<CatalogVm>,
     val components: List<CatalogVm>,
     val types: List<CatalogTypeDef>,
+    /** Keys the reader does not know, by YAML path; they are ignored. */
+    val warnings: List<String> = emptyList(),
 )
 
 /** A `name: Type` pair; for `children` the type is a component name. */
@@ -42,6 +44,8 @@ data class CatalogVm(
     val mutations: List<Mutation>,
     val lists: List<ListDef>,
     val children: List<Field>,
+    /** Screens this screen may replace itself with, without a tap (`redirects_to`, `@RedirectsTo`). */
+    val redirectsTo: List<String> = emptyList(),
 ) {
     val isScreen: Boolean get() = navigation != null
     val packageName: String get() = spec.substringBeforeLast('.', "")

@@ -8,7 +8,10 @@ data class Marker(val element: String, val interfaceName: String, val owner: Cat
     val qualifiedName: String get() = listOf(owner.packageName, interfaceName).filter { it.isNotEmpty() }.joinToString(".")
 }
 
-/** One `navigates_to` entry: [source] declares [method], which opens [target]. */
+/** The method name basekit gives a `@RedirectsTo` edge; its source entry is `<SCREEN>_REDIRECT`. */
+const val REDIRECT_METHOD = "redirect"
+
+/** One `navigates_to` or `redirects_to` entry: [source] declares [method], which opens [target]. */
 data class Edge(val source: CatalogVm, val method: String, val target: CatalogVm)
 
 /**
@@ -54,6 +57,9 @@ class CatalogAnalysis(val document: CatalogDocument) {
                         throw CatalogException("$path.$method.navigates_to: \"$it\" is not a screen")
                     }
                 }
+            vm.redirectsTo.filterNot { it in screenNames }.forEach {
+                throw CatalogException("$path.redirects_to: \"$it\" is not a screen")
+            }
             vm.children.forEach { child ->
                 if (child.type !in componentNames) throw CatalogException("$path.children.${child.name}: \"${child.type}\" is not a component")
             }
@@ -82,8 +88,10 @@ class CatalogAnalysis(val document: CatalogDocument) {
 
         // Only destinations own a navigator, so only edges a screen reaches can be called.
         val reachable = screenNames + screens.flatMap { embeddedComponents(it) }.map { it.name }
+        // A redirect is an edge from the screen itself with method `redirect`, as basekit's
+        // @RedirectsTo produces, so it counts as a call site of its target.
         reachableEdges = all.filter { it.name in reachable }.flatMap { vm ->
-            (vm.actions.map { it.name to it.navigatesTo } + vm.mutations.map { it.name to it.navigatesTo })
+            (listOf(REDIRECT_METHOD to vm.redirectsTo) + vm.actions.map { it.name to it.navigatesTo } + vm.mutations.map { it.name to it.navigatesTo })
                 .flatMap { (method, targets) -> targets.map { Edge(vm, method, vms.getValue(it)) } }
         }
 

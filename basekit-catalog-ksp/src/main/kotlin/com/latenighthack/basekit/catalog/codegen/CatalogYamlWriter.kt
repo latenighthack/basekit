@@ -73,6 +73,7 @@ object CatalogYamlWriter {
             appendLine("      route_args: ${inlineList(navigation.routeArgs)}")
             appendLine("      response: ${navigation.response?.let(::scalar) ?: "null"}")
         }
+        if (vm.redirectsTo.isNotEmpty()) appendLine("    redirects_to: ${inlineList(vm.redirectsTo)}")
         vm.identity?.let { appendLine("    identity: ${scalar(it)}") }
 
         fun section(present: Boolean, body: StringBuilder.() -> Unit) {

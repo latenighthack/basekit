@@ -24,6 +24,8 @@ data class CatalogViewModel(
     val mutations: List<CatalogMutation> = emptyList(),
     val lists: List<CatalogList> = emptyList(),
     val children: List<CatalogField> = emptyList(),
+    /** `@RedirectsTo` targets: screens this screen replaces itself with without a user action. */
+    val redirectsTo: List<String> = emptyList(),
 )
 
 /** A `name: Type` pair. For `children`, the type is a component name. */

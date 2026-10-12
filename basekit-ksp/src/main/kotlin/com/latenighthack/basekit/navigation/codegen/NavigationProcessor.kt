@@ -13,6 +13,10 @@ internal const val DESTINATION_ANNOTATION = "com.latenighthack.basekit.navigatio
 internal const val ROUTE_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.Route"
 internal const val ROUTE_ARG_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.RouteArg"
 internal const val NAVIGATE_TO_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.NavigateTo"
+internal const val REDIRECTS_TO_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.RedirectsTo"
+
+/** The method name of a `@RedirectsTo` edge, so its source entry is `<SCREEN>_REDIRECT`. */
+const val REDIRECT_METHOD = "redirect"
 internal const val CHILD_VIEWMODEL_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ChildViewModel"
 internal const val VIEWMODEL_LIST_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelList"
 internal const val VIEWMODEL_SPEC_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelSpec"
@@ -32,8 +36,16 @@ private const val SWIFT_FRAMEWORK_IMPORTS_OPTION = "basekit.navigation.swiftFram
  * A `@NavigateTo` edge from an action to a target destination. [sourceNavName] names the spec that
  * declares the action: the destination itself, or a list row / child spec it embeds. It forms the
  * `<Target>Source` entry, so two rows that each declare `onItemTapped` stay distinct call sites.
+ *
+ * A `@RedirectsTo` target is an edge too, with [redirect] set and [methodName] [REDIRECT_METHOD]: the
+ * destination replaces itself without a user action.
  */
-data class NavEdge(val sourceNavName: String, val methodName: String, val targetQualifiedName: String)
+data class NavEdge(
+    val sourceNavName: String,
+    val methodName: String,
+    val targetQualifiedName: String,
+    val redirect: Boolean = false,
+)
 
 /** Everything the generators need to know about one `@Destination`. */
 data class DestinationInfo(

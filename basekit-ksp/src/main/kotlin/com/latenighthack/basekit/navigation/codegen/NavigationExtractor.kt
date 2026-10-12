@@ -35,6 +35,15 @@ class NavigationExtractor(private val logger: KSPLogger) {
         val reached = mutableSetOf<String>()
         val destinations = symbols.map { buildDestination(it, subtypesBySupertype, reached) }
         warnUnreachableEdges(resolver, reached)
+        resolver.getSymbolsWithAnnotation(REDIRECTS_TO_ANNOTATION)
+            .filterIsInstance<KSClassDeclaration>()
+            .filter { declaration -> declaration.annotations.none { it.qualifiedName() == DESTINATION_ANNOTATION } }
+            .forEach { declaration ->
+                logger.warn(
+                    "@RedirectsTo on ${declaration.simpleName.asString()} has no effect: only a @Destination redirects",
+                    declaration,
+                )
+            }
 
         return NavigationGraph(destinations, symbols.mapNotNull { it.containingFile })
     }
@@ -137,7 +146,7 @@ class NavigationExtractor(private val logger: KSPLogger) {
         val navName = navNameOverride ?: simpleName.toDestinationNavName()
 
         val visited = mutableSetOf<String>()
-        val edges = collectEdges(declaration, navName, subtypesBySupertype, visited)
+        val edges = redirectEdges(declaration, navName) + collectEdges(declaration, navName, subtypesBySupertype, visited)
         reached += visited
 
         return DestinationInfo(
@@ -153,6 +162,18 @@ class NavigationExtractor(private val logger: KSPLogger) {
             edges = edges,
         )
     }
+
+    /** One edge per `@RedirectsTo` target on the destination itself, in declaration order. */
+    private fun redirectEdges(declaration: KSClassDeclaration, navName: String): List<NavEdge> =
+        declaration.annotations
+            .filter { it.qualifiedName() == REDIRECTS_TO_ANNOTATION }
+            .flatMap { annotation ->
+                (annotation.arguments.firstOrNull { it.name?.asString() == "targets" }?.value as? List<*>).orEmpty()
+            }
+            .mapNotNull { (it as? KSType)?.declaration?.qualifiedName?.asString() }
+            .distinct()
+            .map { NavEdge(navName, REDIRECT_METHOD, it, redirect = true) }
+            .toList()
 
     /**
      * Collects the `@NavigateTo` edges declared on [declaration] plus those on any viewmodel it

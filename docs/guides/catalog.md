@@ -51,6 +51,7 @@ screens:
       route: <"/path/{arg}" | null>
       route_args: [<name>]
       response: <Type | null>
+    redirects_to: [<Name>]
     identity: <prop>
     state:
       <prop>: <Type>
@@ -79,6 +80,10 @@ types:
 
 Empty sections are left out.
 
+`redirects_to` lists the screens a screen may replace itself with, without a tap (an entry screen
+sending the user to the right first step). It comes from `@RedirectsTo` on the destination; see
+[redirects](navigation.md#redirects).
+
 ### Names
 
 A screen or component is named by its navigation name in UpperCamelCase: `IHomeViewModel` and
@@ -99,6 +104,7 @@ Types use their simple Kotlin names, such as `String?` or `List<RecentMessageMod
 | `navigation.route`      | `@Route.path` on the `Args` class, falling back to `@Destination.webPath`.               |
 | `navigation.route_args` | The `Args` properties marked `@RouteArg`.                                                |
 | `navigation.response`   | `R` of `RespondingDestination<Args, R>`.                                                 |
+| `redirects_to`          | `@RedirectsTo` on the destination.                                                       |
 | `identity`              | The `@ViewModelIdentity` property.                                                       |
 | `state`                 | The properties of the spec's `State`.                                                    |
 | `actions`               | Zero-argument suspend functions.                                                         |

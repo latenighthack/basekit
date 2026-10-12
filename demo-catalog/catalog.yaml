@@ -69,6 +69,7 @@ screens:
       route: "/rooms/{roomId}"
       route_args: [roomId]
       response: null
+    redirects_to: [Home]
 
     state:
       title: String
@@ -97,6 +98,7 @@ screens:
       route: "/settings"
       route_args: []
       response: null
+    redirects_to: [Room]
 
     state:
       version: String

@@ -9,7 +9,7 @@
 :root {
   --bg: #f6f6f8; --panel: #ffffff; --text: #1d1d22; --muted: #686876; --border: #d8d8e0;
   --node: #ffffff; --node-head: #edf1fb; --accent: #3466d6; --accent-soft: rgba(52, 102, 214, .12);
-  --edge: #9b9bab; --mutation: #b36b1e; --match: #d9541e; --chip: #eef0f6;
+  --edge: #9b9bab; --mutation: #b36b1e; --redirect: #7c4dbd; --match: #d9541e; --chip: #eef0f6;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
@@ -17,7 +17,7 @@
   :root {
     --bg: #141418; --panel: #1d1d23; --text: #ececf1; --muted: #9c9cab; --border: #33333d;
     --node: #1f1f26; --node-head: #262b3b; --accent: #7ea4ff; --accent-soft: rgba(126, 164, 255, .16);
-    --edge: #6d6d7c; --mutation: #e3a253; --match: #ff8a55; --chip: #2a2a33;
+    --edge: #6d6d7c; --mutation: #e3a253; --redirect: #b18cf0; --match: #ff8a55; --chip: #2a2a33;
   }
 }
 * { box-sizing: border-box; }
@@ -58,14 +58,36 @@ svg text { fill: var(--text); font-family: var(--font); }
 .node .event-row.hl .row-bg { fill: var(--accent-soft); }
 .node .port { fill: var(--edge); }
 .node .event-row.mutation .port { fill: var(--mutation); }
+.node .event-row.redirect .port { fill: var(--redirect); }
+.node .event-row.redirect .event { fill: var(--redirect); }
 .node:hover .box, .node.hl .box { stroke: var(--accent); stroke-width: 2; }
 .node.match .box { stroke: var(--match); stroke-width: 3; }
 .dim { opacity: .2; }
 .edge path.line { fill: none; stroke: var(--edge); stroke-width: 1.4; }
 .edge.mutation path.line { stroke: var(--mutation); stroke-dasharray: 6 4; }
+.edge.redirect path.line { stroke: var(--redirect); stroke-dasharray: 12 3 2 3; }
 .edge.orphan path.line { stroke-dasharray: 2 4; }
 .edge.hl path.line { stroke: var(--accent); stroke-width: 2.6; }
 .edge path.hit { fill: none; stroke: transparent; stroke-width: 12; cursor: pointer; }
+.edge.stubbed:not(.hl) path { display: none; }
+body.show-all .edge.stubbed path { display: inline; }
+.stub { cursor: pointer; }
+.stub line { stroke: var(--edge); stroke-width: 1.4; }
+.stub.mutation line { stroke: var(--mutation); stroke-dasharray: 3 2; }
+.stub.redirect line { stroke: var(--redirect); }
+.stub rect { fill: var(--chip); stroke: var(--border); }
+.stub text { font: 11px var(--mono); fill: var(--muted); }
+.stub.hl rect { stroke: var(--accent); stroke-width: 2; }
+.stub.hl text { fill: var(--accent); }
+body.show-all .stub { display: none; }
+.node .incoming { font-size: 11px; fill: var(--muted); font-family: var(--mono); }
+#focus-bar { display: flex; align-items: center; gap: 8px; }
+#focus-bar[hidden] { display: none; }
+.focus-label { color: var(--muted); white-space: nowrap; }
+.focus-label b { color: var(--text); }
+.node.focus .box { stroke: var(--accent); stroke-width: 2; }
+.column-label { font-size: 11px; fill: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 #tooltip {
   position: fixed; pointer-events: none; padding: 4px 8px; border-radius: 4px; font-size: 12px;
   background: var(--text); color: var(--bg); display: none; z-index: 5; font-family: var(--mono);
@@ -125,10 +147,17 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
   <span class="legend">
     <svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="var(--edge)" stroke-width="1.6"/></svg>action
     <svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="var(--mutation)" stroke-width="1.6" stroke-dasharray="6 4"/></svg>mutation
+    <svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="var(--redirect)" stroke-width="1.6" stroke-dasharray="12 3 2 3"/></svg>redirect
     <svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="var(--edge)" stroke-width="1.6" stroke-dasharray="2 4"/></svg>no navigator
   </span>
   <span class="spacer"></span>
+  <span id="focus-bar" hidden>
+    <span class="focus-label" id="focus-label"></span>
+    <button id="details" title="Show this screen's details">Details</button>
+    <button id="reset-view" title="Back to the whole graph (Esc)">Reset view</button>
+  </span>
   <input type="search" id="search" placeholder="Find a screen…" autocomplete="off">
+  <button id="all-edges" aria-pressed="false" title="Draw every edge in full, including those into busy screens">All edges</button>
   <button id="fit" title="Fit the graph to the window">Fit</button>
 </header>
 <div id="canvas"></div>
@@ -186,7 +215,9 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
       return context.measureText(text).width;
     };
   })();
-  const eventText = (event) => `${event.method}${event.kind === "mutation" ? "(…)" : "()"} → ${event.target}`;
+  const eventText = (event) => event.kind === "redirect"
+    ? `redirects → ${event.target}`
+    : `${event.method}${event.kind === "mutation" ? "(…)" : "()"} → ${event.target}`;
 
   // ---------- graph model ----------
   const nodes = data.nodes.map((source) => ({ ...source, rows: [], incoming: [] }));
@@ -220,6 +251,11 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
     node.height = y + 8;
   }
   for (const edge of events) if (edge.target) edge.target.incoming.push(edge);
+  // In a larger graph, edges into a screen many events open are drawn as short "→ Name" stubs; the full
+  // line shows on hover, or for every edge with "All edges".
+  const HUB_INCOMING = 6, HUB_MIN_NODES = 12;
+  const hubs = new Set(nodes.length >= HUB_MIN_NODES ? nodes.filter((node) => node.incoming.length >= HUB_INCOMING) : []);
+  for (const edge of events) edge.stub = hubs.has(edge.target);
   const totalEvents = events.length;
   document.getElementById("stats").textContent =
     `${data.nodes.filter((n) => n.screen).length} screens · ${totalEvents} events`;
@@ -228,43 +264,45 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
   const successors = new Map(nodes.map((node) => [node, [...new Set(events.filter((e) => e.node === node && e.target).map((e) => e.target))]]));
   const indegree = new Map(nodes.map((node) => [node, 0]));
   for (const [, targets] of successors) for (const target of targets) indegree.set(target, indegree.get(target) + 1);
-  const roots = [
-    ...nodes.filter((node) => node.route === "/"),
-    ...nodes.filter((node) => indegree.get(node) === 0),
-    ...nodes,
-  ].filter((node, index, all) => all.indexOf(node) === index);
-
-  // Depth-first from the roots: edges back onto the current path close a cycle and are left out of layering.
-  const state = new Map(), discovery = [], back = new Set();
-  const visit = (node) => {
-    state.set(node, 1);
-    discovery.push(node);
-    for (const next of successors.get(node)) {
-      if (state.get(next) === 1) back.add(`${node.name}>${next.name}`);
-      else if (!state.has(next)) visit(next);
+  // Columns by tap distance: breadth-first from the entry screen (route "/"), so a screen sits one
+  // column right of the nearest screen that opens it. Edges that point left or stay within a column
+  // route around the boxes.
+  const layer = new Map(), order = [];
+  const spread = (starts) => {
+    const queue = [...starts];
+    while (queue.length) {
+      const node = queue.shift();
+      order.push(node);
+      for (const next of successors.get(node)) {
+        if (layer.has(next)) continue;
+        layer.set(next, layer.get(node) + 1);
+        queue.push(next);
+      }
     }
-    state.set(node, 2);
   };
-  for (const root of roots) if (!state.has(root)) visit(root);
-  const forward = (from, to) => from !== to && !back.has(`${from.name}>${to.name}`);
-
-  // Longest path from the roots, so every forward edge points right.
-  const layer = new Map(nodes.map((node) => [node, 0]));
-  const remaining = new Map(nodes.map((node) => [node, 0]));
-  for (const node of nodes) for (const next of successors.get(node)) if (forward(node, next)) remaining.set(next, remaining.get(next) + 1);
-  const queue = nodes.filter((node) => remaining.get(node) === 0);
-  while (queue.length) {
-    const node = queue.shift();
-    for (const next of successors.get(node)) {
-      if (!forward(node, next)) continue;
-      layer.set(next, Math.max(layer.get(next), layer.get(node) + 1));
-      remaining.set(next, remaining.get(next) - 1);
-      if (remaining.get(next) === 0) queue.push(next);
+  const entries = nodes.filter((node) => node.route === "/");
+  const starts = entries.length ? entries : nodes.filter((node) => indegree.get(node) === 0);
+  const first = starts.length ? starts : nodes.slice(0, 1);
+  for (const node of first) layer.set(node, 0);
+  spread(first);
+  // Screens the entry doesn't reach (deep links, separate flows, unembedded components) sit one column
+  // left of the nearest screen they open, or start from column 0 when they open none that is placed.
+  for (let unplaced = nodes.filter((node) => !layer.has(node)); unplaced.length; unplaced = nodes.filter((node) => !layer.has(node))) {
+    const anchored = unplaced.filter((node) => successors.get(node).some((next) => layer.has(next)));
+    const picked = anchored.length ? anchored : [unplaced[0]];
+    for (const node of picked) {
+      const placed = successors.get(node).filter((next) => layer.has(next)).map((next) => layer.get(next));
+      layer.set(node, placed.length ? Math.min(...placed) - 1 : 0);
     }
+    spread(picked);
   }
+  const lowest = Math.min(...layer.values());
+  for (const node of nodes) layer.set(node, layer.get(node) - lowest);
+  const forward = (from, to) => layer.get(to) > layer.get(from);
+
   const layerCount = Math.max(0, ...layer.values()) + 1;
   const layers = Array.from({ length: layerCount }, () => []);
-  for (const node of discovery) layers[layer.get(node)].push(node);
+  for (const node of order) layers[layer.get(node)].push(node);
   const predecessors = new Map(nodes.map((node) => [node, []]));
   for (const node of nodes) for (const next of successors.get(node)) if (forward(node, next)) predecessors.get(next).push(node);
 
@@ -333,14 +371,16 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
   }
   const root = svg("svg");
   const defs = svg("defs");
-  for (const [id, color] of [["arrow", "var(--edge)"], ["arrow-mutation", "var(--mutation)"], ["arrow-hl", "var(--accent)"]]) {
+  for (const [id, color] of [["arrow", "var(--edge)"], ["arrow-mutation", "var(--mutation)"], ["arrow-redirect", "var(--redirect)"], ["arrow-hl", "var(--accent)"]]) {
     defs.append(svg("marker", { id, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" },
       svg("path", { d: "M0,0 L10,5 L0,10 z", fill: color })));
   }
   root.append(defs);
   const viewport = svg("g");
-  const edgeLayer = svg("g"), nodeLayer = svg("g");
-  viewport.append(edgeLayer, nodeLayer);
+  const edgeLayer = svg("g"), nodeLayer = svg("g"), stubLayer = svg("g");
+  const fullGroup = svg("g");
+  fullGroup.append(edgeLayer, nodeLayer, stubLayer);
+  viewport.append(fullGroup);
   root.append(viewport);
   canvas.append(root);
 
@@ -388,18 +428,31 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
       const below = Math.max(...spanned.map((node) => node.y + node.height)) + 22 + (detour++ % 8) * 9;
       d = rounded([[x1, y1], [x1 + 26 + (detour % 4) * 6, y1], [x1 + 26 + (detour % 4) * 6, below], [x2 - 26, below], [x2 - 26, y2], [x2, y2]]);
     }
-    const marker = edge.kind === "mutation" ? "arrow-mutation" : "arrow";
+    const marker = edge.kind === "mutation" ? "arrow-mutation" : edge.kind === "redirect" ? "arrow-redirect" : "arrow";
     const line = svg("path", { class: "line", d, "marker-end": `url(#${marker})` });
     const hit = svg("path", { class: "hit", d });
-    const group = svg("g", { class: `edge ${edge.kind}${edge.node.reachable ? "" : " orphan"}` }, line, hit);
+    const group = svg("g", { class: `edge ${edge.kind}${edge.node.reachable ? "" : " orphan"}${edge.stub ? " stubbed" : ""}` }, line, hit);
     edge.group = group;
     edge.line = line;
     edge.marker = marker;
     group.addEventListener("mouseenter", (e) => { highlightEdges([edge]); tooltip(e, `${edge.item.vm}.${eventText(edge.row.event)}`); });
     group.addEventListener("mousemove", (e) => tooltip(e));
     group.addEventListener("mouseleave", () => { clearHighlight(); tooltip(null); });
-    group.addEventListener("click", () => { if (!moved) openModal(edge.node.name, edge.item.self ? null : edge.item.vm); });
+    group.addEventListener("click", () => { if (!moved) focusOn(edge.node.name); });
     edgeLayer.append(group);
+    if (edge.stub) {
+      const label = `→ ${edge.target.name}`;
+      const width = measure(label, "mono") + 12;
+      const stub = svg("g", { class: `stub ${edge.kind}` },
+        svg("line", { x1, y1, x2: x1 + 14, y2: y1 }),
+        svg("rect", { x: x1 + 14, y: y1 - 9, width, height: 18, rx: 9 }),
+        svg("text", { x: x1 + 20, y: y1 + 4 }, label));
+      edge.stubGroup = stub;
+      stub.addEventListener("mouseenter", () => highlightEdges([edge]));
+      stub.addEventListener("mouseleave", clearHighlight);
+      stub.addEventListener("click", () => { if (!moved) focusOn(edge.target.name); });
+      stubLayer.append(stub);
+    }
   }
 
   for (const node of nodes) {
@@ -407,6 +460,7 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
     group.append(svg("rect", { class: "box", width: node.width, height: node.height, rx: 8 }));
     group.append(svg("path", { class: "head", d: `M0,8 a8,8 0 0 1 8,-8 h${node.width - 16} a8,8 0 0 1 8,8 v${HEAD - 12} h${-node.width} z` }));
     group.append(svg("text", { class: "title", x: PAD, y: node.route || !node.screen ? 18 : 24 }, node.name));
+    if (hubs.has(node)) group.append(svg("text", { class: "incoming", x: node.width - PAD, y: 18, "text-anchor": "end" }, `← ${node.incoming.length}`));
     if (node.route) group.append(svg("text", { class: "route", x: PAD, y: 32 }, node.route));
     else if (!node.screen) group.append(svg("text", { class: "route", x: PAD, y: 32 }, "component · no navigator"));
     for (const row of node.rows) {
@@ -425,7 +479,7 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
         rowGroup.addEventListener("mouseleave", clearHighlight);
         rowGroup.addEventListener("click", (e) => {
           e.stopPropagation();
-          if (!moved) openModal(node.name, row.item.self ? null : row.item.vm);
+          if (!moved) focusOn(node.name);
         });
         group.append(rowGroup);
       }
@@ -433,7 +487,7 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
     node.group = group;
     group.addEventListener("mouseenter", () => highlightNode(node));
     group.addEventListener("mouseleave", clearHighlight);
-    group.addEventListener("click", () => { if (!moved) openModal(node.name); });
+    group.addEventListener("click", () => { if (!moved) focusOn(node.name); });
     nodeLayer.append(group);
   }
 
@@ -455,6 +509,8 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
       edge.group.classList.toggle("dim", !on);
       edge.line.setAttribute("marker-end", `url(#${on ? "arrow-hl" : edge.marker})`);
       edge.row.group?.classList.toggle("hl", on);
+      edge.stubGroup?.classList.toggle("hl", on);
+      edge.stubGroup?.classList.toggle("dim", !on);
     }
     for (const node of nodes) {
       node.group.classList.toggle("hl", nodesInvolved.has(node));
@@ -471,6 +527,7 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
       edge.group.classList.remove("hl", "dim");
       edge.line.setAttribute("marker-end", `url(#${edge.marker})`);
       edge.row.group?.classList.remove("hl");
+      edge.stubGroup?.classList.remove("hl", "dim");
     }
     for (const node of nodes) node.group.classList.remove("hl", "dim");
     applySearch();
@@ -487,7 +544,7 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
     apply();
   };
   function fit() {
-    const box = viewport.getBBox(), width = canvas.clientWidth, height = canvas.clientHeight;
+    const box = (focusGroup || fullGroup).getBBox(), width = canvas.clientWidth, height = canvas.clientHeight;
     const k = Math.min(1.25, (width - 60) / box.width, (height - 60) / box.height);
     view.k = Math.max(0.15, k);
     view.x = (width - box.width * view.k) / 2 - box.x * view.k;
@@ -548,6 +605,12 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
   window.addEventListener("pointerup", release);
   window.addEventListener("pointercancel", release);
   document.getElementById("fit").addEventListener("click", fit);
+  const allEdges = document.getElementById("all-edges");
+  allEdges.hidden = hubs.size === 0;
+  allEdges.addEventListener("click", () => {
+    const on = document.body.classList.toggle("show-all");
+    allEdges.setAttribute("aria-pressed", String(on));
+  });
 
   // ---------- search ----------
   const search = document.getElementById("search");
@@ -558,20 +621,235 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
       node.group.classList.toggle("match", match);
       if (query !== "" && !match) node.group.classList.add("dim");
     }
-    if (query !== "") for (const edge of events) edge.group?.classList.add("dim");
+    if (query !== "") for (const edge of events) { edge.group?.classList.add("dim"); edge.stubGroup?.classList.add("dim"); }
   }
   search.addEventListener("input", () => { clearHighlight(); });
   search.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
     const query = search.value.trim().toLowerCase();
     const node = nodes.find((n) => n.name.toLowerCase().includes(query));
-    if (node) { center(node); openModal(node.name); }
+    if (node) focusOn(node.name);
+  });
+
+  // ---------- focus view ----------
+  // Clicking a box redraws the graph around it: the screens that open it on the left, each with only the
+  // rows that do; the box itself in the middle with all its events; the screens it opens on the right.
+  let focused = null, focusGroup = null, savedView = null;
+  const focusBar = document.getElementById("focus-bar");
+  const subtitleOf = (node) => node.route || (node.screen ? null : "component · no navigator");
+
+  function layoutBox(spec) {
+    let y = HEAD;
+    let width = Math.max(measure(spec.name, "title") + 2 * PAD + 20, MIN_WIDTH);
+    if (spec.subtitle) width = Math.max(width, measure(spec.subtitle, "label") + 2 * PAD);
+    const rows = spec.rows.map((row) => {
+      const placed = { ...row, y };
+      if (row.type === "label") {
+        width = Math.max(width, measure(row.text, "label") + 2 * PAD);
+        y += LABEL;
+      } else {
+        width = Math.max(width, measure(eventText(row.event), "mono") + 2 * PAD + 14);
+        y += ROW;
+      }
+      return placed;
+    });
+    if (spec.emptyText) { rows.push({ type: "empty", y }); y += ROW; }
+    return { ...spec, rows, width: Math.ceil(width), height: rows.length ? y + 8 : HEAD + 4 };
+  }
+
+  function drawBox(box, extraClass) {
+    const group = svg("g", { class: `node ${extraClass}${box.node.reachable ? "" : " orphan"}`, transform: `translate(${box.x},${box.y})` });
+    group.append(svg("rect", { class: "box", width: box.width, height: box.height, rx: 8 }));
+    group.append(svg("path", { class: "head", d: `M0,8 a8,8 0 0 1 8,-8 h${box.width - 16} a8,8 0 0 1 8,8 v${HEAD - 12} h${-box.width} z` }));
+    group.append(svg("text", { class: "title", x: PAD, y: box.subtitle ? 18 : 24 }, box.name));
+    if (box.subtitle) group.append(svg("text", { class: "route", x: PAD, y: 32 }, box.subtitle));
+    for (const row of box.rows) {
+      if (row.type === "label") {
+        group.append(svg("text", { class: "item-label", x: PAD, y: row.y + 14 }, row.text));
+      } else if (row.type === "empty") {
+        group.append(svg("text", { class: "empty", x: PAD, y: row.y + 15 }, box.emptyText));
+      } else {
+        row.group = svg("g", { class: `event-row ${row.event.kind}` },
+          svg("rect", { class: "row-bg", x: 1, y: row.y, width: box.width - 2, height: ROW }),
+          svg("text", { class: "event", x: row.indent ? PAD + 8 : PAD, y: row.y + 15 }, eventText(row.event)),
+          svg("circle", { class: "port", cx: box.width, cy: row.y + ROW / 2, r: 3 }));
+        group.append(row.group);
+      }
+    }
+    return group;
+  }
+
+  /** The rows of [node] for the given edges, under their item labels, in the node's order. */
+  function rowsFor(node, edges) {
+    const rows = [];
+    for (const item of node.items) {
+      const itemEdges = edges.filter((edge) => edge.node === node && edge.item === item);
+      if (!itemEdges.length) continue;
+      if (!item.self) rows.push({ type: "label", text: item.vm });
+      for (const edge of itemEdges) rows.push({ type: "event", event: edge.row.event, edge, indent: !item.self });
+    }
+    return rows;
+  }
+
+  function renderFocus(node) {
+    focusGroup?.remove();
+    const incoming = events.filter((edge) => edge.target === node && edge.node !== node);
+    const outgoing = events.filter((edge) => edge.node === node);
+    const sources = [...new Set(incoming.map((edge) => edge.node))];
+    const destinations = [...new Set(outgoing.filter((edge) => edge.target && edge.target !== node).map((edge) => edge.target))];
+
+    const sourceBoxes = sources.map((source) =>
+      layoutBox({ name: source.name, subtitle: subtitleOf(source), node: source, rows: rowsFor(source, incoming) }));
+    const focusRows = rowsFor(node, outgoing);
+    const focusBox = layoutBox({
+      name: node.name, subtitle: subtitleOf(node), node, rows: focusRows,
+      emptyText: focusRows.length ? null : "no navigation events",
+    });
+    // Destinations in the order of the rows that open them (their average position), to limit crossings.
+    const eventRows = focusBox.rows.filter((row) => row.type === "event");
+    const rank = (target) => {
+      const indexes = eventRows.map((row, i) => (row.edge.target === target ? i : -1)).filter((i) => i >= 0);
+      return indexes.reduce((sum, i) => sum + i, 0) / indexes.length;
+    };
+    destinations.sort((a, b) => rank(a) - rank(b));
+    const destinationBoxes = destinations.map((target) => layoutBox({ name: target.name, subtitle: subtitleOf(target), node: target, rows: [] }));
+
+    // Three columns, each centred on the focus box.
+    const columns = [sourceBoxes, [focusBox], destinationBoxes];
+    let x = 0;
+    for (const column of columns) {
+      const width = Math.max(0, ...column.map((box) => box.width));
+      const height = column.reduce((sum, box) => sum + box.height, 0) + GAP_Y * Math.max(0, column.length - 1);
+      let y = -height / 2;
+      for (const box of column) {
+        box.x = x + (width - box.width) / 2;
+        box.y = y;
+        y += box.height + GAP_Y;
+      }
+      if (column.length) x += width + GAP_X + 40;
+    }
+
+    const group = svg("g");
+    const edgeGroup = svg("g"), boxGroup = svg("g");
+    group.append(edgeGroup, boxGroup);
+    const label = (text, column) => {
+      if (!column.length) return;
+      const left = Math.min(...column.map((box) => box.x));
+      const top = Math.min(...column.map((box) => box.y));
+      boxGroup.append(svg("text", { class: "column-label", x: left, y: top - 14 }, text));
+    };
+    label(`Opened from (${sourceBoxes.length})`, sourceBoxes);
+    label(`Opens (${destinationBoxes.length})`, destinationBoxes);
+
+    const lines = new Map();
+    const drawEdge = (row, d, from) => {
+      const marker = row.event.kind === "mutation" ? "arrow-mutation" : row.event.kind === "redirect" ? "arrow-redirect" : "arrow";
+      const line = svg("path", { class: "line", d, "marker-end": `url(#${marker})` });
+      const edgeElement = svg("g", { class: `edge ${row.event.kind}${from.node.reachable ? "" : " orphan"}` }, line, svg("path", { class: "hit", d }));
+      const on = (state) => {
+        edgeElement.classList.toggle("hl", state);
+        line.setAttribute("marker-end", `url(#${state ? "arrow-hl" : marker})`);
+        row.group?.classList.toggle("hl", state);
+      };
+      lines.set(row, on);
+      edgeElement.addEventListener("mouseenter", (e) => { on(true); tooltip(e, `${row.edge.item.vm}.${eventText(row.event)}`); });
+      edgeElement.addEventListener("mousemove", (e) => tooltip(e));
+      edgeElement.addEventListener("mouseleave", () => { on(false); tooltip(null); });
+      edgeGroup.append(edgeElement);
+    };
+    const curve = (x1, y1, x2, y2) => {
+      const dx = Math.max(40, (x2 - x1) / 2);
+      return `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
+    };
+
+    // Into the focus box: entry points spread down its left side in source order.
+    const entering = sourceBoxes.flatMap((box) => box.rows.filter((row) => row.type === "event").map((row) => ({ box, row })));
+    entering.forEach(({ box, row }, i) => {
+      const y2 = focusBox.y + 14 + Math.max(focusBox.height - 28, 1) * (i + 0.5) / entering.length;
+      drawEdge(row, curve(box.x + box.width, box.y + row.y + ROW / 2, focusBox.x, y2), box);
+    });
+    // Out of the focus box: to the destination's left side, spread when several events open it.
+    const byTarget = new Map(destinationBoxes.map((box) => [box.node, box]));
+    const leaving = focusBox.rows.filter((row) => row.type === "event");
+    for (const row of leaving) {
+      const x1 = focusBox.x + focusBox.width, y1 = focusBox.y + row.y + ROW / 2;
+      const target = row.edge.target;
+      if (target === node) {
+        const below = focusBox.y + focusBox.height + 24;
+        drawEdge(row, rounded([[x1, y1], [x1 + 28, y1], [x1 + 28, below], [focusBox.x - 28, below], [focusBox.x - 28, focusBox.y + 20], [focusBox.x, focusBox.y + 20]]), focusBox);
+        continue;
+      }
+      const box = byTarget.get(target);
+      if (!box) continue;
+      const into = leaving.filter((other) => other.edge.target === target);
+      const y2 = box.y + 10 + (box.height - 20) * (into.indexOf(row) + 0.5) / into.length;
+      drawEdge(row, curve(x1, y1, box.x, y2), focusBox);
+    }
+
+    const place = (box, extraClass, onClick) => {
+      const element = drawBox(box, extraClass);
+      for (const row of box.rows) {
+        if (row.type !== "event" || !row.group) continue;
+        row.group.addEventListener("mouseenter", () => lines.get(row)?.(true));
+        row.group.addEventListener("mouseleave", () => lines.get(row)?.(false));
+      }
+      element.addEventListener("click", () => { if (!moved) onClick(); });
+      boxGroup.append(element);
+    };
+    for (const box of sourceBoxes) place(box, "", () => focusOn(box.node.name));
+    place(focusBox, "focus", () => openModal(node.name));
+    for (const box of destinationBoxes) place(box, "", () => focusOn(box.node.name));
+    // A row in the focus box opens the screen it navigates to.
+    for (const row of leaving) {
+      row.group?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!moved && row.edge.target) focusOn(row.edge.target.name);
+      });
+    }
+
+    focusGroup = group;
+    viewport.append(group);
+    fullGroup.style.display = "none";
+    focusBar.hidden = false;
+    allEdges.hidden = true;
+    document.getElementById("focus-label").replaceChildren(
+      el("b", {}, node.name), ` · opened from ${sources.length} · opens ${destinations.length}`);
+    fit();
+  }
+
+  function focusOn(name, push = true) {
+    const node = byName.get(name);
+    if (!node) return;
+    if (!focused) savedView = { ...view };
+    focused = node;
+    if (push) window.history.pushState(null, "", `#focus=${encodeURIComponent(name)}`);
+    renderFocus(node);
+  }
+
+  function resetView(push = true) {
+    if (!focused) return;
+    focused = null;
+    focusGroup?.remove();
+    focusGroup = null;
+    fullGroup.style.display = "";
+    focusBar.hidden = true;
+    allEdges.hidden = hubs.size === 0;
+    if (savedView) { Object.assign(view, savedView); apply(); }
+    if (push) window.history.pushState(null, "", location.pathname + location.search);
+  }
+
+  document.getElementById("reset-view").addEventListener("click", () => resetView());
+  document.getElementById("details").addEventListener("click", () => { if (focused) openModal(focused.name); });
+  window.addEventListener("popstate", () => {
+    const name = new URLSearchParams(location.hash.slice(1)).get("focus");
+    if (name) focusOn(name, false);
+    else resetView(false);
   });
 
   // ---------- modal ----------
   const backdrop = document.getElementById("backdrop");
   const body = document.getElementById("modal-body");
-  const history = [];
+  const modalHistory = [];
   let current = null;
 
   const sourceLink = (link) => link ? el("a", { class: "src", href: link.href, title: link.href }, link.label) : null;
@@ -631,7 +909,9 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
         el("div", { class: "kv" },
           el("span", {}, "Route"), navigation.route ? el("code", {}, navigation.route) : el("span", { class: "muted" }, "not deep-linkable"),
           el("span", {}, "Route args"), navigation.routeArgs.length ? el("code", {}, navigation.routeArgs.join(", ")) : el("span", { class: "muted" }, "none"),
-          el("span", {}, "Response"), navigation.response ? typeView(navigation.response) : el("span", { class: "muted" }, "none")),
+          el("span", {}, "Response"), navigation.response ? typeView(navigation.response) : el("span", { class: "muted" }, "none"),
+          navigation.redirectsTo.length ? el("span", {}, "Redirects to") : null,
+          navigation.redirectsTo.length ? el("span", {}, navChips(navigation.redirectsTo), " ", sourceLink(navigation.redirectsLink)) : null),
         table(navigation.args.map((arg) => el("tr", {},
           el("td", { class: "name" }, arg.name), el("td", {}, typeView(arg.type)), el("td", { class: "src" }, sourceLink(arg.link))))))));
     }
@@ -679,14 +959,14 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
   function openModal(name, focus = null, push = true) {
     const vm = data.vms[name];
     if (!vm) return;
-    if (push && current && current !== name) history.push(current);
+    if (push && current && current !== name) modalHistory.push(current);
     current = name;
     document.getElementById("modal-title").textContent = vm.name;
     document.getElementById("modal-title").append(" ", el("span", { class: `badge${vm.screen ? " screen" : ""}` }, vm.screen ? "screen" : "component"));
     document.getElementById("modal-spec").textContent = vm.spec;
     const link = document.getElementById("modal-link");
     link.replaceChildren(sourceLink(vm.link) || "");
-    document.getElementById("modal-back").hidden = history.length === 0;
+    document.getElementById("modal-back").hidden = modalHistory.length === 0;
     body.replaceChildren(...vmView(vm, 0));
     backdrop.classList.add("open");
     body.scrollTop = 0;
@@ -702,23 +982,25 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
   }
   function closeModal() {
     backdrop.classList.remove("open");
-    history.length = 0;
+    modalHistory.length = 0;
     current = null;
   }
   document.getElementById("modal-close").addEventListener("click", closeModal);
   document.getElementById("modal-back").addEventListener("click", () => {
-    const previous = history.pop();
+    const previous = modalHistory.pop();
     if (previous) openModal(previous, null, false);
   });
   backdrop.addEventListener("click", (event) => { if (event.target === backdrop) closeModal(); });
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && backdrop.classList.contains("open")) closeModal();
+    else if (event.key === "Escape" && focused) resetView();
     else if (event.key === "/" && document.activeElement !== search) { event.preventDefault(); search.focus(); }
   });
 
   fit();
-  const initial = new URLSearchParams(location.hash.slice(1)).get("screen");
-  if (initial) openModal(initial);
+  const params = new URLSearchParams(location.hash.slice(1));
+  if (params.get("focus")) focusOn(params.get("focus"), false);
+  if (params.get("screen")) openModal(params.get("screen"));
 })();
 </script>
 </body>

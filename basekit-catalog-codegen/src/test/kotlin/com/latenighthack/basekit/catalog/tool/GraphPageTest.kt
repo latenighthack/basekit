@@ -25,6 +25,7 @@ class GraphPageTest {
           Detail:
             spec: com.example.IDetailViewModel
             navigation: { args: { id: String }, route: "/detail/{id}", route_args: [id], response: null }
+            redirects_to: [Home]
             mutations:
               onShare: { param: { target: String }, navigates_to: Home }
         components:
@@ -59,7 +60,10 @@ class GraphPageTest {
             "Home|FeedItem|onSelected|Home",
             "Detail|Detail|onShare|Home",
             "Debug|Debug|onOpen|Detail",
+            "Detail|Detail|redirects_to|Home",
         ).forEach { id -> assertTrue("\"id\":\"$id\"" in json, id) }
+        assertTrue("\"kind\":\"redirect\"" in json)
+        assertTrue("\"redirectsTo\":[\"Home\"]" in json, json)
         assertTrue("\"kind\":\"mutation\"" in json)
         assertTrue("\"name\":\"Debug\",\"screen\":false,\"reachable\":false" in json, json)
     }
@@ -88,6 +92,28 @@ class GraphPageTest {
         assertTrue("<title>A &lt;title&gt; &amp; more</title>" in page)
         assertFalse("__CATALOG_" in page)
         assertFalse("\"link\":{" in page, "no sources means no links")
+    }
+
+    @Test
+    fun `unknown keys are ignored and reported, and redirects must name screens`() {
+        val document = CatalogReader.read(
+            """
+            schema: catalog/v1
+            owner: picnic
+            screens:
+              Home:
+                spec: a.IHomeViewModel
+                navigation: { args: {}, route: null, route_args: [], response: null, transition: fade }
+                actions:
+                  onOpen: { navigates_to: Home, analytics: tap }
+            """.trimIndent(),
+        )
+        assertEquals(listOf("owner", "screens.Home.navigation.transition", "screens.Home.actions.onOpen.analytics"), document.warnings)
+        val badRedirect = CatalogReader.read(
+            "schema: catalog/v1\nscreens:\n  Home:\n    spec: a.IHomeViewModel\n" +
+                "    navigation: { args: {}, route: null, route_args: [], response: null }\n    redirects_to: [Nowhere]\n",
+        )
+        assertFailsWith<CatalogException> { CatalogAnalysis(badRedirect) }
     }
 
     @Test

@@ -6,7 +6,8 @@ package com.latenighthack.basekit.catalog.tool
  * `nodes` are the graph boxes: every screen, plus every component nothing embeds whose subtree has
  * events (marked `reachable: false`: no navigator reaches it). Each node lists `items`, the node
  * itself and every component it embeds at any depth that declares `navigates_to`, and each item lists
- * its `events`: one per (method, target), so every event becomes its own edge.
+ * its `events`: one per (method, target), plus one per `redirects_to` target on a screen, so every
+ * event becomes its own edge.
  *
  * `vms` and `types` hold everything the screen modal shows, each entry with a resolved source `link`
  * when catalog.sources.yaml knows where it is declared.
@@ -58,11 +59,15 @@ class GraphModel(
         }
     }
 
-    private fun CatalogVm.hasEvents() = actions.any { it.navigatesTo.isNotEmpty() } || mutations.any { it.navigatesTo.isNotEmpty() }
+    private fun CatalogVm.hasEvents() = events().isNotEmpty()
 
-    /** (method, "action" | "mutation", target) for every navigates_to entry, in declaration order. */
+    /**
+     * (method, kind, target) for every redirect (kind "redirect", method "redirects_to") and every
+     * navigates_to entry (kind "action" or "mutation"), in declaration order.
+     */
     private fun CatalogVm.events(): List<Triple<String, String, String>> =
-        actions.flatMap { action -> action.navigatesTo.map { Triple(action.name, "action", it) } } +
+        redirectsTo.map { Triple("redirects_to", "redirect", it) } +
+            actions.flatMap { action -> action.navigatesTo.map { Triple(action.name, "action", it) } } +
             mutations.flatMap { mutation -> mutation.navigatesTo.map { Triple(mutation.name, "mutation", it) } }
 
     private fun vm(vm: CatalogVm): Map<String, Any?> {
@@ -79,6 +84,8 @@ class GraphModel(
                     "routeArgs" to navigation.routeArgs,
                     "response" to navigation.response,
                     "args" to navigation.args.map { field(it, "$key.navigation.args.${it.name}") },
+                    "redirectsTo" to vm.redirectsTo,
+                    "redirectsLink" to link("$key.redirects_to"),
                 )
             },
             "identity" to vm.identity?.let { mapOf("name" to it, "link" to link("$key.identity")) },
