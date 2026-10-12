@@ -8,7 +8,7 @@ import SwiftUI
 private struct FixturePolicy: BasekitNavigationPolicy {
     func decision(for request: BasekitNavigationRequest) -> BasekitNavigationDecision {
         switch request.edge {
-        case .homeOnOpenDetail:
+        case .homeOnOpenDetail, .feedItemOnSelected:
             return .init(presentation: .push, transition: .zoom(sourceID: "fixture-detail"))
         case .homeOnOpenDetailFromBanner:
             return .init(presentation: .platformCustom(id: "banner"), transition: .custom(id: "banner"))
@@ -34,7 +34,7 @@ private struct FixtureRoot: View {
                 case .homeOnPick:
                     transaction.finish(with: PickResult(selectedId: 1))
                     return true
-                case .homeOnOpenDetail:
+                case .homeOnOpenDetail, .feedItemOnSelected:
                     return false
                 }
             }

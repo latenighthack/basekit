@@ -43,6 +43,15 @@ and tests reference those interface-owned types. Both stateful and direct-Flow
 implementations use the same nested State; do not create a second equivalent input
 state class alongside it.
 
+## A screen's types belong in one file
+
+All types for a screen are declared in the screen's viewmodel file: the screen
+interface, its list item interface, every row and child viewmodel interface shown
+in its lists, and their implementations. The complete example below is one file
+containing `SearchListItem`, `CatalogItemViewModel`, `SearchEmptyViewModel`,
+`SearchViewModel` and their implementations. Do not move a screen's row
+interfaces, list item types or row implementations into separate files.
+
 ## The search pipeline
 
 ```text
@@ -80,7 +89,7 @@ with its own Flow state and a working clear-filters action. It is constructed on
 per screen and reused whenever the filtered list is empty, as in Fullhouse.
 
 Both parent implementations below use the same pipeline and satisfy the same tests.
-The whole block is a complete Kotlin file, including imports:
+The whole block is the screen's single Kotlin file, including imports:
 
 ```kotlin
 package com.latenighthack.basekit.viewmodel.examples

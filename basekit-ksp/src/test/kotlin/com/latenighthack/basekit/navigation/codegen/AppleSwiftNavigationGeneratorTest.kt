@@ -20,7 +20,7 @@ class AppleSwiftNavigationGeneratorTest {
                 simpleName = "HomeViewModel",
                 qualifiedName = "sample.HomeViewModel",
                 navName = "home",
-                edges = listOf(NavEdge("onOpenRoom", "sample.RoomViewModel")),
+                edges = listOf(NavEdge("home", "onOpenRoom", "sample.RoomViewModel")),
             ),
             destination(
                 simpleName = "RoomViewModel",
@@ -53,8 +53,8 @@ class AppleSwiftNavigationGeneratorTest {
                 qualifiedName = "sample.ContactsViewModel",
                 navName = "contacts",
                 edges = listOf(
-                    NavEdge("onSearchChanged", "sample.ScanViewModel"),
-                    NavEdge("onSearchChanged", "sample.RoomViewModel"),
+                    NavEdge("contacts", "onSearchChanged", "sample.ScanViewModel"),
+                    NavEdge("contacts", "onSearchChanged", "sample.RoomViewModel"),
                 ),
             ),
             destination("ScanViewModel", "sample.ScanViewModel", "scan"),

@@ -22,6 +22,18 @@ All notable changes to basekit are documented here. The format follows
 - Collection guidance rejects viewmodel list snapshots and copy/rediff caches; observable
   collections remain DeltaList streams throughout filtering, mapping and binding.
 
+## [0.3.2] — 2026-10-11
+
+- Map SwiftUI enum lists to their enhanced Swift element types.
+- Navigation edges belong to the row that triggers them. `@NavigateTo` on a list row or child spec
+  is collected from the destination's `@ChildViewModel`, `@ViewModelList`, `DeltaList` and
+  `SectionedDeltaList` properties, including specs that extend a marker element type. The target
+  joins the destination's navigator. **Breaking:** a row's call site is now named after the row spec
+  (`FEED_ITEM_ON_SELECTED`) instead of the hosting destination (`HOME_ON_SELECTED`). This renames
+  `<Target>Source` entries and `AppleNavigationEdge` / Swift `BasekitNavigationEdge` cases for edges
+  declared on rows; exhaustive Swift switches over the edge must handle the new cases.
+- A `@NavigateTo` on a spec that no destination embeds now produces a build warning.
+
 ## [0.3.1] — 2026-10-09
 
 - Add optional navigation metrics and PostHog adapters for Kotlin, Swift and React consumers.

@@ -10,8 +10,7 @@ class AppleSwiftNavigationGenerator(
     private val frameworkImports: List<String>,
 ) {
     private data class Site(
-        val source: DestinationInfo,
-        val method: String,
+        val edge: NavEdge,
         val target: DestinationInfo,
         // kotlinName must match AppleHostedNavigatorGenerator's AppleNavigationEdge entry so the
         // BasekitNavigationEdge(_:) switch stays exhaustive. Both are target-disambiguated on fan-out.
@@ -22,22 +21,23 @@ class AppleSwiftNavigationGenerator(
     fun generate(destinations: List<DestinationInfo>) {
         val byName = destinations.associateBy { it.qualifiedName }
         val rawSites = destinations.flatMap { source ->
-            source.edges.mapNotNull { edge -> byName[edge.targetQualifiedName]?.let { Triple(source, edge.methodName, it) } }
-        }.distinctBy { (source, method, target) -> Triple(source.qualifiedName, method, target.qualifiedName) }
+            source.edges.mapNotNull { edge -> byName[edge.targetQualifiedName]?.let { edge to it } }
+        }.distinctBy { (edge, _) -> edge }
         if (rawSites.isEmpty()) return
 
         // Kept in lockstep with AppleHostedNavigatorGenerator: a fan-out action (multiple @NavigateTo)
         // produces call sites sharing a source+method base name, so disambiguate by target.
-        val kotlinBase = { source: DestinationInfo, method: String ->
-            "${source.navName.uppercase()}_${method.toUpperSnakeCase()}"
-        }
-        val colliding = rawSites.groupingBy { (source, method, _) -> kotlinBase(source, method) }
+        val colliding = rawSites.groupingBy { (edge, _) -> edge.sourceEntry }
             .eachCount().filterValues { it > 1 }.keys
-        val sites = rawSites.map { (source, method, target) ->
-            val fanOut = kotlinBase(source, method) in colliding
-            val kotlinName = if (fanOut) "${kotlinBase(source, method)}_TO_${target.navName.uppercase()}" else kotlinBase(source, method)
-            val swiftRaw = if (fanOut) "${source.navName}_${method}_to_${target.navName}" else "${source.navName}_$method"
-            Site(source, method, target, kotlinName, swiftRaw.toUpperCamelCase().replaceFirstChar { it.lowercase() })
+        val sites = rawSites.map { (edge, target) ->
+            val fanOut = edge.sourceEntry in colliding
+            val kotlinName = if (fanOut) "${edge.sourceEntry}_TO_${target.navName.uppercase()}" else edge.sourceEntry
+            val swiftRaw = if (fanOut) {
+                "${edge.sourceNavName}_${edge.methodName}_to_${target.navName}"
+            } else {
+                "${edge.sourceNavName}_${edge.methodName}"
+            }
+            Site(edge, target, kotlinName, swiftRaw.toUpperCamelCase().replaceFirstChar { it.lowercase() })
         }
         if (sites.isEmpty()) return
 

@@ -49,7 +49,7 @@ Other implementation guides cover [IDs](docs/guides/ids.md),
 
 ## Status
 
-Pre-1.0 (`0.3.1`). No binary-compatibility guarantee yet; the public API may change between minor
+Pre-1.0 (`0.3.2`). No binary-compatibility guarantee yet; the public API may change between minor
 versions. Supported targets: `jvm`, `android`, `iosArm64`, `iosX64`, `iosSimulatorArm64`,
 `macosArm64`, `macosX64`, `js` (IR). The `tui` slice is a preview and depends on a snapshot build of
 TamboUI (see below).
@@ -86,13 +86,13 @@ Apply the convention plugin for each slice you use — it turns on KSP and wires
 // build.gradle.kts (a KMP module)
 plugins {
     kotlin("multiplatform")
-    id("com.latenighthack.basekit.navigation") version "0.3.1"
-    id("com.latenighthack.basekit.viewmodel") version "0.3.1"
+    id("com.latenighthack.basekit.navigation") version "0.3.2"
+    id("com.latenighthack.basekit.viewmodel") version "0.3.2"
 }
 kotlin {
     sourceSets.commonMain.dependencies {
-        implementation("com.latenighthack.basekit:basekit-navigation:0.3.1")
-        implementation("com.latenighthack.basekit:basekit-viewmodel:0.3.1")
+        implementation("com.latenighthack.basekit:basekit-navigation:0.3.2")
+        implementation("com.latenighthack.basekit:basekit-viewmodel:0.3.2")
     }
 }
 ksp {
@@ -158,7 +158,7 @@ From that, the navigation processor generates (into the package you choose):
 ```kotlin
 interface DetailNavigationTarget {
     fun navigateToDetail(args: DetailViewModel.Args, source: DetailSource, context: Any? = null)
-    enum class DetailSource { HOME_ON_OPEN_DETAIL, HOME_ON_OPEN_DETAIL_FROM_BANNER }
+    enum class DetailSource { HOME_ON_OPEN_DETAIL, HOME_ON_OPEN_DETAIL_FROM_BANNER, FEED_ITEM_ON_SELECTED }
 }
 // The navigator injected into HomeViewModel — it can reach exactly Detail (and close):
 interface HomeNavigator : CloseNavigationTarget, DetailNavigationTarget
@@ -177,6 +177,11 @@ class RealHomeViewModel(private val navigator: HomeNavigator) :
             DetailNavigationTarget.DetailSource.HOME_ON_OPEN_DETAIL)
 }
 ```
+
+A list row declares `@NavigateTo` on its own action (`FeedItemViewModel.onSelected`, call site
+`FEED_ITEM_ON_SELECTED`). Its targets join the navigator of each destination that embeds it through a
+`@ChildViewModel`, `@ViewModelList`, `DeltaList` or `SectionedDeltaList` property, and the destination
+passes that navigator to the rows it constructs.
 
 A [`RespondingDestination<Args, R>`](basekit-navigation/src/commonMain/kotlin/com/latenighthack/basekit/navigation/RespondingDestination.kt)
 makes its `navigateTo…` a `suspend` function returning `R?` — the picker pattern: open, await the
@@ -253,7 +258,7 @@ this only if you need to customize it. This is not more than the plugins do:
 **navigation** (pure common types, generated in the metadata pass):
 
 ```kotlin
-dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-ksp:0.3.1") }
+dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-ksp:0.3.2") }
 kotlin.sourceSets.named("commonMain") {
     kotlin.srcDir(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/kotlin"))
 }
@@ -266,11 +271,11 @@ tasks.matching { it.name.startsWith("ksp") && it.name != "kspCommonMainKotlinMet
 **viewmodel** (per-platform code, so add to every target's ksp configuration):
 
 ```kotlin
-dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-viewmodel-ksp:0.3.1") }
+dependencies { add("kspCommonMainMetadata", "com.latenighthack.basekit:basekit-viewmodel-ksp:0.3.2") }
 kotlin.targets.configureEach {
     if (name == "metadata") return@configureEach
     project.dependencies.add("ksp" + name.replaceFirstChar { it.uppercase() },
-        "com.latenighthack.basekit:basekit-viewmodel-ksp:0.3.1")
+        "com.latenighthack.basekit:basekit-viewmodel-ksp:0.3.2")
 }
 ```
 
@@ -351,7 +356,7 @@ maven("https://central.sonatype.com/repository/maven-snapshots/") { mavenContent
 ```
 ```kotlin
 // build.gradle.kts (a JVM module)
-implementation("com.latenighthack.basekit:basekit-tui:0.3.1")
+implementation("com.latenighthack.basekit:basekit-tui:0.3.2")
 implementation("dev.tamboui:tamboui-toolkit:0.5.0-SNAPSHOT")
 runtimeOnly("dev.tamboui:tamboui-jline3-backend:0.5.0-SNAPSHOT")
 ```
@@ -507,7 +512,7 @@ availability does not qualify the separate convenience-view lifecycle.
 ### Generated Android Compose hosts
 
 Compose is optional. Apply Kotlin's Compose compiler plugin, add
-`com.latenighthack.basekit:basekit-viewmodel-compose:0.3.1` to `androidMain`, and set
+`com.latenighthack.basekit:basekit-viewmodel-compose:0.3.2` to `androidMain`, and set
 `arg("basekit.viewmodel.compose", "true")`. In a KMP module, restrict the compiler plugin to Android:
 
 ```kotlin

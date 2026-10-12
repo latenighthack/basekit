@@ -54,11 +54,16 @@ interface HomeViewModel :
     suspend fun onPick()
 }
 
-/** A row in [HomeViewModel]'s list. Selecting it navigates to that item's detail. */
+/**
+ * A row in [HomeViewModel]'s list. Selecting it navigates to that item's detail. The row declares its
+ * own edge, so the call site is `FEED_ITEM_ON_SELECTED`; the target joins [HomeNavigator], which the
+ * row is handed.
+ */
 @ViewModelSpec
 interface FeedItemViewModel : ViewModel<FeedItemViewModel.State> {
     data class State(val title: String, val subtitle: String, val id: String)
 
+    @NavigateTo(DetailViewModel::class)
     suspend fun onSelected()
 }
 
@@ -71,7 +76,7 @@ class RealFeedItemViewModel(
     override suspend fun onSelected() = withState { state ->
         navigator.navigateToDetail(
             DetailViewModel.Args().apply { id = state.id },
-            DetailNavigationTarget.DetailSource.HOME_ON_OPEN_DETAIL,
+            DetailNavigationTarget.DetailSource.FEED_ITEM_ON_SELECTED,
         )
     }
 }

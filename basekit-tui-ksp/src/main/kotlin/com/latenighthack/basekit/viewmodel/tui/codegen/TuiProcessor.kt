@@ -32,6 +32,11 @@ private const val TUICHILD_ANNOTATION = "com.latenighthack.basekit.viewmodel.tui
 private const val DESTINATION_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.Destination"
 private const val ROUTE_ARG_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.RouteArg"
 private const val NAVIGATE_TO_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.NavigateTo"
+private const val FLOW = "kotlinx.coroutines.flow.Flow"
+private const val DELTA = "com.latenighthack.deltalist.Delta"
+private const val SECTIONED_DELTA = "com.latenighthack.deltalist.SectionedDelta"
+private const val DELTA_LIST = "com.latenighthack.deltalist.DeltaList"
+private const val SECTIONED_DELTA_LIST = "com.latenighthack.deltalist.SectionedDeltaList"
 private const val NAVIGATION_DESTINATION = "com.latenighthack.basekit.navigation.NavigationDestination"
 private const val RESPONDING_DESTINATION = "com.latenighthack.basekit.navigation.RespondingDestination"
 private const val NAVIGATION_RESPONDER = "com.latenighthack.basekit.navigation.NavigationResponder"
@@ -42,8 +47,8 @@ private const val NAV_PACKAGE_OPTION = "Basekit_NavigationPackage"
 // @Component parent, so ViewModels whose deps are constructed at runtime can drive the TUI.
 private const val APP_COMPONENT_OPTION = "Basekit_TuiAppComponent"
 
-/** A `@NavigateTo` edge from a destination action to a target destination. */
-private data class Edge(val methodName: String, val targetQualifiedName: String)
+/** A `@NavigateTo` edge from an action of the spec named [sourceNavName] to a target destination. */
+private data class Edge(val sourceNavName: String, val methodName: String, val targetQualifiedName: String)
 
 /** Everything the processor needs about one `@Destination` to reconstruct the navigation graph. */
 private data class DestNode(
@@ -90,16 +95,17 @@ class TuiProcessor(
             .filterIsInstance<KSClassDeclaration>()
             .toList()
 
+        val subtypesBySupertype = buildSubtypeIndex(declarations)
         val destinations = declarations
             .filter { it.hasAnnotation(DESTINATION_ANNOTATION) }
-            .associate { it.qualifiedName!!.asString() to buildDestNode(it) }
+            .associate { it.qualifiedName!!.asString() to buildDestNode(it, subtypesBySupertype) }
 
         // Call-site counts across the whole graph decide whether a target's navigateTo… takes a source.
         val callSites = LinkedHashMap<String, MutableSet<String>>()
         for (dest in destinations.values) {
             for (edge in dest.edges) {
                 callSites.getOrPut(edge.targetQualifiedName) { linkedSetOf() }
-                    .add("${dest.navName}#${edge.methodName}")
+                    .add("${edge.sourceNavName}#${edge.methodName}")
             }
         }
         val hasSource: (String) -> Boolean = { (callSites[it]?.size ?: 0) > 1 }
@@ -146,7 +152,29 @@ class TuiProcessor(
         return emptyList()
     }
 
-    private fun buildDestNode(decl: KSClassDeclaration): DestNode {
+    /** supertype qualified name -> viewmodel interfaces and classes in the scanned package that extend it. */
+    private fun buildSubtypeIndex(declarations: List<KSClassDeclaration>): Map<String, List<KSClassDeclaration>> {
+        val index = LinkedHashMap<String, MutableList<KSClassDeclaration>>()
+        declarations
+            .flatMap { it.withNestedClasses() }
+            .filter { it.classKind == ClassKind.CLASS || it.classKind == ClassKind.INTERFACE }
+            .forEach { type ->
+                val superTypes = type.getAllSuperTypes()
+                    .mapNotNull { it.declaration.qualifiedName?.asString() }
+                    .toList()
+                if (VIEWMODEL_INTERFACE !in superTypes) return@forEach
+                superTypes.forEach { index.getOrPut(it) { mutableListOf() }.add(type) }
+            }
+        return index
+    }
+
+    private fun KSClassDeclaration.withNestedClasses(): List<KSClassDeclaration> =
+        listOf(this) + declarations.filterIsInstance<KSClassDeclaration>().flatMap { it.withNestedClasses() }
+
+    private fun buildDestNode(
+        decl: KSClassDeclaration,
+        subtypesBySupertype: Map<String, List<KSClassDeclaration>>,
+    ): DestNode {
         val superTypes = decl.getAllSuperTypes().toList()
         fun superTypeArgument(fqn: String, index: Int): KSClassDeclaration? =
             superTypes.firstOrNull { it.declaration.qualifiedName?.asString() == fqn }
@@ -163,13 +191,14 @@ class TuiProcessor(
             ?.map { it.simpleName.asString() }
             ?.toList().orEmpty()
 
-        val edges = collectEdges(decl, visited = mutableSetOf())
+        val navName = decl.simpleName.asString().toDestinationNavName()
+        val edges = collectEdges(decl, navName, subtypesBySupertype, visited = mutableSetOf())
 
         return DestNode(
             qualifiedName = decl.qualifiedName!!.asString(),
             simpleName = decl.simpleName.asString(),
             packageName = decl.packageName.asString(),
-            navName = decl.simpleName.asString().toDestinationNavName(),
+            navName = navName,
             argsQualifiedName = argsDecl?.qualifiedName?.asString(),
             responseQualifiedName = responseDecl?.qualifiedName?.asString(),
             routeArgs = routeArgs,
@@ -179,48 +208,83 @@ class TuiProcessor(
 
     /**
      * Collects the `@NavigateTo` edges declared on [decl] plus those on any viewmodel it embeds
-     * through `@ChildViewModel` / `@ViewModelList` properties, recursively — mirroring the
-     * navigation processor's roll-up, so a list row or child pane can navigate with its host
-     * destination's navigator. [visited] guards against spec cycles.
+     * through `@ChildViewModel`, `@ViewModelList`, `DeltaList` or `SectionedDeltaList` properties,
+     * recursively — mirroring the navigation processor's roll-up, so a list row or child pane can
+     * navigate with its host destination's navigator. Each edge keeps the name of the spec that
+     * declares it. [visited] guards against spec cycles.
      */
-    private fun collectEdges(decl: KSClassDeclaration, visited: MutableSet<String>): List<Edge> {
+    private fun collectEdges(
+        decl: KSClassDeclaration,
+        sourceNavName: String,
+        subtypesBySupertype: Map<String, List<KSClassDeclaration>>,
+        visited: MutableSet<String>,
+    ): List<Edge> {
         val qualifiedName = decl.qualifiedName?.asString() ?: return emptyList()
         if (!visited.add(qualifiedName)) return emptyList()
 
         val own = decl.getDeclaredFunctions().flatMap { fn ->
             fn.annotations.filter { it.qualifiedName() == NAVIGATE_TO_ANNOTATION }.mapNotNull { ann ->
                 val target = ann.arguments.firstOrNull { it.name?.asString() == "target" }?.value as? KSType
-                target?.declaration?.qualifiedName?.asString()?.let { Edge(fn.simpleName.asString(), it) }
+                target?.declaration?.qualifiedName?.asString()
+                    ?.let { Edge(sourceNavName, fn.simpleName.asString(), it) }
             }
         }.toList()
 
         val embedded = decl.getDeclaredProperties()
-            .flatMap { embeddedViewModelTypes(it) }
-            .flatMap { collectEdges(it, visited) }
+            .flatMap { embeddedViewModelTypes(it, subtypesBySupertype) }
+            .flatMap { collectEdges(it, it.edgeSourceNavName(), subtypesBySupertype, visited) }
             .toList()
 
         return (own + embedded).distinct()
     }
 
-    /** The viewmodel specs a `@ChildViewModel` / `@ViewModelList` property embeds in its host. */
-    private fun embeddedViewModelTypes(property: KSPropertyDeclaration): List<KSClassDeclaration> {
-        val listAnnotation = property.annotations.firstOrNull { it.qualifiedName() == VIEWMODEL_LIST_ANNOTATION }
-        return when {
+    /** The spec itself, or for an implementation class the first `@ViewModelSpec` it implements. */
+    private fun KSClassDeclaration.edgeSourceNavName(): String {
+        val spec = if (classKind == ClassKind.CLASS) {
+            getAllSuperTypes()
+                .mapNotNull { it.declaration as? KSClassDeclaration }
+                .firstOrNull { it.hasAnnotation(VIEWMODEL_ANNOTATION) }
+        } else {
+            null
+        }
+        return (spec ?: this).simpleName.asString().toDestinationNavName()
+    }
+
+    /**
+     * The viewmodel types a property embeds in its host, plus every viewmodel interface and class
+     * extending them (rows are often typed by a marker interface).
+     */
+    private fun embeddedViewModelTypes(
+        property: KSPropertyDeclaration,
+        subtypesBySupertype: Map<String, List<KSClassDeclaration>>,
+    ): List<KSClassDeclaration> {
+        val declared = when {
             property.hasAnnotation(CHILD_VIEWMODEL_ANNOTATION) ->
                 listOfNotNull(property.type.resolve().declaration as? KSClassDeclaration)
-            listAnnotation != null -> {
+            property.hasAnnotation(VIEWMODEL_LIST_ANNOTATION) -> {
                 val possibleTypes = property.classListArgument(VIEWMODEL_LIST_ANNOTATION, "possibleTypes")
                     .mapNotNull { it.declaration as? KSClassDeclaration }
-                // The property is Flow<Delta<X>>; X is the element spec for lists declared without
-                // explicit possibleTypes.
-                val element = property.type.resolve()
-                    .arguments.firstOrNull()?.type?.resolve()
-                    ?.arguments?.firstOrNull()?.type?.resolve()
-                    ?.declaration as? KSClassDeclaration
-                (possibleTypes + listOfNotNull(element)).distinctBy { it.qualifiedName?.asString() }
+                possibleTypes + listOfNotNull(deltaListElement(property.type.resolve()))
             }
-            else -> emptyList()
+            else -> listOfNotNull(deltaListElement(property.type.resolve()))
+        }.distinctBy { it.qualifiedName?.asString() }
+
+        val subtypes = declared.flatMap { type ->
+            subtypesBySupertype[type.qualifiedName?.asString()].orEmpty()
         }
+        return (declared + subtypes).distinctBy { it.qualifiedName?.asString() }
+    }
+
+    /** The element type of a `DeltaList<X>`, `SectionedDeltaList<S, X>` or their `Flow<Delta<X>>` expansions. */
+    private fun deltaListElement(type: KSType): KSClassDeclaration? {
+        val element = when (type.declaration.qualifiedName?.asString()) {
+            DELTA_LIST, SECTIONED_DELTA_LIST -> type.arguments.lastOrNull()
+            FLOW -> type.arguments.singleOrNull()?.type?.resolve()
+                ?.takeIf { it.declaration.qualifiedName?.asString() in setOf(DELTA, SECTIONED_DELTA) }
+                ?.arguments?.lastOrNull()
+            else -> null
+        }
+        return element?.type?.resolve()?.declaration as? KSClassDeclaration
     }
 
     private fun buildScreen(

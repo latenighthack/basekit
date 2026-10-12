@@ -2,12 +2,14 @@ package com.latenighthack.basekit.demo.test
 
 import com.latenighthack.basekit.demo.DetailNavigationTarget
 import com.latenighthack.basekit.demo.DetailViewModel
+import com.latenighthack.basekit.demo.FeedItemViewModel
 import com.latenighthack.basekit.demo.HomeViewModel
 import com.latenighthack.basekit.demo.PickResult
 import com.latenighthack.basekit.demo.PickerViewModel
 import com.latenighthack.basekit.navigation.NavigationResponder
 import com.latenighthack.basekit.navigation.test.NavigationEvent
 import com.latenighthack.basekit.navigation.test.awaitViewModel
+import com.latenighthack.deltalist.SoftValue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -75,6 +77,21 @@ class NavigationJourneyTest {
         )
         assertEquals(DetailNavigationTarget.DetailSource.HOME_ON_OPEN_DETAIL, navs[1].source)
         assertEquals(DetailNavigationTarget.DetailSource.HOME_ON_OPEN_DETAIL_FROM_BANNER, navs[2].source)
+    }
+
+    @Test
+    fun a_feed_row_records_its_own_call_site() = runTest {
+        val navigator = navigator()
+        navigator.launch(HomeViewModel.Args())
+        val home = navigator.awaitViewModel<HomeViewModel>()
+
+        val row = home.items.first().items.softGet(0) as SoftValue.Present<FeedItemViewModel>
+        row.value.onSelected()
+        val detail = navigator.awaitViewModel<DetailViewModel>()
+        assertEquals("first", detail.initialState.id)
+
+        val toDetail = navigator.navigationHistory.first().filterIsInstance<NavigationEvent.NavigatedTo>().last()
+        assertEquals(DetailNavigationTarget.DetailSource.FEED_ITEM_ON_SELECTED, toDetail.source)
     }
 
     @Test

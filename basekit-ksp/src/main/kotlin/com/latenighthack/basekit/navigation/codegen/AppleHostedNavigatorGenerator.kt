@@ -10,38 +10,34 @@ class AppleHostedNavigatorGenerator(
     private val navPackage: String,
 ) {
     private data class CallSite(
-        val source: DestinationInfo,
-        val methodName: String,
+        val edge: NavEdge,
         val target: DestinationInfo,
-        // Unique flat-enum identity for this edge. Equal to [baseName] unless the source action fans
+        // Unique flat-enum identity for this edge. Equal to [sourceEntry] unless the source action fans
         // out (multiple @NavigateTo) — then it is disambiguated by target so the two edges don't collide.
         val edgeName: String,
     ) {
         // The <Target>Source enum value name — always source+method, independent of edgeName disambiguation.
-        val sourceEntry: String get() = "${source.navName.uppercase()}_${methodName.toUpperSnakeCase()}"
+        val sourceEntry: String get() = edge.sourceEntry
     }
 
     fun generate(destinations: List<DestinationInfo>) {
         val byName = destinations.associateBy { it.qualifiedName }
+        // A call site is the declaring spec's action, not the hosting destination: a row spec embedded
+        // in two destinations is one call site reachable from both navigators.
         val rawSites = destinations.flatMap { source ->
-            source.edges.mapNotNull { edge ->
-                byName[edge.targetQualifiedName]?.let { Triple(source, edge.methodName, it) }
-            }
-        }.distinctBy { (source, method, target) -> Triple(source.qualifiedName, method, target.qualifiedName) }
+            source.edges.mapNotNull { edge -> byName[edge.targetQualifiedName]?.let { edge to it } }
+        }.distinctBy { (edge, _) -> edge }
         if (rawSites.isEmpty()) return
 
         // A single action can carry multiple @NavigateTo (fan out to several targets); those call sites
         // share a source+method base name. Disambiguate colliding names by target so every
         // AppleNavigationEdge entry stays unique and no call site is dropped.
-        val baseName = { source: DestinationInfo, method: String ->
-            "${source.navName.uppercase()}_${method.toUpperSnakeCase()}"
-        }
-        val colliding = rawSites.groupingBy { (source, method, _) -> baseName(source, method) }
+        val colliding = rawSites.groupingBy { (edge, _) -> edge.sourceEntry }
             .eachCount().filterValues { it > 1 }.keys
-        val sites = rawSites.map { (source, method, target) ->
-            val base = baseName(source, method)
+        val sites = rawSites.map { (edge, target) ->
+            val base = edge.sourceEntry
             val edgeName = if (base in colliding) "${base}_TO_${target.navName.uppercase()}" else base
-            CallSite(source, method, target, edgeName)
+            CallSite(edge, target, edgeName)
         }
 
         val sitesByTarget = sites.groupBy { it.target.qualifiedName }
@@ -85,7 +81,7 @@ class AppleHostedNavigatorGenerator(
         sites: List<CallSite>,
         sitesByTarget: Map<String, List<CallSite>>,
     ) {
-        val sourceSites = sites.filter { it.source.qualifiedName == destination.qualifiedName }
+        val sourceSites = sites.filter { it.edge in destination.edges }
         val cap = destination.navName.toUpperCamelCase()
         val navigatorType = if (sourceSites.isEmpty()) "CloseNavigationTarget" else "${cap}Navigator"
 

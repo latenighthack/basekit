@@ -21,6 +21,9 @@ fun String.toUpperSnakeCase(): String = camelWords()
     .filter { it.isNotEmpty() }
     .joinToString("_") { it.uppercase() }
 
+/** The `<Target>Source` enum entry for an edge, e.g. "home_room_item" + "onItemTapped" -> "HOME_ROOM_ITEM_ON_ITEM_TAPPED". */
+val NavEdge.sourceEntry: String get() = "${sourceNavName.uppercase()}_${methodName.toUpperSnakeCase()}"
+
 /** The `NavigationScreen` enum entry for a destination, e.g. navName "user_profile" -> "USER_PROFILE". */
 val DestinationInfo.screenName: String get() = navName.uppercase()
 

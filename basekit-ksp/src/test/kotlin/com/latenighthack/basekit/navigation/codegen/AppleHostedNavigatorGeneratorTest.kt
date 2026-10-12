@@ -9,6 +9,7 @@ import java.io.File
 import java.io.OutputStream
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertEquals
 
 class AppleHostedNavigatorGeneratorTest {
     // A single action carrying two @NavigateTo (fan-out) must keep BOTH targets: previously the edge
@@ -22,15 +23,15 @@ class AppleHostedNavigatorGeneratorTest {
                 simpleName = "HomeViewModel",
                 qualifiedName = "sample.HomeViewModel",
                 navName = "home",
-                edges = listOf(NavEdge("onOpenScan", "sample.ScanViewModel")),
+                edges = listOf(NavEdge("home", "onOpenScan", "sample.ScanViewModel")),
             ),
             destination(
                 simpleName = "ContactsViewModel",
                 qualifiedName = "sample.ContactsViewModel",
                 navName = "contacts",
                 edges = listOf(
-                    NavEdge("onSearchChanged", "sample.ScanViewModel"),
-                    NavEdge("onSearchChanged", "sample.RoomViewModel"),
+                    NavEdge("contacts", "onSearchChanged", "sample.ScanViewModel"),
+                    NavEdge("contacts", "onSearchChanged", "sample.RoomViewModel"),
                 ),
             ),
             destination("ScanViewModel", "sample.ScanViewModel", "scan"),
@@ -49,6 +50,37 @@ class AppleHostedNavigatorGeneratorTest {
         assertContains(source, "CONTACTS_ON_SEARCH_CHANGED_TO_ROOM")
         // the non-colliding edge keeps its plain name
         assertContains(source, "HOME_ON_OPEN_SCAN")
+    }
+
+    // A row spec embedded by two destinations is one call site: its AppleNavigationEdge entry is emitted
+    // once, and both hosts' navigators map its source entry to that edge.
+    @Test
+    fun rowEdgeSharedByTwoHostsIsOneCallSite() {
+        val output = RecordingCodeGenerator()
+        val rowEdge = NavEdge("room_item", "onItemTapped", "sample.RoomViewModel")
+        val destinations = listOf(
+            destination("HomeViewModel", "sample.HomeViewModel", "home", listOf(rowEdge)),
+            destination(
+                "ContactsViewModel",
+                "sample.ContactsViewModel",
+                "contacts",
+                listOf(rowEdge, NavEdge("contact_item", "onItemTapped", "sample.RoomViewModel")),
+            ),
+            destination("RoomViewModel", "sample.RoomViewModel", "room"),
+        )
+
+        AppleHostedNavigatorGenerator(output, Dependencies(false), "sample")
+            .generate(destinations)
+
+        val source = output.source()
+        assertEquals(1, Regex("^    ROOM_ITEM_ON_ITEM_TAPPED,$", RegexOption.MULTILINE).findAll(source).count())
+        assertContains(source, "    CONTACT_ITEM_ON_ITEM_TAPPED,")
+        assertContains(source, "public class AppleHomeNavigator(")
+        assertContains(source, "public class AppleContactsNavigator(")
+        assertContains(
+            source,
+            "RoomNavigationTarget.RoomSource.ROOM_ITEM_ON_ITEM_TAPPED -> AppleNavigationEdge.ROOM_ITEM_ON_ITEM_TAPPED",
+        )
     }
 
     private fun destination(
@@ -70,7 +102,7 @@ class AppleHostedNavigatorGeneratorTest {
     )
 }
 
-private class RecordingCodeGenerator : CodeGenerator {
+internal class RecordingCodeGenerator : CodeGenerator {
     private val output = ByteArrayOutputStream()
 
     fun source(): String = output.toString(Charsets.UTF_8.name())

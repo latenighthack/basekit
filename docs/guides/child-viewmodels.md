@@ -33,6 +33,8 @@ Every child's `State` class is nested inside its specification interface, as
 `ItemSummaryViewModel.State` below. This is the rule for every viewmodel, including
 parents and empty-state children. A destination's `Args` class also belongs inside
 its owning interface. Neither class belongs at the top level or in an implementation.
+Declare child specs in the parent screen's viewmodel file; see
+[A screen's types belong in one file](viewmodels-state-and-flows.md#a-screens-types-belong-in-one-file).
 
 Basekit requires an annotated child to be a non-null, read-only property whose
 declared type is a generated `@ViewModelSpec`. A `val` getter that constructs a
@@ -170,21 +172,34 @@ may observe per-item projections of shared state; the repository owns transport,
 cache and synchronization. Fence late completions with account/resource identity
 and generation; cancellation cannot reverse accepted remote effects.
 
-## Route actions through a scoped owner
+## Declare navigation on the row that triggers it
 
-A child can receive a narrow action port implemented by its owning destination:
+A row or child that navigates declares the edge on its own action:
 
 ```kotlin
-fun interface OpenItemAction {
-    suspend fun open(itemId: ItemId)
+@ViewModelSpec
+interface ItemRowViewModel : ItemsListItemViewModel, ViewModel<ItemRowViewModel.State> {
+    data class State(val title: String)
+
+    @NavigateTo(ItemDetailViewModel::class)
+    suspend fun onItemTapped()
 }
 ```
 
-The row captures `ItemId`; the owner validates current eligibility and calls its
-generated navigator. Keep the action port outside immutable state. This preserves
-the destination's declared edge and source, without a global navigator accessible
-to every row. Different occurrences may use distinct ports to preserve distinct
-navigation call sites.
+The navigation processor follows the destination's `@ChildViewModel`,
+`@ViewModelList`, `DeltaList` and `SectionedDeltaList` properties to their row
+specs, including every spec that extends a marker element type such as
+`ItemsListItemViewModel`. The row's targets join the destination's generated
+navigator, and the call site is named after the row: `ITEM_ROW_ON_ITEM_TAPPED`.
+The destination hands its scoped navigator to the rows it constructs; the row
+captures `ItemId`, checks eligibility through use cases and calls the navigator.
+Keep the navigator outside immutable state.
+
+Do not declare a row's edge on the destination (for example
+`onItemTapped(itemId)` on `ItemsViewModel`) and forward the row's tap to it. Every
+row forwarding to that method records the destination's source, and the
+destination gains an action no view binds. A `@NavigateTo` on a spec that no
+destination embeds produces a build warning and no navigator method.
 
 A child that independently owns a navigated workflow can instead be a declared
 destination with its own scoped navigator. Avoid inventing destinations solely to

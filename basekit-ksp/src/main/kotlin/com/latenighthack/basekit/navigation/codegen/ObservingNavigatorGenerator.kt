@@ -36,7 +36,7 @@ class ObservingNavigatorGenerator(
         for (destination in destinations) {
             for (edge in destination.edges) {
                 val sites = targetCallSites.getOrPut(edge.targetQualifiedName) { mutableListOf() }
-                val site = CallSite(destination.navName, edge.methodName)
+                val site = CallSite(edge.sourceNavName, edge.methodName)
                 if (site !in sites) sites.add(site)
                 outboundTargets.getOrPut(destination.qualifiedName) { LinkedHashSet() }
                     .add(edge.targetQualifiedName)

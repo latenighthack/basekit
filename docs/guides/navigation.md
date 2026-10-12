@@ -87,8 +87,9 @@ it never substitutes for authorization.
 
 Inject the destination's scoped navigator, commonly through an assisted factory.
 Do not pass a global unrestricted navigator into every viewmodel, navigate from a
-repository, or store navigator closures in immutable state. A child row can invoke
-a typed owner action port so its parent owns the declared edge and source.
+repository, or store navigator closures in immutable state. A list row or child
+declares `@NavigateTo` on its own action and receives its destination's navigator;
+see [child viewmodels](child-viewmodels.md#declare-navigation-on-the-row-that-triggers-it).
 
 ## Keep arguments and results typed
 
