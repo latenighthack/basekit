@@ -165,7 +165,27 @@ interface IdentityPlatformBindings {
 ```
 
 Here `@Provides` is kotlin-inject's annotation. Scopes and the containing component
-are application/module declarations. Basekit's `@ViewModelInject` contributes
+are application/module declarations.
+
+Basekit generates `GeneratedViewModelFactories` in commonMain, in the package the
+`@ViewModelInject` implementations share. It has one factory per implementation, named
+after its destination and taking the implementation's `@Assisted` parameters in order:
+`val homeFactory: (HomeNavigator) -> HomeViewModel`. A component implements them all
+by extending the interface:
+
+```kotlin
+@Component
+abstract class ViewModelComponent(@Component val core: Core) : GeneratedViewModelFactories
+
+@KmpComponentCreate
+expect fun createViewModelComponent(core: Core): ViewModelComponent
+```
+
+An `@Assisted` parameter must name a type the processor can resolve, or one of
+basekit's generated navigators (`<Name>Navigator`, `<Name>NavigationTarget`,
+`CloseNavigationTarget`), which it places in `Basekit_NavigationPackage`. An
+implementation with another unresolved parameter type gets a build warning and no
+factory. Basekit's `@ViewModelInject` contributes
 viewmodel bindings; `@ViewModelModule` integrates app-supplied provider modules in
 the relevant generated components. These annotations do not create platform SDK
 adapters or replace the layered client composition root. Keep repository capability

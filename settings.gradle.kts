@@ -72,6 +72,7 @@ include(":basekit-viewmodel-compose") // optional generated Compose host runtime
 include(":basekit-viewmodel")             // viewmodel runtime + platform bindings (KMP, SKIE)
 include(":basekit-viewmodel-ksp")         // KSP processor + platform generators (JVM)
 include(":basekit-catalog-ksp")           // KSP processor writing catalog.yaml (JVM)
+include(":basekit-catalog-codegen")       // CLI writing Kotlin specs + impls from catalog.yaml (JVM)
 
 // TUI slice — the third codegen slice: generates a TamboUI terminal UI from the ViewModels.
 include(":basekit-tui-annotations") // @TuiScreen / @TuiNavigatesTo link annotations (KMP)
@@ -80,6 +81,7 @@ include(":basekit-tui-ksp")         // KSP processor generating TamboUI screens 
 
 include(":demo-core")           // sample consumer proving the codegen end-to-end
 include(":demo-jvm")            // runnable JVM app proving the TUI slice end-to-end
+include(":demo-catalog")        // round trip: catalog.yaml -> codegen -> compiled specs -> same catalog.yaml
 
 // Explicit isolated library development; release builds use published dependencies.
 apply(from = "gradle/fh-workspace.settings.gradle")

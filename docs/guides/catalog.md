@@ -17,7 +17,9 @@ The catalog plugin also applies the `navigation` and `viewmodel` plugins. Run `a
 `build/generated/basekit-catalog/catalog.yaml`. It is not packaged into any artifact.
 
 The processor runs on the common metadata pass only, so the catalog covers `commonMain`
-declarations.
+declarations. Kotlin creates that pass only when `commonMain` is shared by two or more targets.
+
+To go the other way, from a catalog to Kotlin, see [generating code from a catalog](catalog-codegen.md).
 
 ## File layout
 

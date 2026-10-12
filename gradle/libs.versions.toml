@@ -8,6 +8,9 @@ ksp = "2.3.10"
 maven-publish = "0.30.0"
 # kotlin-inject wires the generated TUI component (the `tui` slice).
 kotlin-inject = "0.7.1"
+# The component basekit-catalog-codegen writes uses @KmpComponentCreate, which fails under KSP2 in
+# kotlin-inject 0.7.1 (KmpComponentCreateGenerator). demo-catalog builds it with 0.8.0.
+kotlin-inject-kmp = "0.8.0"
 # TamboUI: the JVM terminal-UI toolkit the `tui` slice renders with. Snapshot-only for now.
 tamboui = "0.5.0-SNAPSHOT"
 # All DeltaList adapters use this same published version. Local overrides are explicit.
@@ -45,6 +48,8 @@ ksp-api = { module = "com.google.devtools.ksp:symbol-processing-api", version.re
 # kotlin-inject (declared for a future DI slice; not yet consumed)
 kotlin-inject-runtime = { module = "me.tatarka.inject:kotlin-inject-runtime", version.ref = "kotlin-inject" }
 kotlin-inject-ksp = { module = "me.tatarka.inject:kotlin-inject-compiler-ksp", version.ref = "kotlin-inject" }
+kotlin-inject-runtime-kmp = { module = "me.tatarka.inject:kotlin-inject-runtime-kmp", version.ref = "kotlin-inject-kmp" }
+kotlin-inject-ksp-kmp = { module = "me.tatarka.inject:kotlin-inject-compiler-ksp", version.ref = "kotlin-inject-kmp" }
 
 # TamboUI terminal-UI toolkit + a runtime backend (the `tui` slice renders JVM screens with these)
 tamboui-toolkit = { module = "dev.tamboui:tamboui-toolkit", version.ref = "tamboui" }

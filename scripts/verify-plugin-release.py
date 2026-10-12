@@ -114,6 +114,7 @@ tasks.register("verifyPublishedPlugin") {
         verifyProcessor("kspCommonMainMetadata", "basekit-ksp")
         verifyProcessor("kspCommonMainMetadata", "basekit-viewmodel-ksp")
         verifyProcessor("kspCommonMainMetadata", "basekit-catalog-ksp")
+        verifyProcessor("basekitCatalogCodegen", "basekit-catalog-codegen")
         listOf("Jvm", "Android", "Js", "IosArm64", "IosSimulatorArm64", "MacosArm64").forEach {
             verifyProcessor("ksp$it", "basekit-viewmodel-ksp")
         }
@@ -122,6 +123,7 @@ tasks.register("verifyPublishedPlugin") {
         }
         check(tasks.findByName("collectBasekitAppleSwift") != null)
         check(tasks.findByName("generateBasekitCatalog") != null)
+        check(tasks.findByName("generateFromBasekitCatalog") != null)
     }
 }
 ''')
@@ -181,7 +183,7 @@ def verify_incremental_version(directory, version):
 def wait_for_release(repository, version, seconds):
     paths = [f'com/latenighthack/basekit/{a}/{version}/{a}-{version}.jar' for a in
              ('basekit-gradle-plugin', 'basekit-ksp', 'basekit-viewmodel-ksp', 'basekit-tui-ksp',
-              'basekit-catalog-ksp')]
+              'basekit-catalog-ksp', 'basekit-catalog-codegen')]
     for name in ('navigation', 'viewmodel', 'tui', 'catalog'):
         artifact = f'com.latenighthack.basekit.{name}.gradle.plugin'
         paths.append(f'com/latenighthack/basekit/{name}/{artifact}/{version}/{artifact}-{version}.pom')

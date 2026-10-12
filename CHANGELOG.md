@@ -6,6 +6,22 @@ All notable changes to basekit are documented here. The format follows
 
 ## Next
 
+- `basekit-viewmodel-ksp` generates `GeneratedViewModelFactories` in commonMain: one kotlin-inject
+  factory per `@ViewModelInject` implementation, named after its destination and taking its
+  `@Assisted` parameters (`val homeFactory: (HomeNavigator) -> HomeViewModel`). An app component
+  extends it instead of listing every factory: `@Component abstract class ViewModelComponent(@Component
+  val core: Core) : GeneratedViewModelFactories`. The demo's test component now does.
+- Added `basekit-catalog-codegen`, a JVM command-line tool that reads a `catalog.yaml` and writes a
+  Kotlin tree: one spec file per screen (with its rows, child panes, section headers and list
+  markers), a starting-point `@ViewModelInject` implementation per screen with rows and children as
+  inner classes, static lists holding one instance of each row type, navigating actions that call the
+  generated navigator, the catalog's types, and a kotlin-inject `ViewModelComponent` that extends
+  `GeneratedViewModelFactories` and adds a `create…` function per screen. Screens that don't navigate
+  take a `CloseNavigationTarget`. Spec, type and component files are rewritten on every run;
+  implementation files are kept once they exist. The catalog plugin runs it as
+  `generateFromBasekitCatalog`. See [the guide](docs/guides/catalog-codegen.md).
+- Added `demo-catalog`, which generates code from a catalog, compiles it with the basekit processors
+  and kotlin-inject, and checks the catalog written back is identical.
 - Added the `com.latenighthack.basekit.catalog` plugin and the `basekit-catalog-ksp` processor.
   `assemble` writes `build/generated/basekit-catalog/catalog.yaml` (schema `catalog/v1`): every
   screen, component, list, child, navigation edge and referenced type, read from the

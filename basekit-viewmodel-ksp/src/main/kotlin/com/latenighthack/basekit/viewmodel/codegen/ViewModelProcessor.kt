@@ -9,7 +9,11 @@ import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.KSClassifierReference
 import com.google.devtools.ksp.symbol.KSFile
+import com.google.devtools.ksp.symbol.KSType
+import com.google.devtools.ksp.symbol.KSValueParameter
+import com.google.devtools.ksp.symbol.Modifier
 import java.io.File
 
 internal const val VIEWMODEL_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelSpec"
@@ -59,6 +63,12 @@ class ViewModelProcessor(
     private val injectSourceFiles = mutableListOf<KSFile>()
     private var injectPackage: String = ""
 
+    // Every public @ViewModelInject implementation as a factory of its @Assisted parameters, emitted as
+    // GeneratedViewModelFactories on the metadata pass for an app component to extend.
+    private val factoryInfos = mutableListOf<ViewModelFactoryInfo>()
+    private val factorySourceFiles = mutableListOf<KSFile>()
+    private var navigationPackage: String? = null
+
     override fun process(resolver: Resolver): List<KSAnnotated> {
         if (!platformCollected) {
             platformCollected = true
@@ -77,7 +87,12 @@ class ViewModelProcessor(
             }
         }
 
+        if (navigationPackage == null) navigationPackage = resolveNavigationPackage(resolver)
         for (impl in resolver.getSymbolsWithAnnotation(VIEWMODEL_INJECT_ANNOTATION).filterIsInstance<KSClassDeclaration>().filterNot { it.hasAnnotation(CODEGEN_IGNORE_ANNOTATION) }) {
+            buildFactoryInfo(impl)?.let { info ->
+                factoryInfos.add(info)
+                impl.containingFile?.let(factorySourceFiles::add)
+            }
             buildInjectInfo(impl)?.let { info ->
                 injectInfos.add(info)
                 impl.containingFile?.let(injectSourceFiles::add)
@@ -108,6 +123,72 @@ class ViewModelProcessor(
         return InjectVmInfo(interfaceQn, implQn)
     }
 
+    /**
+     * The factory for one implementation, or null when it is not public, implements no spec, or has an
+     * `@Assisted` parameter whose type cannot be named here.
+     */
+    private fun buildFactoryInfo(impl: KSClassDeclaration): ViewModelFactoryInfo? {
+        val implQn = impl.qualifiedName?.asString() ?: return null
+        if (impl.modifiers.any { it in setOf(Modifier.PRIVATE, Modifier.INTERNAL, Modifier.PROTECTED) }) return null
+        val spec = impl.getAllSuperTypes()
+            .mapNotNull { it.declaration as? KSClassDeclaration }
+            .firstOrNull { it.hasAnnotation(VIEWMODEL_ANNOTATION) }
+            ?: return null
+        val ctor = impl.getConstructors().firstOrNull { it.hasAnnotation(INJECT_ANNOTATION) } ?: impl.primaryConstructor
+        val parameterTypes = ctor?.parameters.orEmpty()
+            .filter { it.hasAnnotation(ASSISTED_ANNOTATION) }
+            .map { parameter ->
+                factoryParameterType(parameter) ?: run {
+                    logger.warn(
+                        "GeneratedViewModelFactories: cannot name the type of @Assisted ${parameter.name?.asString()} " +
+                            "on $implQn; it has no factory there",
+                        parameter,
+                    )
+                    return null
+                }
+            }
+        val navName = spec.stringArgument(DESTINATION_ANNOTATION, "navName")?.takeIf { it.isNotEmpty() }
+            ?: spec.simpleName.asString().toDestinationNavName()
+        val name = navName.toUpperCamelCase().replaceFirstChar { it.lowercase() } + "Factory"
+        return ViewModelFactoryInfo(name, implQn, parameterTypes)
+    }
+
+    /**
+     * A parameter type as Kotlin source. basekit's navigators (`HomeNavigator`, `CloseNavigationTarget`)
+     * are generated in the navigation processor's `finish`, after every round, so they never resolve
+     * here; they are named from the navigation package instead.
+     */
+    private fun factoryParameterType(parameter: KSValueParameter): String? {
+        val resolved = parameter.type.resolve()
+        if (!resolved.isError) return resolved.sourceName()
+        // KSP1 keeps the source reference; KSP2 only names an unresolved type as "<ERROR TYPE: Name>".
+        val name = (parameter.type.element as? KSClassifierReference)?.referencedName()
+            ?: ERROR_TYPE.matchEntire(resolved.toString())?.groupValues?.get(1)
+            ?: return null
+        val simple = name.substringAfterLast('.')
+        if (!simple.endsWith("Navigator") && !simple.endsWith("NavigationTarget")) return null
+        if ('.' in name) return name
+        return listOfNotNull(navigationPackage?.takeIf { it.isNotEmpty() }, name).joinToString(".")
+    }
+
+    private fun KSType.sourceName(): String {
+        val base = declaration.qualifiedName?.asString() ?: declaration.simpleName.asString()
+        val arguments = if (arguments.isEmpty()) "" else arguments.joinToString(", ", "<", ">") {
+            it.type?.resolve()?.sourceName() ?: "*"
+        }
+        return base + arguments + if (isMarkedNullable) "?" else ""
+    }
+
+    /** `Basekit_NavigationPackage`, else the navigation processor's fallback: the destinations' common package. */
+    private fun resolveNavigationPackage(resolver: Resolver): String {
+        options[NAVIGATION_PACKAGE_OPTION]?.takeIf { it.isNotEmpty() }?.let { return it }
+        val packages = resolver.getSymbolsWithAnnotation(DESTINATION_ANNOTATION)
+            .filterIsInstance<KSClassDeclaration>()
+            .map { it.packageName.asString() }
+            .toList()
+        return commonPackage(packages).ifEmpty { "navigation" }
+    }
+
     override fun finish() {
         // Emit a marker to learn the output path, then route to the generator for this pass.
         codeGenerator.createNewFile(Dependencies(false), MARKER_PACKAGE, "basekit_viewmodel_marker", "log").close()
@@ -126,6 +207,7 @@ class ViewModelProcessor(
                 val dependencies = Dependencies(aggregating = true, *injectSourceFiles.toTypedArray())
                 ViewModelModuleGenerator(codeGenerator, dependencies).generate(injectInfos, injectPackage)
             }
+            generateFactories()
             return
         }
 
@@ -165,11 +247,30 @@ class ViewModelProcessor(
         }
     }
 
+    private fun generateFactories() {
+        if (factoryInfos.isEmpty()) return
+        val sorted = factoryInfos.sortedWith(compareBy({ it.name }, { it.implQualifiedName }))
+        val factories = sorted.distinctBy { it.name }
+        (sorted - factories.toSet()).forEach { duplicate ->
+            val kept = factories.first { it.name == duplicate.name }.implQualifiedName
+            logger.warn(
+                "GeneratedViewModelFactories: ${duplicate.implQualifiedName} and $kept both derive " +
+                    "${duplicate.name}; only $kept has a factory",
+            )
+        }
+        val packageName = commonPackage(factories.map { it.implQualifiedName.substringBeforeLast('.', "") })
+        val dependencies = Dependencies(aggregating = true, *factorySourceFiles.toTypedArray())
+        ViewModelFactoriesGenerator(codeGenerator, dependencies).generate(factories, packageName)
+    }
+
     private enum class Pass { ANDROID, APPLE, JS, METADATA, OTHER }
 
     private companion object {
         const val MARKER_PACKAGE = "com.latenighthack.basekit.viewmodel.gen"
         const val SWIFT_FRAMEWORK_IMPORTS_OPTION = "basekit.viewmodel.swiftFrameworkImports"
+        const val NAVIGATION_PACKAGE_OPTION = "Basekit_NavigationPackage"
+        val ERROR_TYPE = Regex("<ERROR TYPE: ([A-Za-z0-9_.]+)>")
+        const val DESTINATION_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.Destination"
 
         // Every Apple target routes to the one Swift branch. Keeping this coarse is deliberate: the
         // generated Swift already discriminates UIKit vs AppKit with `#if canImport(...)`, and the

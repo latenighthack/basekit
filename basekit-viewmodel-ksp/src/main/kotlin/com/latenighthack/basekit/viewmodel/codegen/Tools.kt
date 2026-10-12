@@ -158,6 +158,33 @@ fun String.swiftDeclName(): String = if (this in SWIFT_RESERVED_MEMBERS) this + 
  */
 fun String.swiftSourceRef(): String = if (this in SWIFT_KEYWORDS) "`$this`" else this
 
+/**
+ * basekit's navigation name for a spec, as basekit-ksp derives it: drops a leading interface `I` and one
+ * trailing `Screen`, `Destination`, `Route` or `ViewModel`, then snake_cases the rest
+ * (`IHomeViewModel` -> `home`).
+ */
+fun String.toDestinationNavName(): String {
+    var str = this
+    if (str.length > 1 && str[0] == 'I' && str[1].isUpperCase()) str = str.substring(1)
+    for (suffix in listOf("Screen", "Destination", "Route", "ViewModel")) {
+        if (str.length > suffix.length && str.endsWith(suffix)) {
+            str = str.substring(0, str.length - suffix.length)
+            break
+        }
+    }
+    return str.camelWords().filter { it.isNotEmpty() }.joinToString("_") { it.lowercase() }
+}
+
+/** The longest common dotted prefix of [packages]; empty when they share none. */
+fun commonPackage(packages: List<String>): String {
+    if (packages.isEmpty()) return ""
+    var prefix = packages.first().split('.')
+    packages.drop(1).forEach { other ->
+        prefix = prefix.zip(other.split('.')).takeWhile { (a, b) -> a == b }.map { it.first }
+    }
+    return prefix.joinToString(".")
+}
+
 /** "feed_item" -> "FeedItem"; also uppercases the first letter of an already-camel identifier. */
 fun String.toUpperCamelCase(): String {
     val parts = if (contains('_')) split("_") else listOf(this)
