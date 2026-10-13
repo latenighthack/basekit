@@ -17,7 +17,7 @@ abstract class BasekitCatalogCodegenExtension {
     /** The source root to write into. Defaults to `src/commonMain/kotlin`. */
     abstract val outputDirectory: DirectoryProperty
 
-    /** Also overwrite implementation files that already exist. Defaults to false. */
+    /** Also rewrite spec-file regions that were edited, and spec files basekit did not generate. Defaults to false. */
     abstract val force: Property<Boolean>
 
     /** Package of basekit's generated navigators. Defaults to the `Basekit_NavigationPackage` KSP arg. */

@@ -53,13 +53,15 @@ data class TypeRef(val name: String, val arguments: List<TypeRef>, val nullable:
 }
 
 /**
- * Resolves catalog type names to Kotlin: builtins, catalog `types` (declared in [typesPackage]),
- * external types (imported by qualified name) and screens/components (their spec interfaces).
+ * Resolves catalog type names to Kotlin: builtins, catalog `types` (declared in their owner's spec
+ * package, see [TypePlacement], or else in [typesPackage]), external types (imported by qualified
+ * name) and screens/components (their spec interfaces).
  * Rendering records the imports a file needs in the given set.
  */
 class TypeResolver(
     private val document: CatalogDocument,
     val typesPackage: String,
+    private val placement: TypePlacement,
 ) {
     private val types = document.types.associateBy { it.name }
     private val vms = (document.screens + document.components).associateBy { it.name }
@@ -80,7 +82,8 @@ class TypeResolver(
                     imports += type.external
                     type.external.substringAfterLast('.')
                 } else {
-                    imports += "$typesPackage.${ref.name.substringBefore('.')}"
+                    val packageName = placement.owner(ref.name)?.packageName ?: typesPackage
+                    imports += listOf(packageName, ref.name.substringBefore('.')).filter { it.isNotEmpty() }.joinToString(".")
                     ref.name
                 }
             }

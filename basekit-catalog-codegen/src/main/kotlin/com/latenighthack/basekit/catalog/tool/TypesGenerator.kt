@@ -1,7 +1,8 @@
 package com.latenighthack.basekit.catalog.tool
 
 /**
- * Writes the catalog's `types` into one file:
+ * Writes the catalog's `types`: those [TypePlacement] gives an owner into its spec file, the rest into
+ * `CatalogTypes.kt`.
  *
  *  - `enum` -> `enum class`;
  *  - `fields` -> `data class` (`class` when there are none);
@@ -11,7 +12,11 @@ package com.latenighthack.basekit.catalog.tool
  *  - a dotted name such as `Button.Style` is nested in `Button` (an `object` when `Button` is not a type);
  *  - `external` types are imported where used and not generated.
  */
-class TypesGenerator(private val document: CatalogDocument, private val types: TypeResolver) {
+class TypesGenerator(
+    document: CatalogDocument,
+    private val types: TypeResolver,
+    private val placement: TypePlacement,
+) {
 
     private class Node(val name: String) {
         var type: CatalogTypeDef? = null
@@ -27,20 +32,30 @@ class TypesGenerator(private val document: CatalogDocument, private val types: T
         }
     }
 
-    fun file(): GeneratedFile? {
-        if (declared.isEmpty()) return null
-        val root = Node("")
+    /** Top-level names, with dotted names nested under their first segment. */
+    private val root = Node("").also { root ->
         declared.values.forEach { type ->
             var node = root
             type.name.split('.').forEach { segment -> node = node.children.getOrPut(segment) { Node(segment) } }
             node.type = type
         }
+    }
+
+    /** The top-level declarations of the types placed in [owner]'s spec file (`CatalogTypes.kt` for null). */
+    fun declarations(owner: CatalogVm?, imports: MutableSet<String>): List<String> =
+        root.children.values
+            .filter { placement.owner(it.name)?.name == owner?.name }
+            .map { declaration(it, imports) }
+
+    /** `CatalogTypes.kt`, or null when every type is declared in a spec file. */
+    fun file(): GeneratedFile? {
         val imports = mutableSetOf<String>()
-        val body = root.children.values.joinToString("\n\n") { declaration(it, imports) }
+        val declarations = declarations(null, imports)
+        if (declarations.isEmpty()) return null
+        val body = declarations.joinToString("\n\n")
         return GeneratedFile(
-            sourcePath(types.typesPackage, "CatalogTypes"),
+            sourcePath(types.typesPackage, FILE_NAME),
             kotlinFile(types.typesPackage, SpecGenerator.HEADER, imports, body),
-            overwrite = true,
         )
     }
 
@@ -91,5 +106,9 @@ class TypesGenerator(private val document: CatalogDocument, private val types: T
         val fields = parent.fields.orEmpty()
         if (fields.isEmpty()) return ""
         return fields.joinToString(", ", "(", ")") { types.default(it.type, imports) }
+    }
+
+    companion object {
+        const val FILE_NAME = "CatalogTypes"
     }
 }

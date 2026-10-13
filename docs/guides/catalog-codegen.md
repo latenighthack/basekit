@@ -39,15 +39,52 @@ basekit-catalog-codegen --catalog catalog.yaml --out src/commonMain/kotlin \
 | Option                 | Default                                                                                |
 | ---------------------- | -------------------------------------------------------------------------------------- |
 | `--navigation-package` | The `Basekit_NavigationPackage` KSP argument (Gradle task), else the screens' common package, which is also basekit's default. It must match where basekit generates the navigators. |
-| `--types-package`      | The common package of all specs.                                                       |
+| `--types-package`      | The common package of all specs. Only `CatalogTypes.kt` uses it: types one spec file uses go in that file's package. |
 | `--component-package`  | The common package of all specs.                                                       |
 
 ## Which files are rewritten
 
 | File                                   | On every run                         |
 | -------------------------------------- | ------------------------------------ |
-| Spec files, `CatalogTypes.kt`, `ViewModelComponent.kt` | Rewritten. Edit the catalog, not these files. |
-| Implementation files                   | Written only when missing; `--force` (or `force.set(true)`) rewrites them. |
+| `CatalogTypes.kt`, `ViewModelComponent.kt` | Rewritten. Edit the catalog, not these files. |
+| Spec files                             | Each region is rewritten while it matches its hash; an edited region is kept. |
+
+A spec file holds the spec and the implementation of a screen in two regions, `basekit:spec` and
+`basekit:impl`. Each region has two parts, its imports and its declarations, each between IntelliJ
+region comments:
+
+```kotlin
+// region basekit:spec imports
+import com.latenighthack.basekit.viewmodel.ViewModel
+// endregion basekit:spec imports
+// region basekit:impl imports
+import com.latenighthack.basekit.viewmodel.StatefulViewModel
+// endregion basekit:impl imports
+
+// region basekit:spec f6b51b8878235ec9
+@ViewModelSpec
+interface IPickerViewModel : …
+// endregion basekit:spec
+
+// region basekit:impl 75b6cbbb2f553b12
+@ViewModelInject
+class PickerViewModel …
+// endregion basekit:impl
+```
+
+The hash on a region's opening line is taken from both parts as they were written. On a rerun:
+
+- A region whose content still has its hash is rewritten from the catalog.
+- An edited region is kept and reported (`kept … (impl region)`). `--force` (or `force.set(true)`)
+  rewrites it.
+- Code and imports outside the regions are never touched. Add helpers and imports there, or edit
+  inside a region and keep it.
+- Kotlin rejects a repeated import, so a region's imports leave out those already imported earlier
+  in the file. When a rewritten region stops importing something, the import moves to a kept region,
+  whose code may still use it.
+- A file at a spec path without regions is kept unless `--force`, except for a spec file written by
+  0.4.0, which is replaced. A 0.4.0 implementation file (`HomeViewModel.kt`) is moved into the
+  `impl` region and deleted. It counts as edited unless it equals what the catalog generates now.
 
 A file whose content would not change is left untouched.
 
@@ -57,7 +94,7 @@ Each spec goes in the package of its `spec` qualified name.
 
 ### Spec files
 
-One file per screen, named after the spec (`IHomeViewModel.kt`). It holds:
+One file per screen, named after the spec (`IHomeViewModel.kt`). Its `spec` region holds:
 
 - the screen interface: `@Destination` (with `navName` only when the catalog name differs from the
   one basekit derives), `@ViewModelSpec`, `NavigationDestination<Args>` or
@@ -69,7 +106,8 @@ One file per screen, named after the spec (`IHomeViewModel.kt`). It holds:
   `@NavigateTo` for each `navigates_to`;
 - every component only this screen embeds, at any depth;
 - a marker interface for each list element that is not a component, such as
-  `interface IHomeListItemViewModel`. Every row of the list extends it.
+  `interface IHomeListItemViewModel`. Every row of the list extends it;
+- every catalog type that only this file uses, after the interfaces. See [types](#types).
 
 Flat lists are `@ViewModelList(rows…) val items: Flow<Delta<Element>>`. Sectioned lists are
 `val sections: SectionedDeltaList<Spec.SectionsHeader, Element>`.
@@ -77,9 +115,10 @@ Flat lists are `@ViewModelList(rows…) val items: Flow<Delta<Element>>`. Sectio
 A component that several screens embed gets its own file. A component that nothing embeds is a
 root: it gets its own file, with the components it embeds.
 
-### Implementation files
+### Implementations
 
-Names follow the spec: `IHomeViewModel` is implemented by `HomeViewModel` in `HomeViewModel.kt`.
+The `impl` region of each screen's spec file holds a starting-point implementation. Names follow the
+spec: `IHomeViewModel` is implemented by `HomeViewModel`.
 A spec without a leading `I` gets an `Impl` suffix: `HomeViewModel` → `HomeViewModelImpl`.
 
 ```kotlin
@@ -131,7 +170,17 @@ class HomeViewModel @Inject constructor(
 - A root component's implementation is a top-level `@ViewModelInject` class without a navigator. Its
   `navigates_to` edges are left as empty actions, because only screens own a navigator.
 
-### `CatalogTypes.kt`
+### Types
+
+A catalog type is declared in the one spec file that uses it, and in `CatalogTypes.kt` (in
+`--types-package`) when several spec files use it or none does. A type is used by a file when the
+file's screen or components have it in a `state` field, a mutation `param`, a navigation arg or the
+`response`, or when a type that file uses has it in a field. So a type that is only a field of a
+shared type is shared too. `Button.Style` goes wherever `Button` goes, and a sealed type goes in the
+same file as its class subtypes, because Kotlin requires them in one package.
+
+`CatalogTypes.kt` is not written when every type is in a spec file. A run deletes a `CatalogTypes.kt`
+an earlier run wrote (one that starts with the generated header) when it no longer writes one.
 
 | Catalog type                         | Kotlin                                                              |
 | ------------------------------------ | ------------------------------------------------------------------- |

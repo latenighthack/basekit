@@ -108,7 +108,7 @@ tasks.register<JavaExec>("generateFromBasekitCatalog") {
     mainClass.set("com.latenighthack.basekit.catalog.tool.MainKt")
     inputs.file(codegen.catalog)
     outputs.dir(codegen.outputDirectory)
-    // Implementation files are kept between runs, so the task never counts as up to date.
+    // Edited regions are kept between runs, so the task never counts as up to date.
     outputs.upToDateWhen { false }
     argumentProviders.add(CommandLineArgumentProvider {
         buildList {

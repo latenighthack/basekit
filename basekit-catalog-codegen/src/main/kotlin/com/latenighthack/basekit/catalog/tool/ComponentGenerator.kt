@@ -41,7 +41,6 @@ class ComponentGenerator(
         return GeneratedFile(
             sourcePath(packageName, "ViewModelComponent"),
             kotlinFile(packageName, SpecGenerator.HEADER, imports, body),
-            overwrite = true,
         )
     }
 

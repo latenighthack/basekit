@@ -6,6 +6,17 @@ All notable changes to basekit are documented here. The format follows
 
 ## Next
 
+- The catalog code generator writes a screen's spec and implementation into one file
+  (`IHomeViewModel.kt`), as two regions, `basekit:spec` and `basekit:impl`. Each region records a
+  hash of its imports and declarations, and a rerun rewrites only regions that still match it: an
+  edited region is kept (`--force` rewrites it), and code outside the regions is never touched. A
+  0.4.0 spec file is replaced, and the separate implementation file 0.4.0 wrote is moved into the
+  `impl` region and deleted.
+- The catalog code generator declares a type that only one screen's spec file uses in that file,
+  after the specs, instead of in `CatalogTypes.kt`. Use through other types counts: a type that is
+  only a field of a shared type stays in `CatalogTypes.kt`. Dotted names (`Button.Style`) and sealed
+  families stay with their top-level type. `CatalogTypes.kt` now holds only types several files use
+  and is not written when there are none; a stale generated one is deleted.
 - Added `@RedirectsTo(targets)` for a `@Destination` that replaces itself with another screen without
   a user action, such as an entry screen sending the user to the right first step. Each target joins
   the destination's generated navigator like a `@NavigateTo` edge, with source entry

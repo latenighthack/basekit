@@ -1,10 +1,17 @@
 package com.latenighthack.basekit.catalog.tool
 
 /**
- * One generated source file. [overwrite] is false for implementation files, which are written only
- * when missing so handwritten work is kept.
+ * One generated source file. A file with [regions] (a spec file) is merged into the file already at
+ * [path] region by region, see [Regions.merge]; a file without is rewritten. [previousImpl] is where
+ * basekit-catalog-codegen 0.4.0 wrote this spec's implementation as a file of its own.
  */
-data class GeneratedFile(val path: String, val content: String, val overwrite: Boolean)
+data class GeneratedFile(
+    val path: String,
+    val content: String,
+    val regions: List<Region> = emptyList(),
+    val packageName: String = "",
+    val previousImpl: String? = null,
+)
 
 /** Symbols the generated code references, by qualified name. */
 object Symbols {

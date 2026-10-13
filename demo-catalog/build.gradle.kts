@@ -11,7 +11,7 @@ val generatedSources = layout.buildDirectory.dir("generated/catalog-codegen/kotl
 basekitCatalogCodegen {
     catalog.set(layout.projectDirectory.file("catalog.yaml"))
     outputDirectory.set(generatedSources)
-    // The tree is build output, so implementation files are regenerated too.
+    // The tree is build output, so edited regions are rewritten too.
     force.set(true)
 }
 

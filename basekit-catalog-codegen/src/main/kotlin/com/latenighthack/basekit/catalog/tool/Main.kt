@@ -13,12 +13,13 @@ kotlin-inject component from a catalog.yaml (schema catalog/v1).
   --out DIR                   source root to write into, e.g. src/commonMain/kotlin
   --navigation-package PKG    package of basekit's generated navigators (Basekit_NavigationPackage);
                               defaults to the common package of the screens
-  --types-package PKG         package for the catalog's types; defaults to the common package
+  --types-package PKG         package for types several spec files use; defaults to the common package
   --component-package PKG     package for ViewModelComponent; defaults to the common package
-  --force                     also overwrite implementation files that already exist
+  --force                     also rewrite edited regions, and spec files basekit did not generate
 
-  Spec, type and component files are rewritten on every run. Implementation files are written only
-  when missing, unless --force is given.
+  A screen's spec file holds its spec and implementation in two hashed regions. A region that still
+  matches its hash is rewritten; an edited one is kept unless --force is given. Code outside the
+  regions is never touched. CatalogTypes.kt and ViewModelComponent.kt are rewritten on every run.
 
 graph writes a single self-contained HTML page: the navigation graph with every screen, the items in
 it that navigate and every event, and a details view per screen with links to the source.
@@ -106,10 +107,12 @@ private fun generate(arguments: Arguments) {
         componentPackage = arguments.values["--component-package"],
     )
     val files = CatalogCodegen.generate(document, options)
-    val result = CatalogCodegen.write(files, File(arguments.required("--out")), arguments.force)
+    val obsolete = CatalogCodegen.obsolete(document, options, files)
+    val result = CatalogCodegen.write(files, File(arguments.required("--out")), arguments.force, obsolete)
     result.written.forEach { println("wrote $it") }
+    result.removed.forEach { println("removed $it (no longer generated; an implementation moves into its spec file)") }
     if (result.unchanged.isNotEmpty()) println("${result.unchanged.size} file(s) already current")
-    result.kept.forEach { println("kept  $it (exists; --force to overwrite)") }
+    result.kept.forEach { println("kept  $it (edited; --force to overwrite)") }
 }
 
 private fun graph(arguments: Arguments) {
