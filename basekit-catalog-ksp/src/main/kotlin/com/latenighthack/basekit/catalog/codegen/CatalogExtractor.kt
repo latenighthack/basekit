@@ -75,6 +75,7 @@ class CatalogExtractor(
     )
 
     private lateinit var destinations: Map<String, DestinationInfo>
+    private lateinit var hostedComponents: Map<String, DestinationInfo>
     private lateinit var specs: Map<String, Spec>
     private lateinit var names: Map<String, String>
     private val typeDeclarations = LinkedHashMap<String, TypeDeclaration>()
@@ -83,6 +84,7 @@ class CatalogExtractor(
     fun extract(): CatalogExtraction {
         val graph = NavigationExtractor(SilentLogger).extract(resolver)
         destinations = graph.destinations.associateBy { it.qualifiedName }
+        hostedComponents = graph.hostedComponents.associateBy { it.qualifiedName }
 
         val specDeclarations = resolver.getSymbolsWithAnnotation(VIEWMODEL_SPEC)
             .filterIsInstance<KSClassDeclaration>()
@@ -96,7 +98,7 @@ class CatalogExtractor(
         names = catalogNames()
 
         // Every edge, deduplicated: a row embedded by two screens rolls up into both of their graphs.
-        val edges = graph.destinations.flatMap { it.edges }.distinct()
+        val edges = graph.sources.flatMap { it.edges }.distinct()
         val edgesBySource = edges.groupBy { it.sourceNavName }
         warnUnattributedEdges(edges)
 
@@ -107,7 +109,7 @@ class CatalogExtractor(
             .sortedBy { it.name }
         val components = specs.values
             .filter { it.info.qualifiedName !in destinations }
-            .map { viewModel(it, edgesBySource, navigation = null) }
+            .map { viewModel(it, edgesBySource, navigation = null).copy(hosted = it.info.qualifiedName in hostedComponents) }
 
         val catalog = Catalog(
             screens = screens,
@@ -170,7 +172,7 @@ class CatalogExtractor(
 
     /** The snake_case name basekit's navigation code knows a spec or destination by. */
     private fun navName(qualifiedName: String, simpleName: String): String =
-        destinations[qualifiedName]?.navName ?: simpleName.toDestinationNavName()
+        destinations[qualifiedName]?.navName ?: hostedComponents[qualifiedName]?.navName ?: simpleName.toDestinationNavName()
 
     /**
      * catalog/v1 names every screen and component by its navigation name in UpperCamelCase:
@@ -353,7 +355,9 @@ class CatalogExtractor(
     ): List<CatalogComponentGroup> {
         val byName = (screens + components).associateBy { it.name }
         val hosts = mutableMapOf<String, MutableSet<String>>()
-        screens.forEach { screen ->
+        // A hosted component groups the components it embeds, as a screen does.
+        val hostedRoots = components.filter { it.hosted }
+        (screens + hostedRoots).forEach { screen ->
             val seen = mutableSetOf(screen.name)
             val queue = ArrayDeque(listOf(screen))
             while (queue.isNotEmpty()) {
@@ -367,11 +371,12 @@ class CatalogExtractor(
         }
         val sorted = components.sortedBy { it.name }
         val shared = sorted.filter { hosts[it.name].orEmpty().size > 1 }
-        val perScreen = screens.map { screen ->
+        val perScreen = (screens + hostedRoots).map { screen ->
             CatalogComponentGroup("${screen.name} components", sorted.filter { hosts[it.name] == setOf(screen.name) })
         }
-        val unhosted = sorted.filter { hosts[it.name].isNullOrEmpty() }
+        val unhosted = sorted.filter { hosts[it.name].isNullOrEmpty() && !it.hosted }
         return listOf(CatalogComponentGroup("Shared components", shared)) +
+            CatalogComponentGroup("Hosted by every screen", sorted.filter { it.hosted }) +
             perScreen +
             CatalogComponentGroup("Not embedded by any screen", unhosted)
     }

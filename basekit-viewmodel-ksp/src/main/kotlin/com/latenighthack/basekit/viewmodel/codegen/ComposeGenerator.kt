@@ -33,19 +33,24 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                         "        ${it.simpleName.toListCaseName()}: @Composable (${it.qualifiedName.substringBeforeLast('.')}.${it.simpleName}Binding) -> Unit"
                     }
                     file.writeln("    @Composable public fun ${list.propertyName.toUpperCamelCase()}(\n$rows,\n        modifier: Modifier = Modifier, placeholder: @Composable (Int) -> Unit = {},\n    ) {")
+                    fun key(type: VmListElementType) = when {
+                        type.identityProperty != null -> "\"${type.qualifiedName}:\" + raw.${type.identityProperty}"
+                        type.reactId -> "\"${type.qualifiedName}:\" + raw.initialState.id"
+                        else -> "raw"
+                    }
+                    fun render(type: VmListElementType) =
+                        "${type.simpleName.toListCaseName()}(${type.qualifiedName.substringBeforeLast('.')}.bind${type.simpleName}(raw, launchAction))"
+                    val single = list.possibleTypes.singleOrNull()?.takeIf { it.qualifiedName == list.elementQualifiedName }
+                    if (single != null) {
+                        // `raw` already has the row's type; a `when` would be an always-true check plus a
+                        // redundant `else`.
+                        file.writeln("        DeltaRows(source = model.${list.propertyName}, modifier = modifier, placeholder = placeholder, identity = { raw -> ${key(single)} }) { raw -> ${render(single)} }\n    }")
+                        return@forEach
+                    }
                     file.writeln("        DeltaRows(source = model.${list.propertyName}, modifier = modifier, placeholder = placeholder, identity = { raw -> when (raw) {")
-                    list.possibleTypes.forEach {
-                        val key = when {
-                            it.identityProperty != null -> "\"${it.qualifiedName}:\" + raw.${it.identityProperty}"
-                            it.reactId -> "\"${it.qualifiedName}:\" + raw.initialState.id"
-                            else -> "raw"
-                        }
-                        file.writeln("            is ${it.qualifiedName} -> $key")
-                    }
+                    list.possibleTypes.forEach { file.writeln("            is ${it.qualifiedName} -> ${key(it)}") }
                     file.writeln("            else -> error(\"Undeclared ${vm.simpleName}.${list.propertyName} child\")\n        } }) { raw -> when (raw) {")
-                    list.possibleTypes.forEach {
-                        file.writeln("            is ${it.qualifiedName} -> ${it.simpleName.toListCaseName()}(${it.qualifiedName.substringBeforeLast('.')}.bind${it.simpleName}(raw, launchAction))")
-                    }
+                    list.possibleTypes.forEach { file.writeln("            is ${it.qualifiedName} -> ${render(it)}") }
                     file.writeln("            else -> error(\"Undeclared ${vm.simpleName}.${list.propertyName} child\")\n        } }\n    }")
                 }
                 file.writeln("}")

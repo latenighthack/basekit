@@ -20,11 +20,12 @@ class AppleHostedNavigatorGenerator(
         val sourceEntry: String get() = edge.sourceEntry
     }
 
-    fun generate(destinations: List<DestinationInfo>) {
+    fun generate(destinations: List<DestinationInfo>, hostedComponents: List<DestinationInfo> = emptyList()) {
         val byName = destinations.associateBy { it.qualifiedName }
+        val sources = destinations + hostedComponents
         // A call site is the declaring spec's action, not the hosting destination: a row spec embedded
         // in two destinations is one call site reachable from both navigators.
-        val rawSites = destinations.flatMap { source ->
+        val rawSites = sources.flatMap { source ->
             source.edges.mapNotNull { edge -> byName[edge.targetQualifiedName]?.let { edge to it } }
         }.distinctBy { (edge, _) -> edge }
         if (rawSites.isEmpty()) return
@@ -43,7 +44,7 @@ class AppleHostedNavigatorGenerator(
         val sitesByTarget = sites.groupBy { it.target.qualifiedName }
         generateEdge(sites)
         generateHost(sitesByTarget)
-        destinations.forEach { generateNavigator(it, sites, sitesByTarget) }
+        sources.forEach { generateNavigator(it, sites, sitesByTarget) }
     }
 
     private fun generateEdge(sites: List<CallSite>) = write("AppleNavigationEdge") {
@@ -82,6 +83,8 @@ class AppleHostedNavigatorGenerator(
         sitesByTarget: Map<String, List<CallSite>>,
     ) {
         val sourceSites = sites.filter { it.edge in destination.edges }
+        // A hosted component without edges has no navigator interface to implement.
+        if (destination.hosted && sourceSites.isEmpty()) return
         val cap = destination.navName.toUpperCamelCase()
         val navigatorType = if (sourceSites.isEmpty()) "CloseNavigationTarget" else "${cap}Navigator"
 
@@ -96,7 +99,10 @@ class AppleHostedNavigatorGenerator(
                 appendLine("    public val ownerId: String,")
                 appendLine("    private val host: AppleNavigationHost,")
                 appendLine(") : $navigatorType {")
-                appendLine("    override fun close(context: Any?) = runOnMainThread { host.close(ownerId, context) }")
+                // A hosted component is not a screen, so its navigator has no close().
+                if (!destination.hosted) {
+                    appendLine("    override fun close(context: Any?) = runOnMainThread { host.close(ownerId, context) }")
+                }
 
                 sourceSites.groupBy { it.target.qualifiedName }.values.forEach { targetSites ->
                     val target = targetSites.first().target

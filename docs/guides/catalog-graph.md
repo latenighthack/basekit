@@ -11,7 +11,8 @@ file is self-contained: inline CSS and JavaScript, no network requests. It shows
   - redirects (`redirects_to`: screens a screen replaces itself with, without a tap) are purple
     dash-dot;
   - events of a component that no screen embeds are dotted, on a dashed box, because no navigator
-    reaches them.
+    reaches them. A `hosted: true` component is the exception: it has its own navigator, so its box
+    and events are drawn like a screen's.
 - **Focus view:** clicking a box, one of its events, or a stub redraws the graph around that screen:
   - on the left, the screens that open it, each showing only the rows that do;
   - in the middle, the screen with all its events;

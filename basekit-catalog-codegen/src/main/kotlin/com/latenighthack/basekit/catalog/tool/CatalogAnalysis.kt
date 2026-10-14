@@ -33,7 +33,10 @@ class CatalogAnalysis(val document: CatalogDocument) {
     /** Roots that embed each component, through lists or children at any depth. */
     val hosts: Map<String, Set<String>>
 
-    /** Edges whose source a screen embeds (or is a screen): only these have a navigator to call. */
+    /**
+     * Edges whose source is a screen or hosted component, or is embedded by one: only these have a
+     * navigator to call.
+     */
     val reachableEdges: List<Edge>
 
     val markers: Map<String, Marker>
@@ -79,6 +82,12 @@ class CatalogAnalysis(val document: CatalogDocument) {
 
         checkCycles()
         val embeddedAnywhere = all.flatMap { it.embedded }.toSet()
+        components.filter { it.hosted && it.name in embeddedAnywhere }.forEach {
+            throw CatalogException(
+                "components.${it.name}.hosted: a hosted component is not listed under children or lists; " +
+                    "screens host it without naming it",
+            )
+        }
         roots = screens + components.filter { it.name !in embeddedAnywhere }
         hosts = buildMap<String, MutableSet<String>> {
             roots.forEach { root ->
@@ -86,8 +95,9 @@ class CatalogAnalysis(val document: CatalogDocument) {
             }
         }
 
-        // Only destinations own a navigator, so only edges a screen reaches can be called.
-        val reachable = screenNames + screens.flatMap { embeddedComponents(it) }.map { it.name }
+        // Only destinations and hosted components own a navigator, so only edges they reach can be called.
+        val sources = screens + components.filter { it.hosted }
+        val reachable = sources.map { it.name } + sources.flatMap { embeddedComponents(it) }.map { it.name }
         // A redirect is an edge from the screen itself with method `redirect`, as basekit's
         // @RedirectsTo produces, so it counts as a call site of its target.
         reachableEdges = all.filter { it.name in reachable }.flatMap { vm ->
@@ -136,7 +146,10 @@ class CatalogAnalysis(val document: CatalogDocument) {
     /** The root whose files a component is written into: its only host, or null. */
     fun owner(component: CatalogVm): CatalogVm? = hosts[component.name]?.singleOrNull()?.let { vm(it) }
 
-    /** Whether [screen] or anything it embeds navigates, so its impl receives a navigator. */
+    /**
+     * Whether [screen] (or a hosted component) or anything it embeds navigates, so its impl receives a
+     * navigator.
+     */
     fun needsNavigator(screen: CatalogVm): Boolean {
         val sources = (listOf(screen) + embeddedComponents(screen)).map { it.name }.toSet()
         return reachableEdges.any { it.source.name in sources }

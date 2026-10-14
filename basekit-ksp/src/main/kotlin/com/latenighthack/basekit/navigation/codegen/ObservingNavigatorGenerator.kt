@@ -12,6 +12,8 @@ import com.google.devtools.ksp.processing.Dependencies
  *  - A destination with outbound edges implements its `<Cap>Navigator` and overrides every reachable
  *    `navigateTo…` plus `close`.
  *  - A leaf destination (no outbound edges) implements `CloseNavigationTarget` and overrides `close`.
+ *  - A `@HostedComponent` with edges implements its `<Cap>Navigator` without `close`; one without
+ *    edges has no navigator and gets no decorator.
  *
  * Because the decorator sits on the common navigator interface — above the Apple/TUI/test
  * implementations — the observer sees every ViewModel-initiated navigation regardless of what the
@@ -25,15 +27,16 @@ class ObservingNavigatorGenerator(
 ) {
     private data class CallSite(val sourceNavName: String, val methodName: String)
 
-    fun generate(destinations: List<DestinationInfo>) {
+    fun generate(destinations: List<DestinationInfo>, hostedComponents: List<DestinationInfo> = emptyList()) {
         val byQualifiedName = destinations.associateBy { it.qualifiedName }
+        val sources = destinations + hostedComponents
 
         // target qualified name -> ordered, unique call sites navigating to it (size > 1 => has a Source enum)
         val targetCallSites = LinkedHashMap<String, MutableList<CallSite>>()
         // source qualified name -> ordered, unique target qualified names it navigates to
         val outboundTargets = LinkedHashMap<String, LinkedHashSet<String>>()
 
-        for (destination in destinations) {
+        for (destination in sources) {
             for (edge in destination.edges) {
                 val sites = targetCallSites.getOrPut(edge.targetQualifiedName) { mutableListOf() }
                 val site = CallSite(edge.sourceNavName, edge.methodName)
@@ -46,10 +49,10 @@ class ObservingNavigatorGenerator(
         // No edges => NavigatorInterfaceGenerator emits no navigators, so there is nothing to decorate.
         if (targetCallSites.isEmpty()) return
 
-        for (destination in destinations) {
+        for (destination in sources) {
             val targets = outboundTargets[destination.qualifiedName]
             if (targets == null) {
-                writeLeaf(destination)
+                if (!destination.hosted) writeLeaf(destination)
             } else {
                 writeNavigator(destination, targets, byQualifiedName, targetCallSites)
             }
@@ -127,18 +130,22 @@ class ObservingNavigatorGenerator(
             }
         }.joinToString("\n\n")
 
+        // A hosted component is not a screen: its navigator has no close() to observe.
+        val closeOverride = if (source.hosted) "" else """
+            |    override fun close(context: Any?) {
+            |        observer.onNavigation(NavigationEvent.Closed(NavigationScreen.${source.screenName}, context))
+            |        delegate.close(context)
+            |    }
+            |
+            |""".trimMargin()
+
         writeFile("Observing${sourceCap}Navigator") {
             """
             |public class Observing${sourceCap}Navigator(
             |    private val delegate: ${sourceCap}Navigator,
             |    private val observer: NavigationObserver,
             |) : ${sourceCap}Navigator {
-            |    override fun close(context: Any?) {
-            |        observer.onNavigation(NavigationEvent.Closed(NavigationScreen.${source.screenName}, context))
-            |        delegate.close(context)
-            |    }
-            |
-            |$overrides
+            |$closeOverride$overrides
             |}
             """.trimMargin()
         }

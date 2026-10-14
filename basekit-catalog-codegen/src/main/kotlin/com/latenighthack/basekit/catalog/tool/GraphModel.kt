@@ -32,7 +32,8 @@ class GraphModel(
         val orphans = analysis.rootComponents.filter { root ->
             (listOf(root) + analysis.embeddedComponents(root)).any { it.hasEvents() }
         }
-        return (analysis.screens.map { it to true } + orphans.map { it to false }).map { (root, reachable) ->
+        // A hosted component has its own navigator, so its edges are reachable like a screen's.
+        return (analysis.screens.map { it to true } + orphans.map { it to it.hosted }).map { (root, reachable) ->
             val items = (listOf(root) + analysis.embeddedComponents(root))
                 .filter { it == root || it.hasEvents() }
                 .map { vm ->
@@ -53,6 +54,7 @@ class GraphModel(
                 "name" to root.name,
                 "screen" to root.isScreen,
                 "reachable" to reachable,
+                "hosted" to root.hosted,
                 "route" to root.navigation?.route,
                 "items" to items,
             )
@@ -76,6 +78,7 @@ class GraphModel(
             "name" to vm.name,
             "spec" to vm.spec,
             "screen" to vm.isScreen,
+            "hosted" to vm.hosted,
             "link" to link(key),
             "embeddedBy" to analysis.hosts[vm.name].orEmpty().sorted(),
             "navigation" to vm.navigation?.let { navigation ->

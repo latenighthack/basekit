@@ -26,7 +26,7 @@ object CatalogReader {
     }
 
     private val ROOT_KEYS = setOf("schema", "screens", "components", "types")
-    private val VM_KEYS = setOf("spec", "navigation", "redirects_to", "identity", "state", "actions", "mutations", "lists", "children")
+    private val VM_KEYS = setOf("spec", "navigation", "hosted", "redirects_to", "identity", "state", "actions", "mutations", "lists", "children")
     private val NAVIGATION_KEYS = setOf("args", "route", "route_args", "response")
     private val ACTION_KEYS = setOf("navigates_to")
     private val MUTATION_KEYS = setOf("param", "binds", "navigates_to")
@@ -64,6 +64,12 @@ object CatalogReader {
             val spec = body["spec"] as? String ?: throw CatalogException("$path.spec: required")
             known(body, VM_KEYS, path)
             if (!screen && body.containsKey("redirects_to")) throw CatalogException("$path.redirects_to: only screens redirect")
+            if (screen && body.containsKey("hosted")) throw CatalogException("$path.hosted: only components are hosted")
+            val hosted = when (val value = body["hosted"]) {
+                null -> false
+                is Boolean -> value
+                else -> throw CatalogException("$path.hosted: expected true or false")
+            }
             val navigation = if (screen) {
                 val nav = body["navigation"] as? Map<*, *> ?: throw CatalogException("$path.navigation: required for a screen")
                 known(nav, NAVIGATION_KEYS, "$path.navigation")
@@ -112,6 +118,7 @@ object CatalogReader {
                 },
                 children = fields(body["children"], "$path.children"),
                 redirectsTo = strings(body["redirects_to"], "$path.redirects_to"),
+                hosted = hosted,
             )
         }
 

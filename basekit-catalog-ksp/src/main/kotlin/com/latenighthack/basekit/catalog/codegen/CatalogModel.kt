@@ -26,6 +26,8 @@ data class CatalogViewModel(
     val children: List<CatalogField> = emptyList(),
     /** `@RedirectsTo` targets: screens this screen replaces itself with without a user action. */
     val redirectsTo: List<String> = emptyList(),
+    /** A `@HostedComponent`: screens host it without listing it, and it has its own navigator. */
+    val hosted: Boolean = false,
 )
 
 /** A `name: Type` pair. For `children`, the type is a component name. */

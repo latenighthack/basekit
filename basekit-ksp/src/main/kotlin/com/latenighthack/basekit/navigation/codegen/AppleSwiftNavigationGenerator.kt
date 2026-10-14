@@ -18,9 +18,10 @@ class AppleSwiftNavigationGenerator(
         val swiftName: String,
     )
 
-    fun generate(destinations: List<DestinationInfo>) {
+    fun generate(destinations: List<DestinationInfo>, hostedComponents: List<DestinationInfo> = emptyList()) {
         val byName = destinations.associateBy { it.qualifiedName }
-        val rawSites = destinations.flatMap { source ->
+        // Hosted components contribute call sites; only destinations are routes.
+        val rawSites = (destinations + hostedComponents).flatMap { source ->
             source.edges.mapNotNull { edge -> byName[edge.targetQualifiedName]?.let { edge to it } }
         }.distinctBy { (edge, _) -> edge }
         if (rawSites.isEmpty()) return

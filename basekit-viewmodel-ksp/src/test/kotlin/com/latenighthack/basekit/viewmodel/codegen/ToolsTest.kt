@@ -119,10 +119,46 @@ class ToolsTest {
 
     @Test
     fun swiftSourceRef_backticks_only_swift_keywords() {
+        assertEquals("`in`", "in".swiftSourceRef())
         assertEquals("`default`", "default".swiftSourceRef())
-        assertEquals("`class`", "class".swiftSourceRef())
-        // Inherited-member names are not keywords: reading `initial.description` is legal, so no escape.
-        assertEquals("description", "description".swiftSourceRef())
+        assertEquals("description_", "description_".swiftSourceRef())
         assertEquals("userName", "userName".swiftSourceRef())
+    }
+
+    // Names below were checked against a SKIE 0.10.14 / Kotlin 2.3.10 framework's API notes.
+    @Test
+    fun swiftExportedPropertyName_follows_skie_renames() {
+        // Every exported type has description() and hash() (toString, hashCode); SKIE renames a
+        // property that would collide with them.
+        assertEquals("description_", swiftExportedPropertyName("description"))
+        assertEquals("hash_", swiftExportedPropertyName("hash"))
+        // Kotlin/Native renames C keywords (`default_`), but SKIE restores the Kotlin name in Swift.
+        assertEquals("default", swiftExportedPropertyName("default"))
+        assertEquals("class", swiftExportedPropertyName("class"))
+        assertEquals("int", swiftExportedPropertyName("int"))
+        // Other NSObject member names export unchanged.
+        assertEquals("debugDescription", swiftExportedPropertyName("debugDescription"))
+        assertEquals("superclass", swiftExportedPropertyName("superclass"))
+        assertEquals("isProxy", swiftExportedPropertyName("isProxy"))
+        assertEquals("userName", swiftExportedPropertyName("userName"))
+    }
+
+    @Test
+    fun swiftExportedPropertyName_prefers_objc_name_arguments() {
+        assertEquals("summary", swiftExportedPropertyName("description", objcName = "summary"))
+        assertEquals("details", swiftExportedPropertyName("description", objcName = "summary", objcSwiftName = "details"))
+        // Blank arguments are the annotation's defaults.
+        assertEquals("text", swiftExportedPropertyName("text", objcName = "", objcSwiftName = ""))
+        // An explicit name is still renamed when it collides.
+        assertEquals("description_", swiftExportedPropertyName("text", objcSwiftName = "description"))
+    }
+
+    @Test
+    fun kotlinRef_backticks_hard_keywords_only() {
+        assertEquals("`in`", "in".kotlinRef())
+        assertEquals("`is`", "is".kotlinRef())
+        // Soft keywords are valid identifiers.
+        assertEquals("value", "value".kotlinRef())
+        assertEquals("data", "data".kotlinRef())
     }
 }

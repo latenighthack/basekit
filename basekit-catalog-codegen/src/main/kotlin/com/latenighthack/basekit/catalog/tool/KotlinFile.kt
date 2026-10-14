@@ -20,6 +20,7 @@ object Symbols {
     const val ROUTE_ARG = "com.latenighthack.basekit.navigation.annotations.RouteArg"
     const val NAVIGATE_TO = "com.latenighthack.basekit.navigation.annotations.NavigateTo"
     const val REDIRECTS_TO = "com.latenighthack.basekit.navigation.annotations.RedirectsTo"
+    const val HOSTED_COMPONENT = "com.latenighthack.basekit.navigation.annotations.HostedComponent"
     const val NAVIGATION_DESTINATION = "com.latenighthack.basekit.navigation.NavigationDestination"
     const val RESPONDING_DESTINATION = "com.latenighthack.basekit.navigation.RespondingDestination"
     const val NAVIGATION_RESPONDER = "com.latenighthack.basekit.navigation.NavigationResponder"

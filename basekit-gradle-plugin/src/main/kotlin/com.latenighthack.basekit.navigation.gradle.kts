@@ -48,9 +48,10 @@ val verifyAppleSwift = if ("verifyBasekitAppleSwiftIsUniversal" in tasks.names) 
 }
 
 val collectAppleSwift = if ("collectBasekitAppleSwift" in tasks.names) {
-    tasks.named<Copy>("collectBasekitAppleSwift")
+    tasks.named<Sync>("collectBasekitAppleSwift")
 } else {
-    tasks.register<Copy>("collectBasekitAppleSwift") {
+    // Sync, not Copy: a file whose spec was removed must leave the collected directory too.
+    tasks.register<Sync>("collectBasekitAppleSwift") {
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
         includeEmptyDirs = false
         into(layout.buildDirectory.dir("generated/basekit-apple/swift"))

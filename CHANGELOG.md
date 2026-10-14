@@ -6,6 +6,29 @@ All notable changes to basekit are documented here. The format follows
 
 ## Next
 
+- Added `@HostedComponent` (catalog: `hosted: true`) for a component every screen hosts without
+  listing it, such as app chrome around every screen. The app creates one instance. The `@NavigateTo`
+  edges of the component and everything it embeds get the component's own `<Name>Navigator`,
+  without `close()`, plus its `Observing`, `Apple` and test navigators; they no longer warn as
+  unreachable. Each edge keeps its call site as its `<Target>Source` entry. The catalog code generator
+  annotates the spec and gives the implementation and its `create<Name>ViewModel` the navigator; the
+  graph page draws the component like a screen.
+- Swift wrappers read a State, child, list or identity property by its Swift name in the SKIE-built
+  framework. SKIE exports a property named `description` or `hash` with a trailing `_`, because it
+  would collide with `description()`/`hash()` (from `toString`/`hashCode`). The wrappers declared
+  `description_` but read `description`, which compiled, resolved to `NSObject.description`, and held
+  the State's `toString()`. A `@property:ObjCName` swiftName is honored.
+- Swift wrappers collect `state` with `for await`: SKIE bridges it to a non-throwing sequence, so the
+  `do`/`catch` was unreachable and Swift warned on every wrapper. `Observable{Vm}.onError` is
+  deprecated, since nothing calls it. A State without fields no longer declares `initial`, the
+  `state` cast or the `self` rebind, which Swift warned were unused; `state` is still collected.
+- The React hook backticks a State property, action, list or child named after a Kotlin keyword
+  (`` result.`in` = state.`in` ``); it emitted `result.in`, which did not compile.
+- `collectBasekitAppleSwift` and `collectBasekitViewModelSwift` sync their output directories instead
+  of copying into them, so Swift generated for a removed spec no longer stays behind.
+- Compose bindings for a list whose only row type is its element type call the row directly, instead
+  of a `when` with an always-true `is` check and a redundant `else`.
+
 - The catalog code generator writes a screen's spec and implementation into one file
   (`IHomeViewModel.kt`), as two regions, `basekit:spec` and `basekit:impl`. Each region records a
   hash of its imports and declarations, and a rerun rewrites only regions that still match it: an

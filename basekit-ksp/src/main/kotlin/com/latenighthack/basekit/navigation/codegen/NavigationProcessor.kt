@@ -13,6 +13,7 @@ internal const val DESTINATION_ANNOTATION = "com.latenighthack.basekit.navigatio
 internal const val ROUTE_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.Route"
 internal const val ROUTE_ARG_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.RouteArg"
 internal const val NAVIGATE_TO_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.NavigateTo"
+internal const val HOSTED_COMPONENT_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.HostedComponent"
 internal const val REDIRECTS_TO_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.RedirectsTo"
 
 /** The method name of a `@RedirectsTo` edge, so its source entry is `<SCREEN>_REDIRECT`. */
@@ -47,7 +48,11 @@ data class NavEdge(
     val redirect: Boolean = false,
 )
 
-/** Everything the generators need to know about one `@Destination`. */
+/**
+ * Everything the generators need to know about one `@Destination`, or about a `@HostedComponent` when
+ * [hosted] is set. A hosted component only has [edges]: it is never a navigation target, has no screen,
+ * and its navigator has no `close()`.
+ */
 data class DestinationInfo(
     val simpleName: String,
     val qualifiedName: String,
@@ -59,6 +64,7 @@ data class DestinationInfo(
     val routePath: String?,
     val routeArgs: List<String>,
     val edges: List<NavEdge>,
+    val hosted: Boolean = false,
 )
 
 /**
@@ -72,6 +78,7 @@ class NavigationProcessor(
 ) : SymbolProcessor {
 
     private val destinations = mutableListOf<DestinationInfo>()
+    private val hostedComponents = mutableListOf<DestinationInfo>()
     private var sourceFiles: List<KSFile> = emptyList()
     private var collected = false
 
@@ -82,6 +89,7 @@ class NavigationProcessor(
         val graph = NavigationExtractor(logger).extract(resolver)
         sourceFiles = graph.sourceFiles
         destinations.addAll(graph.destinations)
+        hostedComponents.addAll(graph.hostedComponents)
 
         return emptyList()
     }
@@ -100,7 +108,7 @@ class NavigationProcessor(
                     ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
                     .orEmpty()
             val dependencies = Dependencies(aggregating = true, *sourceFiles.toTypedArray())
-            AppleSwiftNavigationGenerator(codeGenerator, dependencies, imports).generate(destinations)
+            AppleSwiftNavigationGenerator(codeGenerator, dependencies, imports).generate(destinations, hostedComponents)
             if (options["basekit.navigation.posthog"] == "true") {
                 ApplePostHogBridgeGenerator(codeGenerator, dependencies, imports).generate()
             }
@@ -113,12 +121,13 @@ class NavigationProcessor(
         // land in one flattened package. Two destinations that derive the same navName would emit the
         // same file twice — a FileAlreadyExistsException with no hint at the cause. Fail with a clear
         // message (and point at @Destination(navName = ...)) instead.
-        val collisions = destinations.groupBy { it.navName }.filterValues { it.size > 1 }
+        val collisions = (destinations + hostedComponents).groupBy { it.navName }.filterValues { it.size > 1 }
         if (collisions.isNotEmpty()) {
             collisions.forEach { (navName, group) ->
                 logger.error(
                     "Destinations ${group.map { it.qualifiedName }.sorted()} all derive the navigation " +
-                        "name \"$navName\"; disambiguate with @Destination(navName = \"...\") on all but one",
+                        "name \"$navName\"; disambiguate with @Destination(navName = \"...\") or " +
+                        "@HostedComponent(navName = \"...\") on all but one",
                 )
             }
             return
@@ -127,14 +136,14 @@ class NavigationProcessor(
         val navigationPackage = resolveNavigationPackage()
         val dependencies = Dependencies(aggregating = true, *sourceFiles.toTypedArray())
 
-        NavigatorInterfaceGenerator(codeGenerator, logger, dependencies, navigationPackage).generate(destinations)
+        NavigatorInterfaceGenerator(codeGenerator, logger, dependencies, navigationPackage).generate(destinations, hostedComponents)
         NavigationScreenGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations)
-        ObservingNavigatorGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations)
+        ObservingNavigatorGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations, hostedComponents)
         RouteTableGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations)
-        AppleHostedNavigatorGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations)
+        AppleHostedNavigatorGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations, hostedComponents)
 
         if (options[GENERATE_TEST_NAVIGATOR_OPTION]?.toBoolean() == true) {
-            TestNavigatorGenerator(codeGenerator, logger, dependencies, navigationPackage).generate(destinations)
+            TestNavigatorGenerator(codeGenerator, logger, dependencies, navigationPackage).generate(destinations, hostedComponents)
         }
     }
 

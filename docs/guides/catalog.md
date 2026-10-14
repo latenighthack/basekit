@@ -70,6 +70,7 @@ screens:
 
 components:
   <Name>: # the same fields as a screen, without navigation
+    hosted: true # screens host it without listing it; it has its own navigator
 
 types:
   <Name>: { enum: [<CASE>] }
@@ -83,6 +84,11 @@ Empty sections are left out.
 `redirects_to` lists the screens a screen may replace itself with, without a tap (an entry screen
 sending the user to the right first step). It comes from `@RedirectsTo` on the destination; see
 [redirects](navigation.md#redirects).
+
+`hosted: true` marks a component every screen hosts without listing it under `children`, such as
+app chrome around every screen. Nothing may list a hosted component. It comes from
+`@HostedComponent`; its edges, and those of everything it embeds, get the component's own navigator.
+See [hosted components](navigation.md#hosted-components).
 
 ### Names
 
@@ -105,6 +111,7 @@ Types use their simple Kotlin names, such as `String?` or `List<RecentMessageMod
 | `navigation.route_args` | The `Args` properties marked `@RouteArg`.                                                |
 | `navigation.response`   | `R` of `RespondingDestination<Args, R>`.                                                 |
 | `redirects_to`          | `@RedirectsTo` on the destination.                                                       |
+| `hosted`                | `@HostedComponent` on the component's spec.                                              |
 | `identity`              | The `@ViewModelIdentity` property.                                                       |
 | `state`                 | The properties of the spec's `State`.                                                    |
 | `actions`               | Zero-argument suspend functions.                                                         |

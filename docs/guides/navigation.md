@@ -117,6 +117,37 @@ annotation only permits the edge. `@RedirectsTo` belongs on a `@Destination`; on
 other type it has no effect and the build warns. The catalog records it as
 `redirects_to`.
 
+### Hosted components
+
+Some components are on every screen without being part of any one of them: a
+sidebar, a header, a status banner. Screens don't list such a component under a
+`@ChildViewModel`, and the app creates one instance for all of them. Mark its spec
+with `@HostedComponent`:
+
+```kotlin
+@HostedComponent
+@ViewModelSpec
+interface ShellViewModel : ViewModel<ShellViewModel.State> {
+    @ChildViewModel
+    val sidebar: SidebarViewModel
+}
+```
+
+The `@NavigateTo` edges of the component, and of the rows and children it embeds,
+get their own navigator, `ShellNavigator`, which extends the `<X>NavigationTarget`
+of every screen they open. It has no `close()`: the component is not a screen.
+Inject it like a destination's navigator; the generated `ObservingShellNavigator`,
+`AppleShellNavigator` and test navigator implement it. The app's platform host
+decides which screen stack a call from the shell opens on, usually the one on top.
+
+The edges keep their call sites: a sidebar row's tap is `SIDEBAR_ON_ACTIVITY_TAPPED`
+in `ActivitySource`, the same as if a screen embedded the sidebar. A
+`NavigationEvent.NavigatedTo` from the shell records that call site, not the
+screen that was showing; screen events report the current screen. A
+`@HostedComponent` can't also be a `@Destination`, and `navName` overrides its
+derived name as it does on `@Destination`. The catalog records it as
+`hosted: true`.
+
 ## Keep arguments and results typed
 
 Arguments carry minimal typed context such as `ItemId`, not an entire mutable

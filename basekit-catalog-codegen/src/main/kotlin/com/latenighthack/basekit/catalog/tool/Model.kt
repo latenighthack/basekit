@@ -46,6 +46,11 @@ data class CatalogVm(
     val children: List<Field>,
     /** Screens this screen may replace itself with, without a tap (`redirects_to`, `@RedirectsTo`). */
     val redirectsTo: List<String> = emptyList(),
+    /**
+     * A component every screen hosts without listing it (`hosted: true`, `@HostedComponent`). It has
+     * its own navigator for the edges of everything it embeds.
+     */
+    val hosted: Boolean = false,
 ) {
     val isScreen: Boolean get() = navigation != null
     val packageName: String get() = spec.substringBeforeLast('.', "")

@@ -8,8 +8,9 @@ data class AssistedParam(val name: String, val type: String, val imports: Set<St
  * gets `@ViewModelInject class <Impl>` with its
  * args, navigator (`CloseNavigationTarget` when nothing on the screen navigates) and responder
  * assisted; every component the screen embeds is a private inner class
- * so its actions reach the screen's navigator. Lists hold one instance of each row type (in every
- * section), navigating actions call the navigator, and binding mutations update State.
+ * so its actions reach the screen's navigator. A hosted component gets its own navigator the same way.
+ * Lists hold one instance of each row type (in every section), navigating actions call the navigator,
+ * and binding mutations update State.
  */
 class ImplGenerator(
     private val analysis: CatalogAnalysis,
@@ -18,10 +19,13 @@ class ImplGenerator(
 ) {
 
     /** The `impl` region of [root]'s spec file. */
-    fun region(root: CatalogVm): Region = if (root.isScreen) screenRegion(root) else standaloneRegion(root)
+    fun region(root: CatalogVm): Region = if (root.isScreen || root.hosted) screenRegion(root) else standaloneRegion(root)
 
-    /** The assisted parameters of [screen]'s impl, in constructor order. */
+    /** The assisted parameters of [screen]'s (or a root component's) impl, in constructor order. */
     fun assistedParams(screen: CatalogVm): List<AssistedParam> {
+        if (screen.hosted && analysis.needsNavigator(screen)) {
+            return listOf(AssistedParam("navigator", "${screen.name}Navigator", setOf("$navigationPackage.${screen.name}Navigator")))
+        }
         val navigation = screen.navigation ?: return emptyList()
         return buildList {
             if (navigation.args.isNotEmpty()) add(AssistedParam("args", "${screen.specName}.Args", setOf(screen.spec)))
@@ -38,6 +42,7 @@ class ImplGenerator(
         }
     }
 
+    /** A screen, or a hosted component: the same impl shape, with the assisted params [assistedParams] gives. */
     private fun screenRegion(screen: CatalogVm): Region {
         val imports = mutableSetOf<String>()
         val params = assistedParams(screen)

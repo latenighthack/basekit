@@ -187,4 +187,19 @@ class CatalogYamlWriterTest {
     fun `rendering is stable`() {
         assertEquals(yaml, CatalogYamlWriter.render(catalog))
     }
+
+    @Test
+    fun `a hosted component is marked hosted`() {
+        val shell = CatalogViewModel(
+            name = "Shell",
+            spec = "gg.roll.viewmodel.IShellViewModel",
+            children = listOf(CatalogField("sidebar", "Sidebar")),
+            hosted = true,
+        )
+        val rendered = CatalogYamlWriter.render(
+            Catalog(listOf(home), listOf(CatalogComponentGroup("Hosted by every screen", listOf(shell))), emptyList()),
+        )
+        assertTrue("  Shell:\n    spec: gg.roll.viewmodel.IShellViewModel\n    hosted: true\n" in rendered, rendered)
+        assertFalse("hosted" in yaml, yaml)
+    }
 }

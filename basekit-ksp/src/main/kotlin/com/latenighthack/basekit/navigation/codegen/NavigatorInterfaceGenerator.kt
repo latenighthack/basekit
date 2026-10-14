@@ -13,7 +13,8 @@ import com.google.devtools.ksp.processing.KSPLogger
  *    destination, an app-wide `<X>Source` enum (one entry per call site) is threaded as `source`.
  *  - `<Name>Navigator` — one per destination that navigates *out*; extends `CloseNavigationTarget`
  *    plus the `<X>NavigationTarget` of every destination it reaches. This is what the concrete
- *    feature is injected with.
+ *    feature is injected with. A `@HostedComponent` with edges gets one too, without
+ *    `CloseNavigationTarget`: it is not a screen, so there is nothing to close.
  *
  * All interfaces are shared graph nodes emitted into a single package, so the generator consumes the
  * full destination set before writing. Generated only in the metadata (commonMain) pass.
@@ -26,15 +27,18 @@ class NavigatorInterfaceGenerator(
 ) {
     private data class CallSite(val sourceNavName: String, val methodName: String)
 
-    fun generate(destinations: List<DestinationInfo>) {
+    fun generate(destinations: List<DestinationInfo>, hostedComponents: List<DestinationInfo> = emptyList()) {
+        // Targets are destinations only; sources also include hosted components.
         val byQualifiedName = destinations.associateBy { it.qualifiedName }
+        val sources = destinations + hostedComponents
+        val sourcesByQualifiedName = sources.associateBy { it.qualifiedName }
 
         // target qualified name -> ordered, unique call sites navigating to it
         val targetCallSites = LinkedHashMap<String, MutableList<CallSite>>()
         // source qualified name -> ordered, unique target qualified names it navigates to
         val outboundTargets = LinkedHashMap<String, LinkedHashSet<String>>()
 
-        for (destination in destinations) {
+        for (destination in sources) {
             for (edge in destination.edges) {
                 val sites = targetCallSites.getOrPut(edge.targetQualifiedName) { mutableListOf() }
                 val site = CallSite(edge.sourceNavName, edge.methodName)
@@ -98,11 +102,11 @@ class NavigatorInterfaceGenerator(
         }
 
         for ((sourceQualifiedName, targetQualifiedNames) in outboundTargets) {
-            val source = byQualifiedName[sourceQualifiedName] ?: continue
+            val source = sourcesByQualifiedName[sourceQualifiedName] ?: continue
             val sourceCap = source.navName.toUpperCamelCase()
 
             val supertypes = buildList {
-                add("CloseNavigationTarget")
+                if (!source.hosted) add("CloseNavigationTarget")
                 for (targetQualifiedName in targetQualifiedNames) {
                     byQualifiedName[targetQualifiedName]?.let {
                         add("${it.navName.toUpperCamelCase()}NavigationTarget")

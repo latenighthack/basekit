@@ -20,7 +20,7 @@ class ReactHookGenerator(
             val hookName = "use${vm.simpleName}"
 
             val listHooks = vm.lists.joinToString("\n") { list ->
-                "    val ${list.propertyName}Value = useMappedDeltaList(viewModel.${list.propertyName}, ::${reactListFactoryName(vm, list)})"
+                "    val ${list.propertyName}Value = useMappedDeltaList(viewModel.${list.propertyName.kotlinRef()}, ::${reactListFactoryName(vm, list)})"
             }
 
             val listFactories = vm.lists.joinToString("\n\n") { list ->
@@ -28,18 +28,18 @@ class ReactHookGenerator(
             }
 
             val stateAssigns = vm.stateProperties.joinToString("\n") {
-                "    result.${it.name} = ${reactToJs(it.type, "state.${it.name}", it.reactAdapter)}"
+                "    result.${it.name.kotlinRef()} = ${reactToJs(it.type, "state.${it.name.kotlinRef()}", it.reactAdapter)}"
             }
 
             val actionAssigns = vm.actions.joinToString("\n") { action ->
-                "    result.${action.name} = { actions.run { viewModel.${action.name}() } }"
+                "    result.${action.name.kotlinRef()} = { actions.run { viewModel.${action.name.kotlinRef()}() } }"
             }
             val mutatorAssigns = vm.mutators.joinToString("\n") { mutator ->
-                "    result.${mutator.name} = { value: dynamic -> actions.run { viewModel.${mutator.name}(${reactFromJs(mutator.type, "value", mutator.reactAdapter)}) } }"
+                "    result.${mutator.name.kotlinRef()} = { value: dynamic -> actions.run { viewModel.${mutator.name.kotlinRef()}(${reactFromJs(mutator.type, "value", mutator.reactAdapter)}) } }"
             }
 
             val listAssigns = vm.lists.joinToString("\n") {
-                "    result.${it.propertyName} = ${it.propertyName}Value"
+                "    result.${it.propertyName.kotlinRef()} = ${it.propertyName}Value"
             }
 
             codeGenerator.createNewFile(dependencies, vm.packageName, "${vm.simpleName}ReactHook", "kt").apply {
@@ -105,7 +105,7 @@ class ReactHookGenerator(
                 if (actionAssigns.isNotEmpty()) writeln(actionAssigns)
                 if (mutatorAssigns.isNotEmpty()) writeln(mutatorAssigns)
                 if (listAssigns.isNotEmpty()) writeln(listAssigns)
-                for (child in vm.children) writeln("    result.${child.propertyName} = ${child.typeQualifiedName.substringBeforeLast('.')}.use${child.typeSimpleName}(viewModel.${child.propertyName})")
+                for (child in vm.children) writeln("    result.${child.propertyName.kotlinRef()} = ${child.typeQualifiedName.substringBeforeLast('.')}.use${child.typeSimpleName}(viewModel.${child.propertyName.kotlinRef()})")
                 writeln("    return result")
                 writeln("}")
             }.close()

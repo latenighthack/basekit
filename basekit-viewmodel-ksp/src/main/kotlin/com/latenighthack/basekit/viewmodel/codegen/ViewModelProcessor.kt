@@ -22,6 +22,7 @@ internal const val CHILD_VIEWMODEL_ANNOTATION = "com.latenighthack.basekit.viewm
 internal const val CODEGEN_IGNORE_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.CodegenIgnore"
 private const val VIEWMODEL_INJECT_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelInject"
 internal const val IDENTITY_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelIdentity"
+internal const val OBJC_NAME_ANNOTATION = "kotlin.native.ObjCName"
 internal const val REACT_ADAPTER_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ReactBindingAdapter"
 internal const val VIEWMODEL_INTERFACE = "com.latenighthack.basekit.viewmodel.ViewModel"
 private const val INJECT_ANNOTATION = "me.tatarka.inject.annotations.Inject"

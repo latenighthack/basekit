@@ -145,18 +145,46 @@ private val SWIFT_RESERVED_MEMBERS = SWIFT_KEYWORDS + setOf(
  * action/mutator method, a mutator's parameter): a name that would collide with a Swift keyword or an
  * inherited/already-declared member gets a trailing `_` (`default` -> `default_`, `description` ->
  * `description_`). A `_`-suffixed name is never itself reserved, so one pass always yields a safe name.
- * The read side of an assignment keeps the original name via [swiftSourceRef].
+ * The read side of an assignment uses the exported name instead (see [swiftExportedPropertyName]).
  */
 fun String.swiftDeclName(): String = if (this in SWIFT_RESERVED_MEMBERS) this + "_" else this
 
 /**
  * Escapes a reference to a *Kotlin-exported* member or argument label (the right side of `self.x =
  * initial.x`, a `viewModel.action()` call, a `param:` label). Only Swift keywords break member-access
- * syntax, so only they are backtick-wrapped (`default` -> `` `default` ``); every other name — including
- * inherited-member names like `description`, which legitimately read the State's own field — is
- * returned unchanged.
+ * syntax, so only they are backtick-wrapped (`default` -> `` `default` ``). A property read must first
+ * be mapped to its exported name with [swiftExportedPropertyName]: SKIE renames some property names,
+ * and reading the Kotlin name instead can silently resolve to an inherited `NSObject` member.
  */
 fun String.swiftSourceRef(): String = if (this in SWIFT_KEYWORDS) "`$this`" else this
+
+/**
+ * Property names SKIE renames in Swift with a trailing `_`: every exported class and protocol also has
+ * `description()` and `hash()` (from `toString` and `hashCode`), and a property of the same name would
+ * collide with them. Checked against SKIE 0.10.14 on Kotlin 2.3.10. Kotlin/Native's own renames of C
+ * keywords (`default` -> `default_`) are undone by SKIE, so those keep their Kotlin name in Swift.
+ */
+private val SKIE_RENAMED_PROPERTY_NAMES = setOf("description", "hash")
+
+/**
+ * The Swift name a property has in a SKIE-built framework: the `@ObjCName` swiftName, else its name,
+ * else the Kotlin name, with `_` appended to `description` and `hash`. Pass the result through
+ * [swiftSourceRef] when reading the property, since a Swift keyword such as `default` stays unchanged.
+ */
+fun swiftExportedPropertyName(kotlinName: String, objcName: String? = null, objcSwiftName: String? = null): String {
+    val name = objcSwiftName?.takeIf { it.isNotBlank() } ?: objcName?.takeIf { it.isNotBlank() } ?: kotlinName
+    return if (name in SKIE_RENAMED_PROPERTY_NAMES) name + "_" else name
+}
+
+/** Kotlin's hard keywords: a member with one of these names is only reachable in backticks. */
+private val KOTLIN_HARD_KEYWORDS = setOf(
+    "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if", "in", "interface",
+    "is", "null", "object", "package", "return", "super", "this", "throw", "true", "try", "typealias",
+    "typeof", "val", "var", "when", "while",
+)
+
+/** A member name as generated Kotlin must write it: backticked when it is a hard keyword (`` `in` ``). */
+fun String.kotlinRef(): String = if (this in KOTLIN_HARD_KEYWORDS) "`$this`" else this
 
 /**
  * basekit's navigation name for a spec, as basekit-ksp derives it: drops a leading interface `I` and one

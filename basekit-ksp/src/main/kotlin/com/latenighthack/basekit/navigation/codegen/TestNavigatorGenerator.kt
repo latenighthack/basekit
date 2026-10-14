@@ -31,7 +31,7 @@ class TestNavigatorGenerator(
 
     private val testPackage = "$navPackage.test"
 
-    fun generate(destinations: List<DestinationInfo>) {
+    fun generate(destinations: List<DestinationInfo>, hostedComponents: List<DestinationInfo> = emptyList()) {
         val byQualifiedName = destinations.associateBy { it.qualifiedName }
 
         // target qualified name -> ordered, unique call sites navigating to it (size > 1 => has a Source enum)
@@ -39,7 +39,7 @@ class TestNavigatorGenerator(
         // source qualified name -> whether it has any outbound edge (=> a <Src>Navigator interface exists)
         val hasOutbound = LinkedHashSet<String>()
 
-        for (destination in destinations) {
+        for (destination in destinations + hostedComponents) {
             for (edge in destination.edges) {
                 val sites = targetCallSites.getOrPut(edge.targetQualifiedName) { mutableListOf() }
                 val site = CallSite(edge.sourceNavName, edge.methodName)
@@ -53,7 +53,7 @@ class TestNavigatorGenerator(
         if (targetCallSites.isEmpty()) return
 
         generateRegistry(destinations, hasOutbound)
-        generateNavigator(destinations, byQualifiedName, targetCallSites, hasOutbound)
+        generateNavigator(destinations, hostedComponents, byQualifiedName, targetCallSites, hasOutbound)
     }
 
     /** The navigator param type a destination's create/factory takes: its own `<Src>Navigator`, else the shared close target. */
@@ -90,6 +90,7 @@ class TestNavigatorGenerator(
 
     private fun generateNavigator(
         destinations: List<DestinationInfo>,
+        hostedComponents: List<DestinationInfo>,
         byQualifiedName: Map<String, DestinationInfo>,
         targetCallSites: Map<String, List<CallSite>>,
         hasOutbound: Set<String>,
@@ -99,7 +100,8 @@ class TestNavigatorGenerator(
         // typed navigator params are satisfied by `this`.
         val supertypes = buildList {
             add("TestNavigatorApi")
-            for (destination in destinations) {
+            // Hosted components' navigators too, so a test can hand this navigator to one.
+            for (destination in destinations + hostedComponents) {
                 if (destination.qualifiedName in hasOutbound) {
                     add("$navPackage.${destination.navName.toUpperCamelCase()}Navigator")
                 }

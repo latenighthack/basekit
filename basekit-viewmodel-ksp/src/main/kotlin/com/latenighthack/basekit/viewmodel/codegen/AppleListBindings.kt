@@ -67,7 +67,7 @@ internal fun uiKitListBinder(list: VmList): String {
     |        ) { cv, indexPath, item in
     |            cellProvider(cv, indexPath, $childKvo(item))
     |        }
-    |        dataSource.bind(erased: viewModel.${list.propertyName})
+    |        dataSource.bind(erased: viewModel.${list.swiftName.swiftSourceRef()})
     |        return dataSource
     |    }
     """.trimMargin()
@@ -96,7 +96,7 @@ internal fun appKitListBinder(list: VmList): String {
     |        ) { cv, indexPath, item in
     |            itemProvider(cv, indexPath, $childKvo(item))
     |        }
-    |        dataSource.bind(erased: viewModel.${list.propertyName})
+    |        dataSource.bind(erased: viewModel.${list.swiftName.swiftSourceRef()})
     |        return dataSource
     |    }
     """.trimMargin()

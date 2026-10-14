@@ -21,7 +21,7 @@ class ComponentGenerator(
             listOf(factoriesPackage, FACTORIES).filter { it.isNotEmpty() }.joinToString("."),
         )
         val entries = analysis.screens.map { it to impls.assistedParams(it) } +
-            analysis.rootComponents.map { it to emptyList() }
+            analysis.rootComponents.map { it to impls.assistedParams(it) }
         val members = entries.map { (vm, params) ->
             imports += vm.spec
             params.forEach { imports += it.imports }

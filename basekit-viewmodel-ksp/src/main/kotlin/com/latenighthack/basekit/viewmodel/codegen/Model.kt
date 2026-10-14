@@ -32,6 +32,8 @@ data class VmStateProperty(
     val listElementQualifiedName: String? = null,
     val type: VmType = VmType(typeQualifiedName, nullable),
     val reactAdapter: ReactAdapter? = null,
+    /** The name Kotlin/Native exports the property under; Swift wrappers read it by this name. */
+    val swiftName: String = swiftExportedPropertyName(name),
 )
 
 /** One exact child ViewModel type admitted by a `@ViewModelList`. */
@@ -62,6 +64,8 @@ data class VmList(
     val elementStateSimpleName: String?,
     val elementStateQualifiedName: String?,
     val possibleTypes: List<VmListElementType>,
+    /** The name Kotlin/Native exports the property under; Swift wrappers read it by this name. */
+    val swiftName: String = swiftExportedPropertyName(propertyName),
 )
 
 /** A `@ChildViewModel` property: a single nested child ViewModel. */
@@ -69,6 +73,8 @@ data class VmChild(
     val propertyName: String,
     val typeSimpleName: String,
     val typeQualifiedName: String,
+    /** The name Kotlin/Native exports the property under; Swift wrappers read it by this name. */
+    val swiftName: String = swiftExportedPropertyName(propertyName),
 )
 
 /** Everything the platform generators need to know about one `@ViewModelSpec`. */
@@ -88,6 +94,8 @@ data class VmInfo(
     val lists: List<VmList>,
     val children: List<VmChild>,
     val identityProperty: String? = null,
+    /** The name Kotlin/Native exports [identityProperty] under. */
+    val identitySwiftName: String? = identityProperty?.let { swiftExportedPropertyName(it) },
 )
 
 /** Resolved type tree; platform mappings must not infer nullability or identity from each other. */

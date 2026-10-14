@@ -28,8 +28,7 @@ open class KvoViewModel: NSObject {
     /// whoever awaited them, whereas a target-action thunk is fire-and-forget and has no caller to
     /// return to. Wire this to your telemetry so a failing button is not invisible.
     ///
-    /// (The state subscription's own failures are a separate, still-silent path - see the `catch`
-    /// in the generated `Kvo{Vm}` initialiser.)
+    /// (The state subscription cannot fail: SKIE bridges `state` to a non-throwing sequence.)
     public var onActionError: ((Error) -> Void)?
 
     public override init() {

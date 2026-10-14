@@ -167,8 +167,11 @@ class HomeViewModel @Inject constructor(
 - Initial State uses defaults: `""`, `0`, `false`, `null`, empty collections, the first enum
   entry or sealed case, and a constructor call for data classes. External types get
   `TODO("initial <Type>")`.
-- A root component's implementation is a top-level `@ViewModelInject` class without a navigator. Its
-  `navigates_to` edges are left as empty actions, because only screens own a navigator.
+- A `hosted: true` component gets `@HostedComponent` on its spec. Its implementation is built like a
+  screen's: it takes its own `<Name>Navigator` when it or anything it embeds navigates, and its
+  embedded components are inner classes that use it. Its `create<Name>ViewModel` takes the navigator.
+- Any other root component's implementation is a top-level `@ViewModelInject` class without a
+  navigator. Its `navigates_to` edges are left as empty actions, because nothing gives it a navigator.
 
 ### Types
 

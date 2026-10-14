@@ -55,11 +55,11 @@ class SwiftKvoGenerator(
             }
 
             val seedAssigns = vm.stateProperties.joinToString("\n") {
-                "        self.${it.name.swiftDeclName()} = initial.${it.name.swiftSourceRef()}${if (it.type.enumCases != null) (if (it.nullable) "?.toKotlinEnum()" else ".toKotlinEnum()") else ""}"
+                "        self.${it.name.swiftDeclName()} = initial.${it.swiftName.swiftSourceRef()}${if (it.type.enumCases != null) (if (it.nullable) "?.toKotlinEnum()" else ".toKotlinEnum()") else ""}"
             }
 
             val updateAssigns = vm.stateProperties.joinToString("\n") {
-                "                        self.${it.name.swiftDeclName()} = state.${it.name.swiftSourceRef()}${if (it.type.enumCases != null) (if (it.nullable) "?.toKotlinEnum()" else ".toKotlinEnum()") else ""}"
+                "                self.${it.name.swiftDeclName()} = state.${it.swiftName.swiftSourceRef()}${if (it.type.enumCases != null) (if (it.nullable) "?.toKotlinEnum()" else ".toKotlinEnum()") else ""}"
             }
 
             val actionMethods = vm.actions.joinToString("\n\n") { action ->
@@ -115,11 +115,11 @@ class SwiftKvoGenerator(
                 appendLine("public final class $className: KvoViewModel {")
                 appendLine()
                 appendLine("    private let viewModel: ${vm.simpleName}")
-                vm.identityProperty?.let { identity ->
+                vm.identitySwiftName?.let { identity ->
                     appendLine("    public var basekitIdentity: String { viewModel.${identity.swiftSourceRef()} }")
                 }
                 for (child in vm.children) {
-                    appendLine("    public lazy var ${child.propertyName.swiftDeclName()} = Kvo${child.typeSimpleName}(viewModel.${child.propertyName.swiftSourceRef()})")
+                    appendLine("    public lazy var ${child.propertyName.swiftDeclName()} = Kvo${child.typeSimpleName}(viewModel.${child.swiftName.swiftSourceRef()})")
                 }
                 appendLine()
                 if (dynamicProps.isNotEmpty()) {
@@ -128,19 +128,28 @@ class SwiftKvoGenerator(
                 }
                 appendLine("    public init(_ viewModel: ${vm.simpleName}) {")
                 appendLine("        self.viewModel = viewModel")
-                appendLine("        let initial = viewModel.initialState as! ${vm.stateSwiftName}")
-                if (seedAssigns.isNotEmpty()) appendLine(seedAssigns)
+                // A State without fields has nothing to seed or assign, so `initial`, the cast and the
+                // `self` rebind are omitted (Swift warns on each unused binding). The sequence is still
+                // collected: collecting `state` may be what starts the ViewModel's upstream work.
+                // SKIE bridges `state` to a non-throwing AsyncSequence, so the loop needs no `try`.
+                if (seedAssigns.isNotEmpty()) {
+                    appendLine("        let initial = viewModel.initialState as! ${vm.stateSwiftName}")
+                    appendLine(seedAssigns)
+                }
                 appendLine("        super.init()")
-                appendLine("        startObserving { [weak self] in")
-                appendLine("            do {")
-                appendLine("                for try await anyState in viewModel.state {")
-                appendLine("                    guard let self = self else { break }")
-                appendLine("                    guard let state = anyState as? ${vm.stateSwiftName} else { continue }")
-                if (updateAssigns.isNotEmpty()) appendLine(updateAssigns)
-                appendLine("                }")
-                appendLine("            } catch {")
-                appendLine("            }")
-                appendLine("        }")
+                if (updateAssigns.isNotEmpty()) {
+                    appendLine("        startObserving { [weak self] in")
+                    appendLine("            for await anyState in viewModel.state {")
+                    appendLine("                guard let self = self else { break }")
+                    appendLine("                guard let state = anyState as? ${vm.stateSwiftName} else { continue }")
+                    appendLine(updateAssigns)
+                    appendLine("            }")
+                    appendLine("        }")
+                } else {
+                    appendLine("        startObserving {")
+                    appendLine("            for await _ in viewModel.state {}")
+                    appendLine("        }")
+                }
                 appendLine("    }")
                 if (actionMethods.isNotEmpty()) {
                     appendLine()

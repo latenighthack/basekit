@@ -3,6 +3,7 @@ package com.latenighthack.basekit.viewmodel.codegen
 import com.google.devtools.ksp.getAllSuperTypes
 import com.google.devtools.ksp.getDeclaredProperties
 import com.google.devtools.ksp.processing.KSPLogger
+import com.google.devtools.ksp.symbol.AnnotationUseSiteTarget
 import com.google.devtools.ksp.symbol.ClassKind
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
@@ -46,7 +47,7 @@ class ViewModelExtractor(private val logger: KSPLogger) {
             } else {
                 null
             }
-            VmStateProperty(prop.simpleName.asString(), type.simpleName.asString(), typeQn, resolved.isMarkedNullable, elementQn, resolved.bindingType(), prop.reactAdapter())
+            VmStateProperty(prop.simpleName.asString(), type.simpleName.asString(), typeQn, resolved.isMarkedNullable, elementQn, resolved.bindingType(), prop.reactAdapter(), prop.swiftExportedName())
         }.toList()
 
         val boundFunctions = declaration.getAllFunctions()
@@ -125,8 +126,10 @@ class ViewModelExtractor(private val logger: KSPLogger) {
                     return@mapNotNull null
                 }
                 val qn = decl.qualifiedName?.asString() ?: return@mapNotNull null
-                VmChild(prop.simpleName.asString(), decl.simpleName.asString(), qn)
+                VmChild(prop.simpleName.asString(), decl.simpleName.asString(), qn, prop.swiftExportedName())
             }
+
+        val identity = identityProperty(declaration)
 
         return VmInfo(
             simpleName = simpleName,
@@ -141,7 +144,8 @@ class ViewModelExtractor(private val logger: KSPLogger) {
             mutators = mutators,
             lists = lists,
             children = children,
-            identityProperty = identityProperty(declaration),
+            identityProperty = identity?.simpleName?.asString(),
+            identitySwiftName = identity?.swiftExportedName(),
         )
     }
 
@@ -237,7 +241,7 @@ class ViewModelExtractor(private val logger: KSPLogger) {
                 qualifiedName = qn,
                 hasId = idIsHashable,
                 stateQualifiedName = stateDeclaration?.qualifiedName?.asString(),
-                identityProperty = identityProperty(declaration),
+                identityProperty = identityProperty(declaration)?.simpleName?.asString(),
                 reactId = idProperty?.type?.resolve()?.let { !it.isMarkedNullable && it.declaration.qualifiedName?.asString() in setOf("kotlin.String", "kotlin.Int", "kotlin.Short", "kotlin.Byte") } == true,
             )
         }
@@ -262,6 +266,7 @@ class ViewModelExtractor(private val logger: KSPLogger) {
             elementStateSimpleName = elementState?.simpleName?.asString(),
             elementStateQualifiedName = elementState?.qualifiedName?.asString(),
             possibleTypes = possibleTypes,
+            swiftName = prop.swiftExportedName(),
         )
     }
 
@@ -270,7 +275,7 @@ class ViewModelExtractor(private val logger: KSPLogger) {
             (this !is KSDeclaration ||
                 modifiers.none { it in setOf(Modifier.PRIVATE, Modifier.PROTECTED, Modifier.INTERNAL) })
 
-    private fun identityProperty(declaration: KSClassDeclaration): String? {
+    private fun identityProperty(declaration: KSClassDeclaration): KSPropertyDeclaration? {
         val ids = declaration.getAllProperties().filter { it.hasAnnotation(IDENTITY_ANNOTATION) && !it.hasAnnotation(CODEGEN_IGNORE_ANNOTATION) }.toList()
         if (ids.size > 1) logger.error("Only one @ViewModelIdentity is allowed", declaration)
         val prop = ids.singleOrNull() ?: return null
@@ -279,7 +284,20 @@ class ViewModelExtractor(private val logger: KSPLogger) {
             logger.error("@ViewModelIdentity must be a public non-null String val", prop)
             return null
         }
-        return prop.simpleName.asString()
+        return prop
+    }
+
+    private fun KSPropertyDeclaration.swiftExportedName(): String {
+        // On a primary-constructor `val`, a bare `@ObjCName` names the parameter; only
+        // `@property:ObjCName` names the property.
+        val inConstructor = (parentDeclaration as? KSClassDeclaration)?.primaryConstructor?.parameters
+            ?.any { (it.isVal || it.isVar) && it.name?.asString() == simpleName.asString() } == true
+        val objcName = annotations.firstOrNull {
+            it.qualifiedName() == OBJC_NAME_ANNOTATION &&
+                (it.useSiteTarget == AnnotationUseSiteTarget.PROPERTY || (it.useSiteTarget == null && !inConstructor))
+        }
+        fun argument(name: String) = objcName?.arguments?.firstOrNull { it.name?.asString() == name }?.value as? String
+        return swiftExportedPropertyName(simpleName.asString(), argument("name"), argument("swiftName"))
     }
 
     private fun KSAnnotated.reactAdapter(): ReactAdapter? {

@@ -12,8 +12,19 @@ import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import com.google.devtools.ksp.symbol.KSType
 
-/** The `@Destination`s in one compilation and the files that declare them. */
-data class NavigationGraph(val destinations: List<DestinationInfo>, val sourceFiles: List<KSFile>)
+/**
+ * The `@Destination`s and `@HostedComponent`s in one compilation and the files that declare them. A
+ * hosted component is a navigation source only: it has edges and a navigator, but no args, route or
+ * screen, and nothing navigates to it.
+ */
+data class NavigationGraph(
+    val destinations: List<DestinationInfo>,
+    val sourceFiles: List<KSFile>,
+    val hostedComponents: List<DestinationInfo> = emptyList(),
+) {
+    /** Everything that owns a navigator: destinations, then hosted components. */
+    val sources: List<DestinationInfo> get() = destinations + hostedComponents
+}
 
 /**
  * Reads every `@Destination` in a compilation into [DestinationInfo]s, including the `@NavigateTo`
@@ -34,6 +45,21 @@ class NavigationExtractor(private val logger: KSPLogger) {
         val subtypesBySupertype = buildSubtypeIndex(resolver)
         val reached = mutableSetOf<String>()
         val destinations = symbols.map { buildDestination(it, subtypesBySupertype, reached) }
+        val hostedSymbols = resolver.getSymbolsWithAnnotation(HOSTED_COMPONENT_ANNOTATION)
+            .filterIsInstance<KSClassDeclaration>()
+            .filter { declaration ->
+                val isDestination = declaration.annotations.any { it.qualifiedName() == DESTINATION_ANNOTATION }
+                if (isDestination) {
+                    logger.error(
+                        "${declaration.simpleName.asString()} is both a @Destination and a @HostedComponent; " +
+                            "a destination already owns a navigator",
+                        declaration,
+                    )
+                }
+                !isDestination
+            }
+            .toList()
+        val hostedComponents = hostedSymbols.map { buildHostedComponent(it, subtypesBySupertype, reached) }
         warnUnreachableEdges(resolver, reached)
         resolver.getSymbolsWithAnnotation(REDIRECTS_TO_ANNOTATION)
             .filterIsInstance<KSClassDeclaration>()
@@ -45,7 +71,11 @@ class NavigationExtractor(private val logger: KSPLogger) {
                 )
             }
 
-        return NavigationGraph(destinations, symbols.mapNotNull { it.containingFile })
+        return NavigationGraph(
+            destinations,
+            (symbols + hostedSymbols).mapNotNull { it.containingFile },
+            hostedComponents,
+        )
     }
 
     /** supertype qualified name -> viewmodel interfaces and classes in this compilation that extend it. */
@@ -82,8 +112,8 @@ class NavigationExtractor(private val logger: KSPLogger) {
                 if (owner.qualifiedName?.asString() in reached) return@forEach
                 logger.warn(
                     "@NavigateTo on ${owner.simpleName.asString()}.${function.simpleName.asString()} is not " +
-                        "reachable from any @Destination; declare it on a destination or on a row/child spec a " +
-                        "destination exposes through @ChildViewModel, @ViewModelList, DeltaList or SectionedDeltaList",
+                        "reachable from any @Destination or @HostedComponent; declare it on one of those or on a " +
+                        "row/child spec one exposes through @ChildViewModel, @ViewModelList, DeltaList or SectionedDeltaList",
                     function,
                 )
             }
@@ -160,6 +190,37 @@ class NavigationExtractor(private val logger: KSPLogger) {
             routePath = routePath,
             routeArgs = routeArgs,
             edges = edges,
+        )
+    }
+
+    /**
+     * A `@HostedComponent` as a navigation source: its own edges plus those of everything it embeds,
+     * collected as for a destination. It has no args, response or route.
+     */
+    private fun buildHostedComponent(
+        declaration: KSClassDeclaration,
+        subtypesBySupertype: Map<String, List<KSClassDeclaration>>,
+        reached: MutableSet<String>,
+    ): DestinationInfo {
+        val simpleName = declaration.simpleName.asString()
+        val navName = declaration.stringArgument(HOSTED_COMPONENT_ANNOTATION, "navName")
+            ?.takeIf { it.isNotEmpty() }
+            ?: simpleName.toDestinationNavName()
+        val visited = mutableSetOf<String>()
+        val edges = collectEdges(declaration, navName, subtypesBySupertype, visited)
+        reached += visited
+        return DestinationInfo(
+            simpleName = simpleName,
+            qualifiedName = declaration.qualifiedName!!.asString(),
+            navName = navName,
+            argsQualifiedName = null,
+            argsSwiftName = null,
+            responseQualifiedName = null,
+            responseSwiftName = null,
+            routePath = null,
+            routeArgs = emptyList(),
+            edges = edges,
+            hosted = true,
         )
     }
 

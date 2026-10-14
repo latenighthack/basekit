@@ -46,6 +46,11 @@ class SpecGenerator(
                 appendLine("@RedirectsTo(${vm.redirectsTo.joinToString(", ") { "${specReference(it, imports)}::class" }})")
             }
         }
+        if (vm.hosted) {
+            imports += Symbols.HOSTED_COMPONENT
+            val derived = spec.toCatalogName()
+            if (derived == vm.name) appendLine("@HostedComponent") else appendLine("@HostedComponent(navName = ${kotlinString(vm.name.toNavName())})")
+        }
         imports += Symbols.VIEWMODEL_SPEC
         appendLine("@ViewModelSpec")
 

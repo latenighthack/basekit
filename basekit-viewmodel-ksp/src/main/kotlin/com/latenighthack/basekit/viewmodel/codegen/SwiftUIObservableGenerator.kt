@@ -40,11 +40,11 @@ class SwiftUIObservableGenerator(
             }
 
             val seedAssigns = vm.stateProperties.joinToString("\n") {
-                "        self.${it.name.swiftDeclName()} = initial.${it.name.swiftSourceRef()}"
+                "        self.${it.name.swiftDeclName()} = initial.${it.swiftName.swiftSourceRef()}"
             }
 
             val updateAssigns = vm.stateProperties.joinToString("\n") {
-                "                self.${it.name.swiftDeclName()} = state.${it.name.swiftSourceRef()}"
+                "            self.${it.name.swiftDeclName()} = state.${it.swiftName.swiftSourceRef()}"
             }
 
             val actionMethods = vm.actions.joinToString("\n\n") { action ->
@@ -105,7 +105,7 @@ class SwiftUIObservableGenerator(
                 |    ${DeltaListAvailability.SWIFTUI}
                 |    @available(*, deprecated, message: "Use DeltaListView(model.${list.propertyName}); in Form/List use DeltaForEach(model.${list.propertyName}, observing: list) with container-owned collection")
                 |    public func observe$cap(into list: DeltaList<${list.elementSimpleName}>) async {
-                |        await list.collect(viewModel.${list.propertyName})
+                |        await list.collect(viewModel.${list.swiftName.swiftSourceRef()})
                 |    }
                 """.trimMargin()
             }
@@ -136,37 +136,42 @@ class SwiftUIObservableGenerator(
                 appendLine("public final class $className: ObservableObject {")
                 appendLine()
                 appendLine("    private let viewModel: ${vm.simpleName}")
-                vm.identityProperty?.let { identity ->
+                vm.identitySwiftName?.let { identity ->
                     appendLine("    public var basekitIdentity: String { viewModel.${identity.swiftSourceRef()} }")
                 }
                 for (child in vm.children) {
-                    appendLine("    public lazy var ${child.propertyName.swiftDeclName()} = Observable${child.typeSimpleName}(viewModel.${child.propertyName.swiftSourceRef()})")
+                    appendLine("    public lazy var ${child.propertyName.swiftDeclName()} = Observable${child.typeSimpleName}(viewModel.${child.swiftName.swiftSourceRef()})")
                 }
                 appendLine()
                 if (publishedProps.isNotEmpty()) {
                     appendLine(publishedProps)
                     appendLine()
                 }
-                appendLine("    /// Surfaced if the state stream terminates with an error. Defaults to nil (silent).")
+                appendLine("    /// Never called: SKIE bridges `state` to a non-throwing AsyncSequence.")
+                appendLine("    @available(*, deprecated, message: \"The state sequence does not throw; this handler is never called\")")
                 appendLine("    public var onError: ((Error) -> Void)?")
                 appendLine()
                 appendLine("    public init(_ viewModel: ${vm.simpleName}) {")
                 appendLine("        self.viewModel = viewModel")
-                appendLine("        let initial = viewModel.initialState as! ${vm.stateSwiftName}")
-                if (seedAssigns.isNotEmpty()) appendLine(seedAssigns)
+                // A State without fields has nothing to seed or assign; omit the bindings Swift would
+                // flag as unused, but still collect `state` (collection may start upstream work).
+                if (seedAssigns.isNotEmpty()) {
+                    appendLine("        let initial = viewModel.initialState as! ${vm.stateSwiftName}")
+                    appendLine(seedAssigns)
+                }
                 appendLine("    }")
                 appendLine()
                 appendLine("    /// Collects `state` until the surrounding task is cancelled. Drive from")
                 appendLine("    /// `.task { await model.observe() }` so the subscription follows the view's lifetime.")
                 appendLine("    public func observe() async {")
-                appendLine("        do {")
-                appendLine("            for try await anyState in viewModel.state {")
-                appendLine("                guard let state = anyState as? ${vm.stateSwiftName} else { continue }")
-                if (updateAssigns.isNotEmpty()) appendLine(updateAssigns)
-                appendLine("            }")
-                appendLine("        } catch {")
-                appendLine("            onError?(error)")
-                appendLine("        }")
+                if (updateAssigns.isNotEmpty()) {
+                    appendLine("        for await anyState in viewModel.state {")
+                    appendLine("            guard let state = anyState as? ${vm.stateSwiftName} else { continue }")
+                    appendLine(updateAssigns)
+                    appendLine("        }")
+                } else {
+                    appendLine("        for await _ in viewModel.state {}")
+                }
                 appendLine("    }")
                 if (actionMethods.isNotEmpty()) {
                     appendLine()

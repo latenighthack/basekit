@@ -16,6 +16,18 @@ import kotlin.reflect.KClass
 @Target(AnnotationTarget.CLASS)
 public annotation class Destination(val webPath: String = "", val navName: String = "")
 
+/**
+ * Marks a `@ViewModelSpec` component that destinations host without listing it, such as app chrome
+ * shown around every screen. The app creates one instance. The `@NavigateTo` edges of the component
+ * and of the rows and children it embeds get their own `<Name>Navigator`, which has no `close()`
+ * because the component is not a screen. The edges keep the component's call sites as their
+ * `<Target>Source` entries.
+ *
+ * @param navName overrides the generated navigation name, as on [Destination].
+ */
+@Target(AnnotationTarget.CLASS)
+public annotation class HostedComponent(val navName: String = "")
+
 /** Declares the deep-link path template for a destination's `Args` type, e.g. `/detail/{id}`. */
 @Target(AnnotationTarget.CLASS)
 public annotation class Route(val path: String = "")

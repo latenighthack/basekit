@@ -70,9 +70,10 @@ val verifyAppleSwift = if ("verifyBasekitAppleSwiftIsUniversal" in tasks.names) 
 verifyAppleSwift.configure { dependsOn(verifyUniversalSwift) }
 
 val collectAppleSwift = if ("collectBasekitAppleSwift" in tasks.names) {
-    tasks.named<Copy>("collectBasekitAppleSwift")
+    tasks.named<Sync>("collectBasekitAppleSwift")
 } else {
-    tasks.register<Copy>("collectBasekitAppleSwift") {
+    // Sync, not Copy: a file whose spec was removed must leave the collected directory too.
+    tasks.register<Sync>("collectBasekitAppleSwift") {
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
         includeEmptyDirs = false
         into(layout.buildDirectory.dir("generated/basekit-apple/swift"))
@@ -89,7 +90,7 @@ collectAppleSwift.configure {
 // Flatten the per-Apple-target generated Swift into one stable directory a Swift package / Xcode
 // target can include. Opt-in (not part of `build`). It scans the whole generated/ksp tree, so it
 // must depend on every KSP task that writes there (Android/JS/Apple), not only the Apple ones.
-tasks.register<Copy>("collectBasekitViewModelSwift") {
+tasks.register<Sync>("collectBasekitViewModelSwift") {
     dependsOn(collectAppleSwift)
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     includeEmptyDirs = false
