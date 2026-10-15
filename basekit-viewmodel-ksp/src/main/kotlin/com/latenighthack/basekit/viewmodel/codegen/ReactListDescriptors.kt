@@ -1,5 +1,43 @@
 package com.latenighthack.basekit.viewmodel.codegen
 
+internal fun reactHeaderFactoryName(vm: VmInfo, list: VmList): String =
+    "bind${vm.simpleName}${list.propertyName.toUpperCamelCase()}ReactHeader"
+
+/** The TypeScript header type of a sectioned list, e.g. `SidebarViewModelConnectionsHeader`. */
+internal fun reactHeaderTypeName(vm: VmInfo, list: VmList): String =
+    "${vm.simpleName}${list.propertyName.toUpperCamelCase()}Header"
+
+/**
+ * A sectioned list's header for React, spelled as in Kotlin: an enum entry's name (a string-literal
+ * union), or `{ kind }` for a sealed subclass (a `kind`-tagged union).
+ */
+internal fun reactHeaderFactory(vm: VmInfo, list: VmList): String {
+    val header = list.header ?: return ""
+    val body = if (header.isEnum) {
+        "(raw as ${header.qualifiedName}).name"
+    } else {
+        val branches = header.cases.joinToString("\n") { case ->
+            "    is ${case.qualifiedName} -> {\n        val header: dynamic = js(\"({})\")\n        header.kind = \"${case.name}\"\n        header\n    }"
+        }
+        "when (raw) {\n$branches\n    else -> error(\"${vm.simpleName}.${list.propertyName} emitted an undeclared header: ${'$'}raw\")\n}"
+    }
+    return """
+    |/** Typed React header for `${list.propertyName}`. */
+    |private fun ${reactHeaderFactoryName(vm, list)}(raw: Any?): Any = $body
+    """.trimMargin()
+}
+
+/** The TypeScript declaration of [reactHeaderTypeName]. */
+internal fun reactHeaderType(vm: VmInfo, list: VmList): String {
+    val header = list.header ?: return ""
+    val cases = if (header.isEnum) {
+        header.cases.joinToString(" | ") { "'${it.name}'" }
+    } else {
+        header.cases.joinToString(" | ") { "{ readonly kind: '${it.name}' }" }
+    }
+    return "export type ${reactHeaderTypeName(vm, list)} = $cases;"
+}
+
 internal fun reactListFactoryName(vm: VmInfo, list: VmList): String =
     "bind${vm.simpleName}${list.propertyName.toUpperCamelCase()}ReactElement"
 

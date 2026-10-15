@@ -44,6 +44,8 @@ class AppleHostedNavigatorGenerator(
         val sitesByTarget = sites.groupBy { it.target.qualifiedName }
         generateEdge(sites)
         generateHost(sitesByTarget)
+        // A destination named `close` already gets an `AppleCloseNavigator`, which also closes.
+        if (sources.none { it.navName.toUpperCamelCase() == "Close" }) generateCloseNavigator()
         sources.forEach { generateNavigator(it, sites, sitesByTarget) }
     }
 
@@ -73,6 +75,24 @@ class AppleHostedNavigatorGenerator(
                 }.joinToString(", ")
                 appendLine("    public fun show$cap($params)")
             }
+            appendLine("}")
+        }
+    }
+
+    /**
+     * A navigator that only closes, for code that needs a `CloseNavigationTarget` without naming a
+     * destination (each leaf destination also gets its own `Apple<Name>Navigator`).
+     */
+    private fun generateCloseNavigator() = write("AppleCloseNavigator") {
+        buildString {
+            appendLine("import com.latenighthack.basekit.navigation.runOnMainThread")
+            appendLine()
+            appendLine("/** Closes the entry [ownerId] owns in [host]; the call hops to the main thread like every Apple navigator. */")
+            appendLine("public class AppleCloseNavigator(")
+            appendLine("    public val ownerId: String,")
+            appendLine("    private val host: AppleNavigationHost,")
+            appendLine(") : CloseNavigationTarget {")
+            appendLine("    override fun close(context: Any?) = runOnMainThread { host.close(ownerId, context) }")
             appendLine("}")
         }
     }

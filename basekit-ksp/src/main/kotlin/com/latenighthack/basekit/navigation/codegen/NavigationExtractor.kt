@@ -149,6 +149,21 @@ class NavigationExtractor(private val logger: KSPLogger) {
             ?.stringArgument(ROUTE_ANNOTATION, "path")
         val webPath = declaration.stringArgument(DESTINATION_ANNOTATION, "webPath")
         val routePath = routeFromArgs?.takeIf { it.isNotEmpty() } ?: webPath?.takeIf { it.isNotEmpty() }
+        val routeAliases = argsDeclaration?.stringListArgument(ROUTE_ANNOTATION, "aliases").orEmpty()
+            .filter { it.isNotEmpty() }
+        if (routeAliases.isNotEmpty() && routePath == null) {
+            logger.error("@Route aliases on $simpleName need a route path", argsDeclaration)
+        }
+        // An alias registers the same args factory, which binds every @RouteArg from the match.
+        routePath?.let(::routeParams)?.let { params ->
+            routeAliases.filter { routeParams(it) != params }.forEach { alias ->
+                logger.error(
+                    "@Route alias \"$alias\" on $simpleName must capture the same parameters as \"$routePath\" " +
+                        "(${params.sorted().joinToString().ifEmpty { "none" }})",
+                    argsDeclaration,
+                )
+            }
+        }
 
         val routeArgProperties = argsDeclaration
             ?.getDeclaredProperties()
@@ -190,6 +205,7 @@ class NavigationExtractor(private val logger: KSPLogger) {
             routePath = routePath,
             routeArgs = routeArgs,
             edges = edges,
+            routeAliases = routeAliases,
         )
     }
 

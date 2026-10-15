@@ -28,7 +28,8 @@ class AndroidBindingGenerator(
                 """.trimMargin()
             }
 
-            val listBinders = vm.lists.joinToString("\n\n") { list -> androidListBinder(list) }
+            // Sectioned lists bind through Compose; the RecyclerView helpers are flat only.
+            val listBinders = vm.lists.filterNot { it.sectioned }.joinToString("\n\n") { list -> androidListBinder(list) }
 
             codeGenerator.createNewFile(dependencies, vm.packageName, className, "kt").apply {
                 writeln("package ${vm.packageName}")

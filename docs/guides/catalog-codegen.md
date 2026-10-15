@@ -99,7 +99,8 @@ One file per screen, named after the spec (`IHomeViewModel.kt`). Its `spec` regi
 - the screen interface: `@Destination` (with `navName` only when the catalog name differs from the
   one basekit derives), `@ViewModelSpec`, `NavigationDestination<Args>` or
   `RespondingDestination<Args, R>`, and nested:
-  - `Args`, with `@Route`, a typed constructor and `@RouteArg` on the route args;
+  - `Args`, with `@Route` (and its `aliases`, from `route_aliases`), a typed constructor and
+    `@RouteArg` on the route args;
   - `State`, a data class of the `state` fields (`class State` when there are none);
   - one sealed `<List>Header` interface per sectioned list, with a `data object` per section;
 - `@ViewModelIdentity`, lists, `@ChildViewModel` properties, actions and mutations, with

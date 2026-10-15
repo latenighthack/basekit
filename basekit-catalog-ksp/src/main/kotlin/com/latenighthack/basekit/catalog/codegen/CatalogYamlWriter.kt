@@ -70,6 +70,9 @@ object CatalogYamlWriter {
             appendLine("    navigation:")
             map("args", navigation.args, indent = 6, inlineLimit = 1)
             appendLine("      route: ${navigation.route?.let(::quoted) ?: "null"}")
+            if (navigation.routeAliases.isNotEmpty()) {
+                appendLine("      route_aliases: [${navigation.routeAliases.joinToString(", ") { quoted(it) }}]")
+            }
             appendLine("      route_args: ${inlineList(navigation.routeArgs)}")
             appendLine("      response: ${navigation.response?.let(::scalar) ?: "null"}")
         }

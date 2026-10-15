@@ -31,6 +31,7 @@ class SwiftWrapperGeneratorTest {
         name: String,
         properties: List<VmStateProperty> = emptyList(),
         lists: List<VmList> = emptyList(),
+        actions: List<VmAction> = emptyList(),
     ) = VmInfo(
         simpleName = name,
         qualifiedName = "sample.$name",
@@ -40,7 +41,7 @@ class SwiftWrapperGeneratorTest {
         stateQualifiedName = "sample.$name.State",
         stateSwiftName = "${name}State",
         stateProperties = properties,
-        actions = emptyList(),
+        actions = actions,
         mutators = emptyList(),
         lists = lists,
         children = emptyList(),
@@ -124,5 +125,98 @@ class SwiftWrapperGeneratorTest {
         val source = out.text("ItemViewModelReactHook.kt")
         assertContains(source, "result.`in` = state.`in`")
         assertContains(source, "result.title = state.title")
+    }
+
+    private val sealedHeader = VmSectionHeader(
+        qualifiedName = "sample.HostViewModel.Section",
+        swiftName = "HostViewModelSection",
+        isEnum = false,
+        cases = listOf(
+            VmHeaderCase("Personal", "sample.HostViewModel.Section.Personal", "HostViewModelSectionPersonal"),
+            VmHeaderCase("Custom", "sample.HostViewModel.Section.Custom", "HostViewModelSectionCustom", isObject = false),
+        ),
+    )
+    private val enumHeader = VmSectionHeader("sample.Shelf", "Shelf", isEnum = true, cases = listOf(VmHeaderCase("TOP"), VmHeaderCase("BOTTOM")))
+
+    private fun sectioned(header: VmSectionHeader, vararg rows: VmListElementType, element: String = "RowMarker") =
+        VmList("rows", element, "sample.$element", null, null, rows.toList(), header = header)
+
+    @Test
+    fun kvo_sectioned_binder_types_headers_and_rows() {
+        val out = RecordingCodeGenerator()
+        SwiftKvoGenerator(out, Dependencies(false)).generate(listOf(vm("HostViewModel", lists = listOf(sectioned(sealedHeader, row("TextRowViewModel"), row("ImageRowViewModel"))))))
+        val kvo = out.text("KvoHostViewModel.swift")
+        assertContains(kvo, "public enum KvoHostViewModelRowsHeader: Hashable {\n    case Personal\n    case Custom(HostViewModelSectionCustom)\n}")
+        assertContains(kvo, "if raw is HostViewModelSectionPersonal { return .Personal }")
+        assertContains(kvo, "if let typed = raw as? HostViewModelSectionCustom { return .Custom(typed) }")
+        assertContains(kvo, "if let typed = raw as? TextRowViewModel { return .textRow(KvoTextRowViewModel(typed)) }")
+        assertContains(kvo, "#if canImport(UIKit) && !os(watchOS)")
+        assertContains(kvo, "-> SectionedDeltaCollectionDataSource<AnyObject, RowMarker> {")
+        assertContains(kvo, "dataSource.bind(to: viewModel.rows)")
+        // No flat ViewModelListBinding for a sectioned list, and no SwiftUI binding at all.
+        assertFalse("ViewModelListBinding" in kvo)
+        SwiftUIObservableGenerator(out, Dependencies(false)).generate(listOf(vm("HostViewModel", lists = listOf(sectioned(sealedHeader, row("TextRowViewModel"), row("ImageRowViewModel"))))))
+        assertFalse("rows" in out.text("ObservableHostViewModel.swift"))
+    }
+
+    @Test
+    fun kvo_enum_headers_keep_kotlin_spellings() {
+        val out = RecordingCodeGenerator()
+        SwiftKvoGenerator(out, Dependencies(false)).generate(listOf(vm("HostViewModel", lists = listOf(sectioned(enumHeader, row("RowViewModel"), element = "RowViewModel")))))
+        val kvo = out.text("KvoHostViewModel.swift")
+        assertContains(kvo, "case TOP\n    case BOTTOM")
+        assertContains(kvo, "switch (raw as? __Shelf)?.name {\n        case \"TOP\": return .TOP")
+        assertContains(kvo, "return KvoRowViewModel(raw)")
+    }
+
+    @Test
+    fun compose_sectioned_list_has_a_typed_header_slot() {
+        val source = compose(sectioned(sealedHeader, row("RowViewModel", "rowId"), element = "RowViewModel"))
+        assertContains(source, "header: @Composable (sample.HostViewModel.Section) -> Unit,")
+        assertContains(source, "DeltaSections(source = model.rows, header = header, modifier = modifier, placeholder = placeholder, identity = { raw -> \"sample.RowViewModel:\" + raw.rowId }) { raw -> row(sample.bindRowViewModel(raw, launchAction)) }")
+    }
+
+    @Test
+    fun react_sectioned_list_types_headers_as_unions() {
+        val host = vm("HostViewModel", lists = listOf(sectioned(sealedHeader, row("TextRowViewModel"), row("ImageRowViewModel"))))
+        val shelves = vm("ShelfViewModel", lists = listOf(sectioned(enumHeader, row("RowViewModel"), element = "RowViewModel")))
+        val out = RecordingCodeGenerator()
+        ReactHookGenerator(out, Dependencies(false)).generate(listOf(host, shelves))
+        val hook = out.text("HostViewModelReactHook.kt")
+        assertContains(hook, "useMappedSectionedDeltaList(viewModel.rows, ::bindHostViewModelRowsReactHeader, ::bindHostViewModelRowsReactElement)")
+        assertContains(hook, "is sample.HostViewModel.Section.Custom -> {\n        val header: dynamic = js(\"({})\")\n        header.kind = \"Custom\"")
+        assertContains(out.text("ShelfViewModelReactHook.kt"), "(raw as sample.Shelf).name")
+        ReactTypesGenerator(out, Dependencies(false)).generate(listOf(host, shelves), "sample-runtime")
+        val types = out.text("basekit-react.d.ts")
+        assertContains(types, "readonly rows: SectionedViewModelList<HostViewModelRowsHeader, HostViewModelRowsElement>;")
+        assertContains(types, "export type HostViewModelRowsHeader = { readonly kind: 'Personal' } | { readonly kind: 'Custom' };")
+        assertContains(types, "export type ShelfViewModelRowsHeader = 'TOP' | 'BOTTOM';")
+    }
+
+    @Test
+    fun action_ids_are_identical_on_every_platform() {
+        val sidebar = vm("SidebarViewModel", actions = listOf(VmAction("onAccountTapped")))
+        val out = RecordingCodeGenerator()
+        SwiftUIObservableGenerator(out, Dependencies(false)).generate(listOf(sidebar))
+        ComposeGenerator(out, Dependencies(false)).generate(listOf(sidebar))
+        ReactTypesGenerator(out, Dependencies(false)).generate(listOf(sidebar), "sample-runtime")
+        assertContains(out.text("ObservableSidebarViewModel.swift"), "public static let onAccountTapped = \"sidebar.onAccountTapped\"")
+        assertContains(out.text("SidebarViewModelCompose.kt"), "public const val onAccountTapped: String = \"sidebar.onAccountTapped\"")
+        assertContains(out.text("basekit-react.js"), "SidebarViewModelActionIds = Object.freeze({ onAccountTapped: 'sidebar.onAccountTapped' })")
+    }
+
+    @Test
+    fun destination_models_use_the_entry_owner_and_report_missing_responders() {
+        val out = RecordingCodeGenerator()
+        val agent = ViewModelFactoryInfo("agentFactory", "sample.AgentViewModelImpl", listOf("sample.AgentViewModel.Args", "sample.nav.AgentNavigator"),
+            FactoryRoute("agent", "AgentViewModel", "AppleAgentNavigator", hasArgs = true, responding = false, listOf(RouteParameter.ARGS, RouteParameter.NAVIGATOR)))
+        val confirm = ViewModelFactoryInfo("confirmFactory", "sample.ConfirmViewModelImpl", listOf("sample.nav.CloseNavigationTarget", "com.latenighthack.basekit.navigation.NavigationResponder<kotlin.Boolean>"),
+            FactoryRoute("confirm", "ConfirmViewModel", "AppleConfirmNavigator", hasArgs = false, responding = true, listOf(RouteParameter.NAVIGATOR, RouteParameter.RESPONDER)))
+        DestinationModelGenerator(out, Dependencies(false), emptyList()).generate(listOf(agent to agent.route!!, confirm to confirm.route!!), setOf("agent", "confirm", "toast"))
+        val swift = out.text("BasekitDestinationModels.swift")
+        assertContains(swift, "case .agent(let args, _):\n        return .agent(ObservableAgentViewModel(factories.agentFactory(args, AppleAgentNavigator(ownerId: entry.ownerID, host: host))))")
+        assertContains(swift, "case .confirm(_, let responder):\n        guard let responder else { throw .missingResponder(destination: \"confirm\") }")
+        // `toast` has no factory, so the switch needs a default that reports it.
+        assertContains(swift, "default:\n        throw .noFactory(")
     }
 }

@@ -24,6 +24,13 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                         public fun launch(action: suspend ${vm.simpleName}Binding.() -> Unit): Job = launchAction { action() }
                 """.trimIndent())
                 vm.actions.forEach { file.writeln("    public suspend fun ${it.name}() { model.${it.name}() }") }
+                val identified = vm.actionIdentifierMembers()
+                if (identified.isNotEmpty()) {
+                    // Stable identifiers, the same on every platform; hosts pass them to Modifier.testTag.
+                    file.writeln("    public object ActionIds {")
+                    identified.forEach { file.writeln("        public const val ${it.kotlinRef()}: String = \"${actionIdentifier(vm, it)}\"") }
+                    file.writeln("    }")
+                }
                 vm.mutators.forEach { file.writeln("    public suspend fun ${it.name}(${it.paramName}: ${it.type.kotlinName}) { model.${it.name}(${it.paramName}) }") }
                 vm.children.forEach { child ->
                     file.writeln("    @Composable public fun ${child.propertyName.toUpperCamelCase()}(): ${child.typeQualifiedName.substringBeforeLast('.')}.${child.typeSimpleName}Binding = ${child.typeQualifiedName.substringBeforeLast('.')}.bind${child.typeSimpleName}(model.${child.propertyName}, launchAction)")
@@ -32,7 +39,10 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                     val rows = list.possibleTypes.joinToString(",\n") {
                         "        ${it.simpleName.toListCaseName()}: @Composable (${it.qualifiedName.substringBeforeLast('.')}.${it.simpleName}Binding) -> Unit"
                     }
-                    file.writeln("    @Composable public fun ${list.propertyName.toUpperCamelCase()}(\n$rows,\n        modifier: Modifier = Modifier, placeholder: @Composable (Int) -> Unit = {},\n    ) {")
+                    // A sectioned list adds a typed header slot; rows bind exactly as in a flat list.
+                    val headerSlot = list.header?.let { "        header: @Composable (${it.qualifiedName}) -> Unit,\n" }.orEmpty()
+                    val rowsCall = if (list.sectioned) "DeltaSections(source = model.${list.propertyName}, header = header, " else "DeltaRows(source = model.${list.propertyName}, "
+                    file.writeln("    @Composable public fun ${list.propertyName.toUpperCamelCase()}(\n$headerSlot$rows,\n        modifier: Modifier = Modifier, placeholder: @Composable (Int) -> Unit = {},\n    ) {")
                     fun key(type: VmListElementType) = when {
                         type.identityProperty != null -> "\"${type.qualifiedName}:\" + raw.${type.identityProperty}"
                         type.reactId -> "\"${type.qualifiedName}:\" + raw.initialState.id"
@@ -44,10 +54,10 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                     if (single != null) {
                         // `raw` already has the row's type; a `when` would be an always-true check plus a
                         // redundant `else`.
-                        file.writeln("        DeltaRows(source = model.${list.propertyName}, modifier = modifier, placeholder = placeholder, identity = { raw -> ${key(single)} }) { raw -> ${render(single)} }\n    }")
+                        file.writeln("        ${rowsCall}modifier = modifier, placeholder = placeholder, identity = { raw -> ${key(single)} }) { raw -> ${render(single)} }\n    }")
                         return@forEach
                     }
-                    file.writeln("        DeltaRows(source = model.${list.propertyName}, modifier = modifier, placeholder = placeholder, identity = { raw -> when (raw) {")
+                    file.writeln("        ${rowsCall}modifier = modifier, placeholder = placeholder, identity = { raw -> when (raw) {")
                     list.possibleTypes.forEach { file.writeln("            is ${it.qualifiedName} -> ${key(it)}") }
                     file.writeln("            else -> error(\"Undeclared ${vm.simpleName}.${list.propertyName} child\")\n        } }) { raw -> when (raw) {")
                     list.possibleTypes.forEach { file.writeln("            is ${it.qualifiedName} -> ${render(it)}") }

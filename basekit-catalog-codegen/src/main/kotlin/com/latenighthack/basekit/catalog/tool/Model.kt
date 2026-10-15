@@ -17,6 +17,8 @@ data class Navigation(
     val route: String?,
     val routeArgs: List<String>,
     val response: String?,
+    /** Other paths that open the screen (`route_aliases`, `@Route(aliases)`). */
+    val routeAliases: List<String> = emptyList(),
 )
 
 data class Action(val name: String, val navigatesTo: List<String>)

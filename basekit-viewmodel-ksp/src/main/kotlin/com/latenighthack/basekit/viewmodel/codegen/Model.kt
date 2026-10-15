@@ -56,7 +56,29 @@ data class VmListElementType(
     val reactId: Boolean = hasId,
 )
 
-/** A `@ViewModelList` property: a `Flow<Delta<ElementVm>>` with a precise closed child set. */
+/** One case of a sectioned list's header: an enum entry, or a direct subclass of a sealed header. */
+data class VmHeaderCase(
+    /** The Kotlin spelling (`Personal`, `ALWAYS`), kept on every platform so hosts can map it to copy. */
+    val name: String,
+    /** The sealed subclass; null for an enum entry. */
+    val qualifiedName: String? = null,
+    val swiftName: String? = null,
+    /** A sealed `object` subclass carries no value; a class subclass carries its instance. */
+    val isObject: Boolean = true,
+)
+
+/** The header type of a sectioned list: an enum or a sealed type, never free-form text. */
+data class VmSectionHeader(
+    val qualifiedName: String,
+    val swiftName: String,
+    val isEnum: Boolean,
+    val cases: List<VmHeaderCase>,
+)
+
+/**
+ * A `@ViewModelList` property with a precise closed child set: flat (`Flow<Delta<ElementVm>>`), or
+ * sectioned (`SectionedDeltaList<Header, ElementVm>`) when [header] is set.
+ */
 data class VmList(
     val propertyName: String,
     val elementSimpleName: String,
@@ -66,7 +88,10 @@ data class VmList(
     val possibleTypes: List<VmListElementType>,
     /** The name Kotlin/Native exports the property under; Swift wrappers read it by this name. */
     val swiftName: String = swiftExportedPropertyName(propertyName),
-)
+    val header: VmSectionHeader? = null,
+) {
+    val sectioned: Boolean get() = header != null
+}
 
 /** A `@ChildViewModel` property: a single nested child ViewModel. */
 data class VmChild(

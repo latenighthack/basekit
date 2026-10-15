@@ -118,3 +118,66 @@ private func fixtureAppKitHooks(router: BasekitNavigationRouter) {
     router.use(appKitPresenter: FixtureAppKitPresenter())
 }
 #endif
+
+// Host-side use of the generated view model factory, the child router, the closing navigator and
+// action identifiers. Presentation stays the host's: this fixture only builds and observes models.
+@available(iOS 18.0, macOS 15.0, *)
+@MainActor
+private struct FixtureDestination: View {
+    let router: BasekitNavigationRouter
+    let entry: BasekitNavigationEntry
+    let factories: GeneratedViewModelFactories
+
+    var body: some View {
+        switch try? basekitViewModel(for: entry, host: router, factories: factories) {
+        case .home(let model):
+            BasekitModelView(model) { home in
+                Text("Home").accessibilityIdentifier(ObservableHomeViewModel.ActionIds.onRefresh)
+                    .onTapGesture { Task { try? await home.onRefresh() } }
+            }
+        case .detail(let model):
+            Text(String(describing: model))
+        case .none:
+            Text("No view model")
+        case .picker(let model):
+            BasekitModelView(model) { _ in Text("Picker") }
+        }
+    }
+}
+
+@available(iOS 18.0, macOS 15.0, *)
+@MainActor
+private func fixtureChildRouter(parent: BasekitNavigationRouter, entry: BasekitNavigationEntry) -> BasekitNavigationRouter {
+    let child = BasekitNavigationRouter(parent: parent)
+    // The callback is main-actor isolated, so a host can forward `context` without assumeIsolated.
+    child.onCloseRoot = { ownerID, context in parent.close(ownerId: ownerID, context: context) }
+    AppleCloseNavigator(ownerId: entry.ownerID, host: child).close(context: nil)
+    return child
+}
+
+#if canImport(UIKit)
+@available(iOS 18.0, *)
+@MainActor
+private func fixtureSectionedBinding(_ model: KvoBindingProbeViewModel, collectionView: UICollectionView) {
+    model.bindShelves(collectionView, cellProvider: { cv, indexPath, row in
+        switch row {
+        case .bindingChild(let child): _ = child.title
+        case .bindingNote(let note): _ = note.text
+        }
+        return UICollectionViewCell()
+    }, headerProvider: { _, _, header in
+        switch header {
+        case .TOP, .BOTTOM: return UICollectionReusableView()
+        }
+    })
+    model.bindSections(collectionView, cellProvider: { _, _, child in
+        _ = child.title
+        return UICollectionViewCell()
+    }, headerProvider: { _, _, header in
+        switch header {
+        case .Pinned: return UICollectionReusableView()
+        case .Group(let group): _ = group.name; return UICollectionReusableView()
+        }
+    })
+}
+#endif

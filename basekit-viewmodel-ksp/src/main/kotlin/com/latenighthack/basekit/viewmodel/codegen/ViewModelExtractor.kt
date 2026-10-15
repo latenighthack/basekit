@@ -149,15 +149,73 @@ class ViewModelExtractor(private val logger: KSPLogger) {
         )
     }
 
-    private fun buildList(ownerName: String, prop: KSPropertyDeclaration): VmList? {
-        val flow = prop.type.resolve()
-        val delta = flow.arguments.singleOrNull()?.type?.resolve()
-        if (flow.isMarkedNullable || flow.declaration.qualifiedName?.asString() != "kotlinx.coroutines.flow.Flow" ||
-            delta?.declaration?.qualifiedName?.asString() != "com.latenighthack.deltalist.Delta" || delta.isMarkedNullable) {
-            logger.error("@ViewModelList ${prop.simpleName.asString()} on $ownerName must be Flow<Delta<ChildVm>>", prop)
+    /**
+     * The element type and, for a sectioned list, the header type of a list property: `Flow<Delta<E>>`
+     * or `DeltaList<E>`, and `Flow<SectionedDelta<H, E>>` or `SectionedDeltaList<H, E>`. Null for
+     * anything else.
+     */
+    private fun listTypes(type: KSType): Pair<KSType?, KSType?>? {
+        if (type.isMarkedNullable) return null
+        fun argument(of: KSType, index: Int) = of.arguments.getOrNull(index)?.type?.resolve()
+        return when (type.declaration.qualifiedName?.asString()) {
+            DELTA_LIST -> argument(type, 0) to null
+            SECTIONED_DELTA_LIST -> argument(type, 1) to argument(type, 0)
+            FLOW -> {
+                val delta = argument(type, 0)?.takeUnless { it.isMarkedNullable } ?: return null
+                when (delta.declaration.qualifiedName?.asString()) {
+                    DELTA -> argument(delta, 0) to null
+                    SECTIONED_DELTA -> argument(delta, 1) to argument(delta, 0)
+                    else -> null
+                }
+            }
+            else -> null
+        }
+    }
+
+    /** A sectioned list's header: an enum (its entries) or a sealed type (its direct subclasses). */
+    private fun sectionHeader(ownerName: String, prop: KSPropertyDeclaration, type: KSType): VmSectionHeader? {
+        val declaration = type.declaration as? KSClassDeclaration
+        val qualifiedName = declaration?.qualifiedName?.asString()
+        val cases = when {
+            declaration == null || qualifiedName == null || type.isMarkedNullable -> null
+            declaration.classKind == ClassKind.ENUM_CLASS -> declaration.declarations
+                .filterIsInstance<KSClassDeclaration>()
+                .filter { it.classKind == ClassKind.ENUM_ENTRY }
+                .map { VmHeaderCase(it.simpleName.asString()) }
+                .toList()
+            Modifier.SEALED in declaration.modifiers -> declaration.getSealedSubclasses()
+                .map {
+                    VmHeaderCase(
+                        name = it.simpleName.asString(),
+                        qualifiedName = it.qualifiedName?.asString(),
+                        swiftName = it.swiftExportName(),
+                        isObject = it.classKind == ClassKind.OBJECT,
+                    )
+                }
+                .toList()
+            else -> null
+        }
+        if (cases.isNullOrEmpty()) {
+            logger.error(
+                "@ViewModelList ${prop.simpleName.asString()} on $ownerName has section header " +
+                    "${qualifiedName ?: type}; a header must be a non-null enum or sealed type with at least one case",
+                prop,
+            )
             return null
         }
-        val elementType = delta.arguments.singleOrNull()?.type?.resolve()
+        return VmSectionHeader(qualifiedName!!, declaration!!.swiftExportName(), declaration.classKind == ClassKind.ENUM_CLASS, cases)
+    }
+
+    private fun buildList(ownerName: String, prop: KSPropertyDeclaration): VmList? {
+        val (elementType, headerType) = listTypes(prop.type.resolve()) ?: run {
+            logger.error(
+                "@ViewModelList ${prop.simpleName.asString()} on $ownerName must be Flow<Delta<ChildVm>> " +
+                    "or SectionedDeltaList<Header, ChildVm>",
+                prop,
+            )
+            return null
+        }
+        val header = headerType?.let { sectionHeader(ownerName, prop, it) ?: return null }
         val elementDecl = elementType?.declaration as? KSClassDeclaration
         if (elementDecl == null || elementType.isMarkedNullable) {
             logger.error("@ViewModelList ${prop.simpleName.asString()} on $ownerName must declare a concrete non-null child type", prop)
@@ -267,6 +325,7 @@ class ViewModelExtractor(private val logger: KSPLogger) {
             elementStateQualifiedName = elementState?.qualifiedName?.asString(),
             possibleTypes = possibleTypes,
             swiftName = prop.swiftExportedName(),
+            header = header,
         )
     }
 

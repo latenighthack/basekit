@@ -171,6 +171,19 @@ the annotation. If the generator cannot express the required separation, use an
 application route resolver or extend the generator rather than exposing raw IDs.
 See [ID encoding boundaries](ids.md#encoding-boundaries).
 
+A screen with more than one URL, such as an old path kept working after a rename,
+lists the others as aliases:
+
+```kotlin
+@Route("/apps", aliases = ["/connections"])
+class Args() : NavigatorArgs()
+```
+
+`GeneratedRoutes` registers each alias with the same args factory as the path.
+An alias must capture the same `{params}` as the path, because the factory binds
+every `@RouteArg` from the match; the build fails otherwise. The catalog records
+aliases as `route_aliases`.
+
 Tokens, proofs, SDK objects, pending continuations and arbitrary return URLs do
 not belong in navigation arguments. Use typed safe-return destinations and explicit
 secret-bearing boundary types where an issued link requires them. Redact sensitive

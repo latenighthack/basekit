@@ -84,6 +84,29 @@ class HostedComponentTest {
         assertFalse("createShellViewModel" in source)
     }
 
+    @Test
+    fun appleCloseNavigatorClosesOnTheMainThread() {
+        val output = RecordingCodeGenerator()
+        AppleHostedNavigatorGenerator(output, Dependencies(false), "sample").generate(destinations, hosted)
+        assertContains(
+            output.source(),
+            "public class AppleCloseNavigator(\n    public val ownerId: String,\n    private val host: AppleNavigationHost,\n) : CloseNavigationTarget {\n" +
+                "    override fun close(context: Any?) = runOnMainThread { host.close(ownerId, context) }",
+        )
+    }
+
+    @Test
+    fun routerCallbacksAreMainActorAndAChildForwardsItsRoot() {
+        val output = RecordingCodeGenerator()
+        AppleSwiftNavigationGenerator(output, Dependencies(false), emptyList()).generate(destinations, hosted)
+        val source = output.source()
+        assertContains(source, "public var onCloseRoot: (@MainActor (String, Any?) -> Void)?")
+        assertContains(source, "public var platformDismisser: (@MainActor (UUID) -> Void)?")
+        assertContains(source, "public convenience init(parent: BasekitNavigationRouter, policy: BasekitNavigationPolicy = BasekitDefaultNavigationPolicy()) {")
+        assertContains(source, "onCloseRoot = { [weak parent] ownerID, context in parent?.close(ownerId: ownerID, context: context) }")
+        assertFalse(Regex("""var \w+Provider: \(\(""").containsMatchIn(source))
+    }
+
     private fun info(simpleName: String, navName: String, edges: List<NavEdge> = emptyList(), hosted: Boolean = false) =
         DestinationInfo(
             simpleName = simpleName,

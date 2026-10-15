@@ -332,4 +332,31 @@ class CatalogCodegenTest {
         assertEquals("ON_OPEN_DETAIL", "onOpenDetail".toUpperSnakeCase())
         assertEquals(TypeRef("Map", listOf(TypeRef("String", emptyList(), false), TypeRef("Int", emptyList(), true)), true), TypeRef.parse("Map<String, Int?>?"))
     }
+
+    @Test
+    fun `route aliases join the Route annotation and must capture the route's params`() {
+        val aliased = catalog.replace("route: \"/detail/{id}\"\n", "route: \"/detail/{id}\"\n      route_aliases: [\"/items/{id}\"]\n")
+        val document = CatalogReader.read(aliased)
+        assertEquals(emptyList(), document.warnings)
+        val spec = CatalogCodegen.generate(document).first { it.path == "com/example/DetailViewModel.kt" }.content
+        assertTrue("@Route(\"/detail/{id}\", aliases = [\"/items/{id}\"])\n    class Args() : NavigatorArgs() {" in spec, spec)
+        assertFailsWith<CatalogException> { CatalogReader.read(aliased.replace("\"/items/{id}\"", "\"/items\"")) }
+            .also { assertTrue("screens.Detail.navigation.route_aliases" in it.message!!, it.message) }
+        assertFailsWith<CatalogException> {
+            CatalogReader.read(catalog.replace("route: \"/\"\n", "route: null\n      route_aliases: [\"/home\"]\n"))
+        }
+    }
+
+    @Test
+    fun `a sectioned list declares its rows so every platform can bind them`() {
+        val sectioned = catalog.replace(
+            "      items:\n        kind: flat\n        element: FeedRow\n        rows: [FeedItem, FeedEmpty]",
+            "      items:\n        kind: sectioned\n        sections: [Pinned, Recent]\n        element: FeedRow\n        rows: [FeedItem, FeedEmpty]",
+        )
+        val spec = CatalogCodegen.generate(CatalogReader.read(sectioned)).first { it.path == "com/example/HomeViewModel.kt" }.content
+        assertTrue(
+            "@ViewModelList(FeedItemViewModel::class, FeedEmptyViewModel::class)\n    val items: SectionedDeltaList<HomeViewModel.ItemsHeader, FeedRowViewModel>" in spec,
+            spec,
+        )
+    }
 }

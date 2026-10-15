@@ -84,6 +84,7 @@ class GraphModel(
             "navigation" to vm.navigation?.let { navigation ->
                 mapOf(
                     "route" to navigation.route,
+                    "routeAliases" to navigation.routeAliases,
                     "routeArgs" to navigation.routeArgs,
                     "response" to navigation.response,
                     "args" to navigation.args.map { field(it, "$key.navigation.args.${it.name}") },

@@ -202,4 +202,12 @@ class CatalogYamlWriterTest {
         assertTrue("  Shell:\n    spec: gg.roll.viewmodel.IShellViewModel\n    hosted: true\n" in rendered, rendered)
         assertFalse("hosted" in yaml, yaml)
     }
+
+    @Test
+    fun `route aliases follow the route`() {
+        val aliased = home.copy(navigation = home.navigation!!.copy(route = "/", routeAliases = listOf("/activity", "/requests")))
+        val rendered = CatalogYamlWriter.render(Catalog(listOf(aliased), emptyList(), emptyList()))
+        assertTrue("      route: \"/\"\n      route_aliases: [\"/activity\", \"/requests\"]\n      route_args: []\n" in rendered, rendered)
+        assertFalse("route_aliases" in yaml, yaml)
+    }
 }

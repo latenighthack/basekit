@@ -11,12 +11,23 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import com.latenighthack.deltalist.Delta
 import com.latenighthack.deltalist.Change
+import com.latenighthack.deltalist.Section
+import com.latenighthack.deltalist.SectionedChange
+import com.latenighthack.deltalist.SectionedDelta
+import com.latenighthack.deltalist.SectionedDeltaList
+import kotlinx.coroutines.flow.flowOf
 
 @kotlin.js.JsExport
 @kotlin.js.JsName("BrowserProbeMessage")
 class ProbeMessage(val text: String)
 
 enum class ProbeFailure { NONE, RETRY }
+
+/** An enum section header. */
+enum class ProbeShelf { TOP, BOTTOM }
+
+/** Marker element for a sectioned list with two row types. */
+interface BindingProbeRow
 
 /** Compiled on every target and consumed directly by the native and TS acceptance fixtures. */
 @ViewModelSpec
@@ -31,6 +42,14 @@ interface BindingProbeViewModel : ViewModel<BindingProbeViewModel.State> {
     @ViewModelIdentity val identity: String
     @ChildViewModel val child: BindingChildViewModel
     @ViewModelList(BindingChildViewModel::class) val rows: Flow<Delta<BindingChildViewModel>>
+
+    /** A sealed section header: an object case and a case that carries a value. */
+    sealed interface Section {
+        data object Pinned : Section
+        data class Group(val name: String) : Section
+    }
+    @ViewModelList(BindingChildViewModel::class) val sections: SectionedDeltaList<Section, BindingChildViewModel>
+    @ViewModelList(BindingChildViewModel::class, BindingNoteViewModel::class) val shelves: Flow<SectionedDelta<ProbeShelf, BindingProbeRow>>
     suspend fun waitUntilCancelled()
     suspend fun setNote(value: String?)
     suspend fun setMessage(value: ProbeMessage)
@@ -42,7 +61,18 @@ interface BindingProbeViewModel : ViewModel<BindingProbeViewModel.State> {
 }
 
 @ViewModelSpec
-interface BindingChildViewModel : ViewModel<BindingChildViewModel.State> {
+interface BindingNoteViewModel : ViewModel<BindingNoteViewModel.State>, BindingProbeRow {
+    data class State(val text: String)
+    suspend fun dismiss()
+}
+
+class RealBindingNoteViewModel(text: String) : BindingNoteViewModel,
+    StatefulViewModel<BindingNoteViewModel.State>(BindingNoteViewModel.State(text)) {
+    override suspend fun dismiss() {}
+}
+
+@ViewModelSpec
+interface BindingChildViewModel : ViewModel<BindingChildViewModel.State>, BindingProbeRow {
     data class State(val title: String)
     @ViewModelIdentity val identity: String
     suspend fun select()
@@ -78,6 +108,24 @@ class RealBindingProbeViewModel : BindingProbeViewModel,
         activeRowCollectors++
         try { emitAll(mutableRows) } finally { activeRowCollectors-- }
     }
+    override val sections: SectionedDeltaList<BindingProbeViewModel.Section, BindingChildViewModel> = flowOf(
+        SectionedDelta(
+            listOf(
+                Section(BindingProbeViewModel.Section.Pinned, listOf(RealBindingChildViewModel("pinned"))),
+                Section(BindingProbeViewModel.Section.Group("more"), listOf(RealBindingChildViewModel("more"))),
+            ),
+            SectionedChange.Reload,
+        ),
+    )
+    override val shelves: Flow<SectionedDelta<ProbeShelf, BindingProbeRow>> = flowOf(
+        SectionedDelta(
+            listOf(
+                Section(ProbeShelf.TOP, listOf<BindingProbeRow>(RealBindingChildViewModel("top"), RealBindingNoteViewModel("note"))),
+                Section(ProbeShelf.BOTTOM, emptyList()),
+            ),
+            SectionedChange.Reload,
+        ),
+    )
     override suspend fun setNote(value: String?) = update { copy(note = value) }
     override suspend fun setMessage(value: ProbeMessage) = update { copy(message = value, optionalMessage = value) }
     override suspend fun setFailure(value: ProbeFailure) = update { copy(failure = value) }

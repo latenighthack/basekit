@@ -28,9 +28,14 @@ public annotation class Destination(val webPath: String = "", val navName: Strin
 @Target(AnnotationTarget.CLASS)
 public annotation class HostedComponent(val navName: String = "")
 
-/** Declares the deep-link path template for a destination's `Args` type, e.g. `/detail/{id}`. */
+/**
+ * Declares the deep-link path template for a destination's `Args` type, e.g. `/detail/{id}`.
+ *
+ * @param aliases other paths that open the same destination, such as an old URL kept working. Each
+ *   must capture the same `{params}` as [path].
+ */
 @Target(AnnotationTarget.CLASS)
-public annotation class Route(val path: String = "")
+public annotation class Route(val path: String = "", val aliases: Array<String> = [])
 
 /** Marks an `Args` property as a route (path) parameter bound from the matched URL. */
 @Target(AnnotationTarget.PROPERTY)

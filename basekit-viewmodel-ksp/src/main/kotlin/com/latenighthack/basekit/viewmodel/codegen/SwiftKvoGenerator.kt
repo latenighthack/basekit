@@ -9,7 +9,8 @@ import com.google.devtools.ksp.processing.Dependencies
  * current by collecting the ViewModel's `state` sequence (SKIE bridges Kotlin `Flow` to Swift
  * `AsyncSequence`). Suspend actions become `async throws` methods; each `@ViewModelList` gets a
  * `bind{ListProp}(_:)` that drives a deltalist collection-view data source, vending `Kvo{ChildVm}`
- * wrappers to the cell/item provider.
+ * wrappers to the cell/item provider. A sectioned list's binder (UIKit only) also hands the header
+ * provider typed headers (see [appleSectionedListBinder]).
  *
  * This is the imperative binding for every Apple platform, not just iOS: `@objc dynamic` properties
  * are what both UIKit KVO and AppKit's Cocoa Bindings consume. One universal file is emitted per
@@ -79,11 +80,15 @@ class SwiftKvoGenerator(
                 """.trimMargin()
             }
 
-            val listBinders = vm.lists.joinToString("\n\n") { list -> appleListBinder(list) }
-            val listElements = vm.lists.map { appleListElementDeclaration(vm, it, AppleWrapperStyle.KVO) }
+            val flatLists = vm.lists.filterNot { it.sectioned }
+            val listBinders = (flatLists.map { appleListBinder(it) } + vm.lists.filter { it.sectioned }.map { appleSectionedListBinder(vm, it) })
                 .filter { it.isNotEmpty() }
                 .joinToString("\n\n")
-            val listDescriptors = vm.lists.joinToString("\n\n") {
+            val listElements = (vm.lists.map { appleListElementDeclaration(vm, it, AppleWrapperStyle.KVO) } +
+                vm.lists.map { appleSectionHeaderDeclaration(vm, it) })
+                .filter { it.isNotEmpty() }
+                .joinToString("\n\n")
+            val listDescriptors = flatLists.joinToString("\n\n") {
                 appleListDescriptorProperty(vm, it, AppleWrapperStyle.KVO)
             }
 
@@ -154,6 +159,10 @@ class SwiftKvoGenerator(
                 if (actionMethods.isNotEmpty()) {
                     appendLine()
                     appendLine(actionMethods)
+                }
+                swiftActionIds(vm).takeIf { it.isNotEmpty() }?.let {
+                    appendLine()
+                    appendLine(it)
                 }
                 if (mutatorMethods.isNotEmpty()) {
                     appendLine()

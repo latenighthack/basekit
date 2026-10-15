@@ -6,7 +6,9 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.latenighthack.deltalist.Change
 import com.latenighthack.deltalist.Delta
+import com.latenighthack.deltalist.SectionedDeltaList
 import com.latenighthack.deltalist.SoftValue
+import com.latenighthack.deltalist.android.compose.collectAsSectionedDeltaState
 import com.latenighthack.deltalist.android.compose.rememberItem
 import kotlinx.coroutines.flow.Flow
 import java.lang.ref.ReferenceQueue
@@ -40,6 +42,48 @@ public fun <T : Any> DeltaRows(
                     // Reconnect even when a replacement child has the same logical key.
                     val acquired = delta.items.rememberItem(index, identity(item.value))
                     row(acquired)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The sectioned peer of [DeltaRows]: one [header] row per section, followed by its rows, in the
+ * order the Kotlin list emits them. Section keys follow sections through moves; a row's key is its
+ * section's key plus the same identity [DeltaRows] uses. Unloaded rows show [placeholder] and request
+ * their page.
+ */
+@Composable
+public fun <H, T : Any> DeltaSections(
+    source: SectionedDeltaList<H, T>,
+    identity: (T) -> Any,
+    header: @Composable (H) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: @Composable (Int) -> Unit = {},
+    row: @Composable (T) -> Unit,
+) {
+    val keys = remember { RowKeys() }
+    val state = source.collectAsSectionedDeltaState()
+    LazyColumn(modifier) {
+        for (section in state.sections) {
+            item(key = section.key) { header(section.header) }
+            val items = section.items
+            items(section.size, key = { index ->
+                when (val item = items.softGet(index)) {
+                    is SoftValue.Present -> "${section.key}|" + keys.key(identity(item.value))
+                    is SoftValue.NotLoaded, null -> section.itemKey(index)
+                }
+            }) { index ->
+                when (val item = items.softGet(index)) {
+                    is SoftValue.NotLoaded -> {
+                        LaunchedEffect(items, index) { item.request() }
+                        placeholder(index)
+                    }
+                    null -> Unit
+                    is SoftValue.Present -> key(ReferenceIdentity(items), ReferenceIdentity(item.value)) {
+                        row(items.rememberItem(index, identity(item.value)))
+                    }
                 }
             }
         }

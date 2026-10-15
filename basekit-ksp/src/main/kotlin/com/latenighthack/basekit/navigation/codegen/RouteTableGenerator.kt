@@ -5,8 +5,8 @@ import com.google.devtools.ksp.processing.Dependencies
 
 /**
  * Emits `GeneratedRoutes.register(table)`, which registers one deep-link route per `@Route`
- * destination into a [com.latenighthack.basekit.navigation.RouteTable]. Path parameters annotated
- * `@RouteArg` are bound from the matched URL (String-valued in this slice).
+ * destination, plus one per `@Route` alias, into a [com.latenighthack.basekit.navigation.RouteTable].
+ * Path parameters annotated `@RouteArg` are bound from the matched URL (String-valued in this slice).
  */
 class RouteTableGenerator(
     private val codeGenerator: CodeGenerator,
@@ -25,18 +25,20 @@ class RouteTableGenerator(
             appendLine("public object GeneratedRoutes {")
             appendLine("    public fun register(table: RouteTable) {")
             for (destination in routed) {
-                val path = destination.routePath!!
                 val argsType = destination.argsQualifiedName!!
-                if (destination.routeArgs.isEmpty()) {
-                    appendLine("        table.register(\"$path\") { _ -> $argsType() }")
-                } else {
-                    appendLine("        table.register(\"$path\") { params ->")
-                    appendLine("            $argsType().apply {")
-                    for (arg in destination.routeArgs) {
-                        appendLine("                $arg = params.getValue(\"$arg\")")
+                // Each alias registers the same factory as the destination's own path.
+                for (path in listOf(destination.routePath!!) + destination.routeAliases) {
+                    if (destination.routeArgs.isEmpty()) {
+                        appendLine("        table.register(\"$path\") { _ -> $argsType() }")
+                    } else {
+                        appendLine("        table.register(\"$path\") { params ->")
+                        appendLine("            $argsType().apply {")
+                        for (arg in destination.routeArgs) {
+                            appendLine("                $arg = params.getValue(\"$arg\")")
+                        }
+                        appendLine("            }")
+                        appendLine("        }")
                     }
-                    appendLine("            }")
-                    appendLine("        }")
                 }
             }
             appendLine("    }")

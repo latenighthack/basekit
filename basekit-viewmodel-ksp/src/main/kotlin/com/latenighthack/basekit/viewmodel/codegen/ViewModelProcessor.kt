@@ -22,6 +22,11 @@ internal const val CHILD_VIEWMODEL_ANNOTATION = "com.latenighthack.basekit.viewm
 internal const val CODEGEN_IGNORE_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.CodegenIgnore"
 private const val VIEWMODEL_INJECT_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelInject"
 internal const val IDENTITY_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelIdentity"
+internal const val FLOW = "kotlinx.coroutines.flow.Flow"
+internal const val DELTA = "com.latenighthack.deltalist.Delta"
+internal const val DELTA_LIST = "com.latenighthack.deltalist.DeltaList"
+internal const val SECTIONED_DELTA = "com.latenighthack.deltalist.SectionedDelta"
+internal const val SECTIONED_DELTA_LIST = "com.latenighthack.deltalist.SectionedDeltaList"
 internal const val OBJC_NAME_ANNOTATION = "kotlin.native.ObjCName"
 internal const val REACT_ADAPTER_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ReactBindingAdapter"
 internal const val VIEWMODEL_INTERFACE = "com.latenighthack.basekit.viewmodel.ViewModel"
@@ -67,6 +72,8 @@ class ViewModelProcessor(
     // Every public @ViewModelInject implementation as a factory of its @Assisted parameters, emitted as
     // GeneratedViewModelFactories on the metadata pass for an app component to extend.
     private val factoryInfos = mutableListOf<ViewModelFactoryInfo>()
+    // `BasekitRoute` case names of every @Destination, to know whether the route switch needs `default`.
+    private val destinationCaseNames = mutableSetOf<String>()
     private val factorySourceFiles = mutableListOf<KSFile>()
     private var navigationPackage: String? = null
 
@@ -89,6 +96,11 @@ class ViewModelProcessor(
         }
 
         if (navigationPackage == null) navigationPackage = resolveNavigationPackage(resolver)
+        resolver.getSymbolsWithAnnotation(DESTINATION_ANNOTATION).filterIsInstance<KSClassDeclaration>().forEach { destination ->
+            val navName = destination.stringArgument(DESTINATION_ANNOTATION, "navName")?.takeIf { it.isNotEmpty() }
+                ?: destination.simpleName.asString().toDestinationNavName()
+            destinationCaseNames += navName.toUpperCamelCase().replaceFirstChar { it.lowercase() }
+        }
         for (impl in resolver.getSymbolsWithAnnotation(VIEWMODEL_INJECT_ANNOTATION).filterIsInstance<KSClassDeclaration>().filterNot { it.hasAnnotation(CODEGEN_IGNORE_ANNOTATION) }) {
             buildFactoryInfo(impl)?.let { info ->
                 factoryInfos.add(info)
@@ -151,7 +163,38 @@ class ViewModelProcessor(
         val navName = spec.stringArgument(DESTINATION_ANNOTATION, "navName")?.takeIf { it.isNotEmpty() }
             ?: spec.simpleName.asString().toDestinationNavName()
         val name = navName.toUpperCamelCase().replaceFirstChar { it.lowercase() } + "Factory"
-        return ViewModelFactoryInfo(name, implQn, parameterTypes)
+        return ViewModelFactoryInfo(name, implQn, parameterTypes, factoryRoute(spec, navName, parameterTypes))
+    }
+
+    /**
+     * How a navigation entry supplies [spec]'s factory: its args, its Apple navigator and its responder.
+     * Null when [spec] is not a `@Destination`, or when a parameter is none of those.
+     */
+    private fun factoryRoute(spec: KSClassDeclaration, navName: String, parameterTypes: List<String>): FactoryRoute? {
+        if (!spec.hasAnnotation(DESTINATION_ANNOTATION)) return null
+        val superTypes = spec.getAllSuperTypes().toList()
+        fun argument(fqn: String, index: Int) = superTypes.firstOrNull { it.declaration.qualifiedName?.asString() == fqn }
+            ?.arguments?.getOrNull(index)?.type?.resolve()?.declaration as? KSClassDeclaration
+        val responding = superTypes.any { it.declaration.qualifiedName?.asString() == RESPONDING_DESTINATION }
+        val args = (argument(RESPONDING_DESTINATION, 0) ?: argument(NAVIGATION_DESTINATION, 0))?.qualifiedName?.asString()
+        val parameters = parameterTypes.map { type ->
+            val simple = type.substringBefore('<').substringAfterLast('.')
+            when {
+                type == args -> RouteParameter.ARGS
+                type.startsWith(NAVIGATION_RESPONDER) -> RouteParameter.RESPONDER
+                simple.endsWith("Navigator") || simple == "CloseNavigationTarget" -> RouteParameter.NAVIGATOR
+                else -> return null
+            }
+        }
+        val cap = navName.toUpperCamelCase()
+        return FactoryRoute(
+            caseName = cap.replaceFirstChar { it.lowercase() },
+            specSimpleName = spec.simpleName.asString(),
+            navigatorType = "Apple${cap}Navigator",
+            hasArgs = args != null,
+            responding = responding,
+            parameters = parameters,
+        )
     }
 
     /**
@@ -228,6 +271,13 @@ class ViewModelProcessor(
                     }
                     SwiftKvoGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
                     SwiftUIObservableGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
+                    // A factory taking a navigator means the graph has edges, so the navigation processor
+                    // generated BasekitRoute and the Apple navigators this file refers to.
+                    val routes = uniqueFactories(warn = false).mapNotNull { factory -> factory.route?.let { factory to it } }
+                    if (routes.any { (_, route) -> RouteParameter.NAVIGATOR in route.parameters }) {
+                        val factoryDependencies = Dependencies(aggregating = true, *(sourceFiles + factorySourceFiles).toTypedArray())
+                        DestinationModelGenerator(codeGenerator, factoryDependencies, swiftFrameworkImports).generate(routes, destinationCaseNames)
+                    }
                 } catch (error: IllegalArgumentException) { logger.error(error.message.orEmpty()) }
                   catch (error: IllegalStateException) { logger.error(error.message.orEmpty()) }
             }
@@ -248,17 +298,23 @@ class ViewModelProcessor(
         }
     }
 
-    private fun generateFactories() {
-        if (factoryInfos.isEmpty()) return
+    /** One factory per name, in name order; the first implementation by qualified name wins. */
+    private fun uniqueFactories(warn: Boolean): List<ViewModelFactoryInfo> {
         val sorted = factoryInfos.sortedWith(compareBy({ it.name }, { it.implQualifiedName }))
         val factories = sorted.distinctBy { it.name }
-        (sorted - factories.toSet()).forEach { duplicate ->
+        if (warn) (sorted - factories.toSet()).forEach { duplicate ->
             val kept = factories.first { it.name == duplicate.name }.implQualifiedName
             logger.warn(
                 "GeneratedViewModelFactories: ${duplicate.implQualifiedName} and $kept both derive " +
                     "${duplicate.name}; only $kept has a factory",
             )
         }
+        return factories
+    }
+
+    private fun generateFactories() {
+        if (factoryInfos.isEmpty()) return
+        val factories = uniqueFactories(warn = true)
         val packageName = commonPackage(factories.map { it.implQualifiedName.substringBeforeLast('.', "") })
         val dependencies = Dependencies(aggregating = true, *factorySourceFiles.toTypedArray())
         ViewModelFactoriesGenerator(codeGenerator, dependencies).generate(factories, packageName)
@@ -272,6 +328,9 @@ class ViewModelProcessor(
         const val NAVIGATION_PACKAGE_OPTION = "Basekit_NavigationPackage"
         val ERROR_TYPE = Regex("<ERROR TYPE: ([A-Za-z0-9_.]+)>")
         const val DESTINATION_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.Destination"
+        const val NAVIGATION_DESTINATION = "com.latenighthack.basekit.navigation.NavigationDestination"
+        const val RESPONDING_DESTINATION = "com.latenighthack.basekit.navigation.RespondingDestination"
+        const val NAVIGATION_RESPONDER = "com.latenighthack.basekit.navigation.NavigationResponder"
 
         // Every Apple target routes to the one Swift branch. Keeping this coarse is deliberate: the
         // generated Swift already discriminates UIKit vs AppKit with `#if canImport(...)`, and the

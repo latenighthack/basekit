@@ -232,10 +232,26 @@ BasekitNavigationStackHost(router: router, rootEntry: root) { entry, namespace i
 }
 ```
 
-The app supplies an exhaustive `@ViewBuilder` switch over `BasekitRoute`. Construct each Kotlin
-ViewModel with the entry's `ownerID` and generated scoped navigator, for example
-`AppleHomeNavigator(ownerId: entry.ownerID, host: router)`. A responding route also carries the
-`NavigationResponder` to inject into its ViewModel.
+The app supplies an exhaustive `@ViewBuilder` switch over `BasekitRoute`. With
+`GeneratedViewModelFactories`, `basekitViewModel(for: entry, host: router, factories: factories)` builds
+the destination's `Observable{Spec}`, returned as a `BasekitDestinationModel` case. It builds the
+navigator under `entry.ownerID` (the owner `close` is matched by) and passes a responding route's
+responder, throwing `.missingResponder` when the entry has none and `.noFactory` for a destination
+without a factory. It is pure: the host keeps the view, the presentation and the model's lifetime.
+`BasekitModelView(model) { model in Screen(model: model) }` owns a model like `@StateObject` and
+observes it while shown. Without factories, construct each ViewModel with the entry's `ownerID` and
+its generated navigator, e.g. `AppleHomeNavigator(ownerId: entry.ownerID, host: router)`;
+`AppleCloseNavigator` closes for any destination that only closes.
+
+`BasekitNavigationRouter(parent:)` creates a router for content `parent` presents, such as a modal
+with its own stack and sheets: closing its root closes the owner's entry in `parent`, resolving its
+responder as a swipe-dismiss there does. It is opt-in per presentation. `onCloseRoot` and the other
+router callbacks are `@MainActor`.
+
+Generated wrappers expose `ActionIds` (`ObservableSidebarViewModel.ActionIds.onAccountTapped ==
+"sidebar.onAccountTapped"`), the same strings as Compose's `SidebarViewModelBinding.ActionIds` and
+React's `SidebarViewModelActionIds`. Hosts apply them to their own controls (`accessibilityIdentifier`,
+`Modifier.testTag`, `data-testid`); nothing applies them automatically.
 
 `BasekitNavigationStackHost` is the SwiftUI renderer. On iOS,
 `BasekitNavigationControllerHost` owns a `UINavigationController` and its factory can return either a
@@ -294,12 +310,12 @@ the convention plugins under [`basekit-gradle-plugin/`](basekit-gradle-plugin/sr
 | Annotation | Slice | On | Purpose |
 |---|---|---|---|
 | `@Destination(webPath, navName)` | navigation | interface | Marks a navigable destination; `navName` disambiguates colliding names |
-| `@Route(path)` | navigation | `Args` class | Deep-link template, e.g. `/detail/{id}` |
+| `@Route(path, aliases)` | navigation | `Args` class | Deep-link template, e.g. `/detail/{id}`; `aliases` are other paths with the same params |
 | `@RouteArg` | navigation | `Args` property | Binds a path param from the URL (must be `String`) |
 | `@NavigateTo(target)` | navigation | function | Declares a navigation edge from this action to `target` |
 | `@RedirectsTo(targets)` | navigation | interface | Destinations this `@Destination` may replace itself with, without a user action; each joins its navigator with source `<SCREEN>_REDIRECT` |
 | `@ViewModelSpec(webPath)` | viewmodel | interface | Marks a ViewModel; drives the platform binding codegen |
-| `@ViewModelList(possibleTypes)` | viewmodel | property | A `Flow<Delta<ChildVm>>`; `possibleTypes` is the exact, non-overlapping closed child set used for list-specific Apple enums and React `kind` handles |
+| `@ViewModelList(possibleTypes)` | viewmodel | property | A `Flow<Delta<ChildVm>>`, or a `SectionedDeltaList<Header, ChildVm>` with an enum or sealed header; `possibleTypes` is the exact, non-overlapping closed child set used for list-specific Apple enums and React `kind` handles |
 | `@ChildViewModel` | viewmodel | property | A stable, non-null, read-only nested child ViewModel |
 | `@ViewModelInject` | viewmodel | class | Wires a concrete impl into the generated kotlin-inject module, and adds its factory (`homeFactory: (HomeNavigator) -> HomeViewModel`) to the generated `GeneratedViewModelFactories` interface |
 | `@ViewModelModule` | viewmodel | interface | App-supplied kotlin-inject providers the component includes |
@@ -539,8 +555,8 @@ Ready content reads `binding.state`, awaits its typed methods, or launches them 
 type and an optional placeholder. Collection follows the started lifecycle; the DeltaList adapter
 owns row acquisition/release. Existing generated Activities remain the View/RecyclerView integration.
 
-`@ViewModelList` is flat. Use heterogeneous heading/row children for ordinary groups; sticky sections
-need a custom adapter over DeltaList's sectioned API. `@ChildViewModel` is stable and non-null; use a
+A sectioned `@ViewModelList` binds through UIKit, Compose and React with typed headers; see
+[delta lists](docs/guides/delta-lists.md#binding-sections-through-basekit). `@ChildViewModel` is stable and non-null; use a
 destination or a zero/one list for switching children. No extra collection semantics are invented
 in the platform bindings.
 

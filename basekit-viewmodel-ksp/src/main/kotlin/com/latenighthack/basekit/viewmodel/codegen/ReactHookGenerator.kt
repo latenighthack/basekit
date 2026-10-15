@@ -20,12 +20,16 @@ class ReactHookGenerator(
             val hookName = "use${vm.simpleName}"
 
             val listHooks = vm.lists.joinToString("\n") { list ->
-                "    val ${list.propertyName}Value = useMappedDeltaList(viewModel.${list.propertyName.kotlinRef()}, ::${reactListFactoryName(vm, list)})"
+                if (list.sectioned) {
+                    "    val ${list.propertyName}Value = useMappedSectionedDeltaList(viewModel.${list.propertyName.kotlinRef()}, ::${reactHeaderFactoryName(vm, list)}, ::${reactListFactoryName(vm, list)})"
+                } else {
+                    "    val ${list.propertyName}Value = useMappedDeltaList(viewModel.${list.propertyName.kotlinRef()}, ::${reactListFactoryName(vm, list)})"
+                }
             }
 
-            val listFactories = vm.lists.joinToString("\n\n") { list ->
-                reactListElementFactory(vm, list)
-            }
+            val listFactories = vm.lists.flatMap { list ->
+                listOf(reactListElementFactory(vm, list), reactHeaderFactory(vm, list))
+            }.filter { it.isNotEmpty() }.joinToString("\n\n")
 
             val stateAssigns = vm.stateProperties.joinToString("\n") {
                 "    result.${it.name.kotlinRef()} = ${reactToJs(it.type, "state.${it.name.kotlinRef()}", it.reactAdapter)}"
@@ -51,6 +55,7 @@ class ReactHookGenerator(
                 writeln("import com.latenighthack.basekit.viewmodel.bindFlow")
                 writeln("import com.latenighthack.basekit.viewmodel.ReactActionScope")
                 writeln("import com.latenighthack.deltalist.react.useMappedDeltaList")
+                if (vm.lists.any { it.sectioned }) writeln("import com.latenighthack.deltalist.react.useMappedSectionedDeltaList")
                 writeln("import kotlinx.coroutines.CoroutineScope")
                 writeln("import kotlinx.coroutines.SupervisorJob")
                 writeln("import kotlinx.coroutines.launch")

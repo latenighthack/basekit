@@ -58,6 +58,13 @@ internal class ReactTypesGenerator(private val generator: CodeGenerator, private
             appendLine("  map<R>(render: (item: T, index: number) => R): R[];")
             appendLine("  visibleRange(start: number, endInclusive: number): void;")
             appendLine("}")
+            appendLine("/** One section of a SectionedViewModelList: a typed header and its delegated rows. */")
+            appendLine("export interface ViewModelSection<H, T> { readonly key: string; readonly header: H; readonly items: ViewModelList<T>; }")
+            appendLine("/** Sectioned list in Kotlin's order. `sections` is replaced and `revision` incremented on every change. */")
+            appendLine("export interface SectionedViewModelList<H, T> {")
+            appendLine("  readonly sections: readonly ViewModelSection<H, T>[]; readonly revision: number;")
+            appendLine("  visibleRange(fromSection: number, fromItem: number, toSection: number, toItem: number): void;")
+            appendLine("}")
             for (vm in models) {
                 appendLine("export type ${vm.simpleName}Ref = Omit<Runtime.${vm.simpleName}ReactRef, 'use'>;")
                 appendLine("export interface ${vm.simpleName}Binding {")
@@ -65,20 +72,36 @@ internal class ReactTypesGenerator(private val generator: CodeGenerator, private
                 vm.actions.forEach { appendLine("  ${it.name}(): Promise<void>;") }
                 vm.mutators.forEach { appendLine("  ${it.name}(${it.paramName}: ${reactType(it.type, it.reactAdapter)}): Promise<void>;") }
                 vm.children.forEach { appendLine("  readonly ${it.propertyName}: ${it.typeSimpleName}Binding;") }
-                vm.lists.forEach { appendLine("  readonly ${it.propertyName}: ViewModelList<${vm.simpleName}${it.propertyName.toUpperCamelCase()}Element>;") }
+                vm.lists.forEach {
+                    val element = "${vm.simpleName}${it.propertyName.toUpperCamelCase()}Element"
+                    if (it.sectioned) appendLine("  readonly ${it.propertyName}: SectionedViewModelList<${reactHeaderTypeName(vm, it)}, $element>;")
+                    else appendLine("  readonly ${it.propertyName}: ViewModelList<$element>;")
+                }
                 appendLine("}")
                 for (list in vm.lists) {
+                    if (list.sectioned) appendLine(reactHeaderType(vm, list))
                     appendLine("export type ${vm.simpleName}${list.propertyName.toUpperCamelCase()}Element =")
                     appendLine(list.possibleTypes.joinToString(" |\n") {
                         "  { readonly kind: '${it.simpleName.toListCaseName()}'; readonly key: string | number; use(): ${it.simpleName}Binding }"
                     } + ";")
                 }
                 appendLine("export declare function use${vm.simpleName}(viewModel: ${vm.simpleName}Ref): ${vm.simpleName}Binding;")
+                val identified = vm.actionIdentifierMembers()
+                if (identified.isNotEmpty()) {
+                    appendLine("/** Stable identifiers for ${vm.simpleName}'s actions and mutations, the same on every platform (for `data-testid`). */")
+                    appendLine("export declare const ${vm.simpleName}ActionIds: { " + identified.joinToString(" ") { "readonly ${it}: '${actionIdentifier(vm, it)}';" } + " };")
+                }
             }
         }
         generator.createNewFile(dependencies, "", "basekit-react", "d.ts").use { it.write(types.encodeToByteArray()) }
         generator.createNewFile(dependencies, "", "basekit-react", "js").use { out ->
-            models.forEach { out.writeln("export function use${it.simpleName}(viewModel) { return viewModel.use(); }") }
+            models.forEach { vm ->
+                out.writeln("export function use${vm.simpleName}(viewModel) { return viewModel.use(); }")
+                val identified = vm.actionIdentifierMembers()
+                if (identified.isNotEmpty()) {
+                    out.writeln("export const ${vm.simpleName}ActionIds = Object.freeze({ " + identified.joinToString(", ") { "${it}: '${actionIdentifier(vm, it)}'" } + " });")
+                }
+            }
         }
         generator.createNewFile(dependencies, "", "basekit-react.package", "json").use {
             it.writeln("""{"name":"$runtimeModule-bindings","version":"$packageVersion","type":"module","main":"./basekit-react.js","types":"./basekit-react.d.ts","exports":{".":{"types":"./basekit-react.d.ts","import":"./basekit-react.js"}},"peerDependencies":{"$runtimeModule":"*"}}""")

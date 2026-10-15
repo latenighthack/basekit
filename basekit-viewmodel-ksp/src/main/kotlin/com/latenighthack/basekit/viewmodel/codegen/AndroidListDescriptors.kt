@@ -66,10 +66,10 @@ private fun androidPolymorphicBinder(list: VmList): String {
 
 /** Runtime imports the generated activity needs for its list binders. */
 internal fun androidListImports(vm: VmInfo): List<String> = buildList {
-    if (vm.lists.any { it.possibleTypes.size == 1 }) {
+    if (vm.lists.any { !it.sectioned && it.possibleTypes.size == 1 }) {
         add("com.latenighthack.basekit.viewmodel.bindViewModels")
     }
-    if (vm.lists.any { it.possibleTypes.size > 1 }) {
+    if (vm.lists.any { !it.sectioned && it.possibleTypes.size > 1 }) {
         add("com.latenighthack.basekit.viewmodel.bindViewModelRows")
     }
 }

@@ -45,6 +45,23 @@ fun KSClassDeclaration.jsExportName(): String {
     return if (parent == null) own else "${parent.jsExportName()}.$own"
 }
 
+/**
+ * The `ActionIds` enum a Swift wrapper declares: one constant per action and mutation, holding its
+ * [actionIdentifier]. Empty when [vm] has neither.
+ */
+fun swiftActionIds(vm: VmInfo): String {
+    val members = vm.actionIdentifierMembers()
+    if (members.isEmpty()) return ""
+    val constants = members.joinToString("\n") { "        public static let ${it.swiftSourceRef()} = \"${actionIdentifier(vm, it)}\"" }
+    return """
+    |    /// Stable identifiers for this view model's actions and mutations, the same on every platform.
+    |    /// Apply one to the control that triggers it with `accessibilityIdentifier(_:)`.
+    |    public enum ActionIds {
+    |$constants
+    |    }
+    """.trimMargin()
+}
+
 /** Splits an identifier into its words, e.g. "onOpenDetail" -> [on, Open, Detail]. */
 fun String.camelWords(): List<String> =
     split(Regex("(?<!(^|[A-Z]))(?=[A-Z])|(?<!^)(?=[A-Z][a-z])"))
@@ -258,3 +275,17 @@ private fun VmStateProperty.swiftBindingTypeInput(): VmType =
 fun VmStateProperty.swiftBindingType(): SwiftType = swiftType(swiftBindingTypeInput())
 
 fun VmStateProperty.swiftObservableBindingType(): SwiftType = swiftObservableType(swiftBindingTypeInput())
+
+/**
+ * The identifier for an action or mutation, the same on every platform: the spec's name in lower
+ * camel case without a leading `I` or trailing `ViewModel`/`Screen`/`Destination`/`Route`, then the
+ * member (`SidebarViewModel.onAccountTapped` -> `sidebar.onAccountTapped`). Hosts apply it to the
+ * control that triggers the member (`accessibilityIdentifier`, `Modifier.testTag`, `data-testid`).
+ */
+fun actionIdentifier(vm: VmInfo, member: String): String {
+    val spec = vm.simpleName.toDestinationNavName().toUpperCamelCase().replaceFirstChar { it.lowercase() }
+    return "$spec.$member"
+}
+
+/** Every action and mutation name of [vm], in declaration order. */
+fun VmInfo.actionIdentifierMembers(): List<String> = actions.map { it.name } + mutators.map { it.name }

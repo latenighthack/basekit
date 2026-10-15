@@ -397,8 +397,20 @@ Use typed grouping values, such as `ItemDay`, not formatted heading strings.
 
 ### Binding sections through Basekit
 
-Generated `@ViewModelList` bindings are flat. Flatten headings/items into a closed
-polymorphic list for ordinary grouping:
+A `SectionedDeltaList<Header, Row>` (or `Flow<SectionedDelta<Header, Row>>`) property
+annotated `@ViewModelList(rows...)` gets a sectioned binding. The header must be an
+enum or a sealed type; each platform sees it typed and spelled as in Kotlin, so the
+host maps it to copy. Rows bind to their declared types as in a flat list:
+
+| Platform | Binding |
+| --- | --- |
+| UIKit | `kvoModel.bindItems(collectionView, cellProvider:, headerProvider:)` over deltalist's `SectionedDeltaCollectionDataSource`, with `Kvo{Row}` wrappers (or the list's element enum) and a generated header enum (`case Personal`, `case Custom(…)`) |
+| Compose | `binding.Items(header = { … }, row = { … })` over `DeltaSections`; the header slot takes the Kotlin header type |
+| React | `SectionedViewModelList<Header, Element>`: `sections` of `{ key, header, items }` with `revision` and `visibleRange(fromSection, fromItem, toSection, toItem)`; headers are a string union (enum) or a `kind`-tagged union (sealed) |
+
+Section keys follow sections through moves; a row's key is its section's key plus the
+flat row identity. SwiftUI has no sectioned view; the Android RecyclerView helpers stay
+flat. Where neither fits, flatten headings/items into a closed polymorphic list:
 
 ```kotlin
 val rows: Flow<Delta<ItemListChild>> = sections.flatten(

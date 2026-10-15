@@ -98,7 +98,12 @@ class SpecGenerator(
         imports += Symbols.NAVIGATOR_ARGS
         navigation.route?.let {
             imports += Symbols.ROUTE
-            appendLine("@Route(${kotlinString(it)})")
+            val aliases = navigation.routeAliases
+            if (aliases.isEmpty()) {
+                appendLine("@Route(${kotlinString(it)})")
+            } else {
+                appendLine("@Route(${kotlinString(it)}, aliases = [${aliases.joinToString(", ") { alias -> kotlinString(alias) }}])")
+            }
         }
         navigation.routeArgs.filter { arg -> navigation.args.none { it.name == arg } }.forEach {
             throw CatalogException("route_args: \"$it\" is not one of the args")
@@ -152,7 +157,15 @@ class SpecGenerator(
             }
             ListKind.SECTIONED -> {
                 imports += Symbols.SECTIONED_DELTA_LIST
-                "val ${identifier(list.name)}: SectionedDeltaList<${vm.specName}.${headerName(list)}, $element>"
+                val property = "val ${identifier(list.name)}: SectionedDeltaList<${vm.specName}.${headerName(list)}, $element>"
+                // Declared rows let basekit bind each row to its exact type, as in a flat list.
+                val rows = list.rows.ifEmpty { listOf(list.element).filter { analysis.isComponent(it) } }
+                if (rows.isEmpty()) {
+                    property
+                } else {
+                    imports += Symbols.VIEWMODEL_LIST
+                    "@ViewModelList(${rows.joinToString(", ") { "${specReference(it, imports)}::class" }})\n$property"
+                }
             }
         }
     }

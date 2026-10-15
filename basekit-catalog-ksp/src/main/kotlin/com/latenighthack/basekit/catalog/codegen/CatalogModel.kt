@@ -38,6 +38,8 @@ data class CatalogNavigation(
     val route: String?,
     val routeArgs: List<String>,
     val response: String?,
+    /** `@Route(aliases)`: other paths that open the screen. */
+    val routeAliases: List<String> = emptyList(),
 )
 
 /** A zero-argument operation, and the screens its `@NavigateTo` annotations open. */

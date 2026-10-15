@@ -97,7 +97,9 @@ class SwiftUIObservableGenerator(
                 """.trimMargin()
             }.joinToString("\n\n")
 
-            val listObservers = vm.lists.joinToString("\n\n") { list ->
+            // Sectioned lists bind through UIKit only (the Kvo wrapper); SwiftUI has no sectioned view.
+            val flatLists = vm.lists.filterNot { it.sectioned }
+            val listObservers = flatLists.joinToString("\n\n") { list ->
                 val cap = list.propertyName.toUpperCamelCase()
                 """
                 |    /// Collects `${list.propertyName}` into a SwiftUI `DeltaList`. Drive with
@@ -109,10 +111,10 @@ class SwiftUIObservableGenerator(
                 |    }
                 """.trimMargin()
             }
-            val listElements = vm.lists.map { appleListElementDeclaration(vm, it, AppleWrapperStyle.OBSERVABLE) }
+            val listElements = flatLists.map { appleListElementDeclaration(vm, it, AppleWrapperStyle.OBSERVABLE) }
                 .filter { it.isNotEmpty() }
                 .joinToString("\n\n")
-            val listDescriptors = vm.lists.joinToString("\n\n") {
+            val listDescriptors = flatLists.joinToString("\n\n") {
                 appleListDescriptorProperty(vm, it, AppleWrapperStyle.OBSERVABLE)
             }
 
@@ -133,7 +135,7 @@ class SwiftUIObservableGenerator(
                     appendLine()
                 }
                 appendLine("@MainActor")
-                appendLine("public final class $className: ObservableObject {")
+                appendLine("public final class $className: ObservableObject, BasekitObservableViewModel {")
                 appendLine()
                 appendLine("    private let viewModel: ${vm.simpleName}")
                 vm.identitySwiftName?.let { identity ->
@@ -176,6 +178,10 @@ class SwiftUIObservableGenerator(
                 if (actionMethods.isNotEmpty()) {
                     appendLine()
                     appendLine(actionMethods)
+                }
+                swiftActionIds(vm).takeIf { it.isNotEmpty() }?.let {
+                    appendLine()
+                    appendLine(it)
                 }
                 if (mutatorMethods.isNotEmpty()) {
                     appendLine()

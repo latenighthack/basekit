@@ -207,6 +207,7 @@ class CatalogExtractor(
             args = destination.argsQualifiedName?.let(::argsFields).orEmpty(),
             route = destination.routePath,
             routeArgs = destination.routeArgs,
+            routeAliases = destination.routeAliases,
             response = destination.responseQualifiedName?.let { typeName(TypeRef(it, false, emptyList())) },
         )
         val spec = specs[destination.qualifiedName]
@@ -288,8 +289,8 @@ class CatalogExtractor(
                 annotated[name]?.let { list ->
                     return@mapNotNull CatalogList(
                         name = name,
-                        kind = CatalogListKind.FLAT,
-                        sections = emptyList(),
+                        kind = if (list.sectioned) CatalogListKind.SECTIONED else CatalogListKind.FLAT,
+                        sections = list.header?.cases?.map { it.name }.orEmpty(),
                         element = elementName(list.elementQualifiedName, list.elementSimpleName),
                         rows = list.possibleTypes.map { nameOf(it.qualifiedName, it.simpleName) },
                     )

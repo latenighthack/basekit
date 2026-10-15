@@ -6,6 +6,30 @@ All notable changes to basekit are documented here. The format follows
 
 ## Next
 
+- Sectioned lists bind on every platform. `@ViewModelList(rows...)` accepts a
+  `SectionedDeltaList<Header, Row>` or `Flow<SectionedDelta<Header, Row>>` whose header is an enum or a
+  sealed type. UIKit gets `bind<List>(_:cellProvider:headerProvider:)` on the Kvo wrapper over
+  `SectionedDeltaCollectionDataSource`, with typed rows and a header enum spelled as in Kotlin;
+  Compose gets a header slot over the new `DeltaSections`; React gets `SectionedViewModelList` with
+  string-union (enum) or `kind`-union (sealed) headers. SwiftUI and the RecyclerView helpers stay flat.
+  The catalog code generator declares a sectioned list's rows with `@ViewModelList`.
+- Requires deltalist 0.4.0.
+- Apple navigation: `AppleCloseNavigator(ownerId:host:)` is generated beside the other Apple
+  navigators; `onCloseRoot` and `BasekitNavigationControllerHost`'s animator and interaction providers
+  are `@MainActor`; `BasekitNavigationRouter(parent:)` forwards closing its root to the router that
+  presented it.
+- `basekitViewModel(for:host:factories:)` builds a destination's `Observable{Spec}` from a navigation
+  entry as a `BasekitDestinationModel`, with the navigator under `entry.ownerID`. It throws
+  `BasekitDestinationModelError.missingResponder` or `.noFactory` instead of returning nothing.
+- `BasekitModelView` owns a generated SwiftUI view model and observes it while shown; Observable
+  wrappers conform to `BasekitObservableViewModel`.
+- Generated bindings expose `ActionIds`, one identifier per action and mutation
+  (`sidebar.onAccountTapped`), identical in Swift, Compose and React.
+- Added `@Route(aliases = [...])` and catalog `route_aliases` for a screen with more than one URL.
+  `GeneratedRoutes` registers each alias with the destination's args factory; an alias must capture
+  the same `{params}` as the path. The catalog tools read and write `route_aliases` (they warned it
+  was unknown), the code generator emits the annotation argument, and the graph page lists aliases
+  in the screen details.
 - Added `@HostedComponent` (catalog: `hosted: true`) for a component every screen hosts without
   listing it, such as app chrome around every screen. The app creates one instance. The `@NavigateTo`
   edges of the component and everything it embeds get the component's own `<Name>Navigator`,

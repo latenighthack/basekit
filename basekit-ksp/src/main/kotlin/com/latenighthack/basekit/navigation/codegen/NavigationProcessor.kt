@@ -65,6 +65,8 @@ data class DestinationInfo(
     val routeArgs: List<String>,
     val edges: List<NavEdge>,
     val hosted: Boolean = false,
+    /** `@Route(aliases)`: other paths that open the destination, with the same params as [routePath]. */
+    val routeAliases: List<String> = emptyList(),
 )
 
 /**

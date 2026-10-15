@@ -11,6 +11,8 @@ data class ViewModelFactoryInfo(
     val name: String,
     val implQualifiedName: String,
     val parameterTypes: List<String>,
+    /** Set when the spec is a `@Destination` whose factory a navigation entry can supply. */
+    val route: FactoryRoute? = null,
 )
 
 /**

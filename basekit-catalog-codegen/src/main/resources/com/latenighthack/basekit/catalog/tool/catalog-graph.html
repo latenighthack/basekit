@@ -908,6 +908,8 @@ details.type > div { border-left: 2px solid var(--border); padding: 2px 0 2px 10
       parts.push(section("Navigation", el("div", {},
         el("div", { class: "kv" },
           el("span", {}, "Route"), navigation.route ? el("code", {}, navigation.route) : el("span", { class: "muted" }, "not deep-linkable"),
+          navigation.routeAliases.length ? el("span", {}, "Route aliases") : null,
+          navigation.routeAliases.length ? el("code", {}, navigation.routeAliases.join(", ")) : null,
           el("span", {}, "Route args"), navigation.routeArgs.length ? el("code", {}, navigation.routeArgs.join(", ")) : el("span", { class: "muted" }, "none"),
           el("span", {}, "Response"), navigation.response ? typeView(navigation.response) : el("span", { class: "muted" }, "none"),
           navigation.redirectsTo.length ? el("span", {}, "Redirects to") : null,

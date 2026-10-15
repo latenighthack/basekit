@@ -27,7 +27,7 @@ object CatalogReader {
 
     private val ROOT_KEYS = setOf("schema", "screens", "components", "types")
     private val VM_KEYS = setOf("spec", "navigation", "hosted", "redirects_to", "identity", "state", "actions", "mutations", "lists", "children")
-    private val NAVIGATION_KEYS = setOf("args", "route", "route_args", "response")
+    private val NAVIGATION_KEYS = setOf("args", "route", "route_aliases", "route_args", "response")
     private val ACTION_KEYS = setOf("navigates_to")
     private val MUTATION_KEYS = setOf("param", "binds", "navigates_to")
     private val LIST_KEYS = setOf("kind", "sections", "element", "rows")
@@ -73,11 +73,23 @@ object CatalogReader {
             val navigation = if (screen) {
                 val nav = body["navigation"] as? Map<*, *> ?: throw CatalogException("$path.navigation: required for a screen")
                 known(nav, NAVIGATION_KEYS, "$path.navigation")
+                val route = nav["route"] as? String
+                val aliases = strings(nav["route_aliases"], "$path.navigation.route_aliases")
+                if (aliases.isNotEmpty() && route == null) {
+                    throw CatalogException("$path.navigation.route_aliases: needs a route")
+                }
+                // basekit registers an alias with the route's args factory, which binds every route arg.
+                aliases.filter { route != null && routeParams(it) != routeParams(route) }.forEach {
+                    throw CatalogException(
+                        "$path.navigation.route_aliases: \"$it\" must capture the same parameters as \"$route\"",
+                    )
+                }
                 Navigation(
                     args = fields(nav["args"], "$path.navigation.args"),
-                    route = nav["route"] as? String,
+                    route = route,
                     routeArgs = strings(nav["route_args"], "$path.navigation.route_args"),
                     response = nav["response"] as? String,
+                    routeAliases = aliases,
                 )
             } else {
                 if (body.containsKey("navigation")) throw CatalogException("$path.navigation: only screens navigate")
@@ -121,6 +133,9 @@ object CatalogReader {
                 hosted = hosted,
             )
         }
+
+        private fun routeParams(template: String): Set<String> =
+            Regex("""\{([^/}]+)}""").findAll(template).map { it.groupValues[1] }.toSet()
 
         private fun type(name: String, body: Map<*, *>, path: String): CatalogTypeDef = known(body, TYPE_KEYS, path).let { CatalogTypeDef(
             name = name,
