@@ -155,8 +155,37 @@ class SwiftWrapperGeneratorTest {
         assertContains(kvo, "dataSource.bind(to: viewModel.rows)")
         // No flat ViewModelListBinding for a sectioned list, and no SwiftUI binding at all.
         assertFalse("ViewModelListBinding" in kvo)
+    }
+
+    @Test
+    fun observable_sectioned_binder_hands_cells_observed_observable_rows() {
+        val out = RecordingCodeGenerator()
         SwiftUIObservableGenerator(out, Dependencies(false)).generate(listOf(vm("HostViewModel", lists = listOf(sectioned(sealedHeader, row("TextRowViewModel"), row("ImageRowViewModel"))))))
-        assertFalse("rows" in out.text("ObservableHostViewModel.swift"))
+        val observable = out.text("ObservableHostViewModel.swift")
+        assertContains(observable, "public enum ObservableHostViewModelRowsElement {\n    case textRow(ObservableTextRowViewModel)")
+        assertContains(observable, "public enum ObservableHostViewModelRowsHeader: Hashable {\n    case Personal\n    case Custom(HostViewModelSectionCustom)\n}")
+        assertContains(observable, "if let typed = raw as? TextRowViewModel { return .textRow(ObservableTextRowViewModel(typed)) }")
+        assertContains(observable, "#if canImport(UIKit) && !os(watchOS)\nimport UIKit\n#endif")
+        assertContains(observable, "cellProvider: @escaping (UICollectionView, IndexPath, ObservableHostViewModelRowsElement) -> UICollectionViewCell,")
+        assertContains(observable, "headerProvider: ((UICollectionView, IndexPath, ObservableHostViewModelRowsHeader) -> UICollectionReusableView)? = nil")
+        assertContains(observable, "-> SectionedDeltaCollectionDataSource<AnyObject, RowMarker> {")
+        assertContains(observable, "cell.basekitObserve { await row.observeForDeltaList() }")
+        assertContains(observable, "dataSource.bind(to: viewModel.rows)")
+        assertFalse("@nonobjc" in observable)
+        // Sectioned lists have no SwiftUI binding.
+        assertFalse("ViewModelListBinding" in observable)
+    }
+
+    @Test
+    fun observable_flat_binder_observes_each_row_for_its_cell() {
+        val out = RecordingCodeGenerator()
+        val list = VmList("rows", "RowViewModel", "sample.RowViewModel", null, null, listOf(row("RowViewModel", "rowId")))
+        SwiftUIObservableGenerator(out, Dependencies(false)).generate(listOf(vm("HostViewModel", lists = listOf(list))))
+        val observable = out.text("ObservableHostViewModel.swift")
+        assertContains(observable, "public func bindRows(\n        _ collectionView: UICollectionView,\n        cellProvider: @escaping (UICollectionView, IndexPath, ObservableRowViewModel) -> UICollectionViewCell\n    ) -> DeltaCollectionDataSource<RowViewModel> {")
+        assertContains(observable, "let row = binding.makeElement(for: raw)")
+        assertContains(observable, "cell.basekitObserve { await binding.observe(row) }")
+        assertContains(observable, "binding.bind(to: dataSource)")
     }
 
     @Test
@@ -206,17 +235,43 @@ class SwiftWrapperGeneratorTest {
     }
 
     @Test
-    fun destination_models_use_the_entry_owner_and_report_missing_responders() {
+    fun destination_models_use_the_entry_owner_and_stop_on_missing_responders() {
         val out = RecordingCodeGenerator()
         val agent = ViewModelFactoryInfo("agentFactory", "sample.AgentViewModelImpl", listOf("sample.AgentViewModel.Args", "sample.nav.AgentNavigator"),
             FactoryRoute("agent", "AgentViewModel", "AppleAgentNavigator", hasArgs = true, responding = false, listOf(RouteParameter.ARGS, RouteParameter.NAVIGATOR)))
         val confirm = ViewModelFactoryInfo("confirmFactory", "sample.ConfirmViewModelImpl", listOf("sample.nav.CloseNavigationTarget", "com.latenighthack.basekit.navigation.NavigationResponder<kotlin.Boolean>"),
             FactoryRoute("confirm", "ConfirmViewModel", "AppleConfirmNavigator", hasArgs = false, responding = true, listOf(RouteParameter.NAVIGATOR, RouteParameter.RESPONDER)))
-        DestinationModelGenerator(out, Dependencies(false), emptyList()).generate(listOf(agent to agent.route!!, confirm to confirm.route!!), setOf("agent", "confirm", "toast"))
+        DestinationModelGenerator(out, Dependencies(false), emptyList()).generate(listOf(agent to agent.route!!, confirm to confirm.route!!))
         val swift = out.text("BasekitDestinationModels.swift")
+        assertContains(swift, ") -> BasekitDestinationModel {\n    switch entry.route {")
         assertContains(swift, "case .agent(let args, _):\n        return .agent(ObservableAgentViewModel(factories.agentFactory(args, AppleAgentNavigator(ownerId: entry.ownerID, host: host))))")
-        assertContains(swift, "case .confirm(_, let responder):\n        guard let responder else { throw .missingResponder(destination: \"confirm\") }")
-        // `toast` has no factory, so the switch needs a default that reports it.
-        assertContains(swift, "default:\n        throw .noFactory(")
+        assertContains(swift, "case .confirm(_, let responder):\n        guard let responder else {\n            preconditionFailure(\"basekitViewModel: the confirm entry has no responder.")
+        // Every destination has a factory (the processor fails the build otherwise): nothing throws.
+        assertFalse("throw" in swift)
+        assertFalse("default:" in swift)
+        assertFalse("BasekitDestinationModelError" in swift)
+        // The view builds the model once per identity and observes it while shown.
+        assertContains(swift, "public struct BasekitDestinationView<Content: View>: View {\n    @StateObject private var holder: BasekitDestinationModelHolder")
+        assertContains(swift, "_holder = StateObject(wrappedValue: BasekitDestinationModelHolder(basekitViewModel(for: entry, host: host, factories: factories)))")
+        assertContains(swift, "content(holder.model).task { await holder.model.model.observe() }")
+    }
+
+    @Test
+    fun destinations_without_a_usable_factory_are_build_errors() {
+        val agent = ViewModelFactoryInfo("agentFactory", "sample.AgentViewModelImpl", listOf("sample.nav.AgentNavigator"),
+            FactoryRoute("agent", "AgentViewModel", "AppleAgentNavigator", hasArgs = false, responding = false, listOf(RouteParameter.NAVIGATOR)))
+        val odd = ViewModelFactoryInfo("oddFactory", "sample.OddViewModelImpl", listOf("kotlin.String"))
+        val errors = missingDestinationFactories(
+            listOf(
+                DestinationSite("agent", "sample.AgentViewModel", "/src/Agent.kt:4"),
+                DestinationSite("toast", "sample.ToastViewModel", "/src/Toast.kt:12"),
+                DestinationSite("odd", "sample.OddViewModel", null),
+            ),
+            listOf(agent, odd),
+        )
+        assertEquals(2, errors.size)
+        assertContains(errors[0], "Destination sample.OddViewModel: its implementation sample.OddViewModelImpl takes an @Assisted parameter")
+        assertContains(errors[0], "(kotlin.String)")
+        assertContains(errors[1], "Destination sample.ToastViewModel (declared at /src/Toast.kt:12) has no public @ViewModelInject implementation")
     }
 }

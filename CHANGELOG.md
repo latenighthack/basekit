@@ -6,6 +6,8 @@ All notable changes to basekit are documented here. The format follows
 
 ## Next
 
+- Navigation args on JVM, Apple and JS: a nullable argument set to `null` reads back `null` instead of
+  crashing, and reading an argument that was never set fails naming it.
 - Sectioned lists bind on every platform. `@ViewModelList(rows...)` accepts a
   `SectionedDeltaList<Header, Row>` or `Flow<SectionedDelta<Header, Row>>` whose header is an enum or a
   sealed type. UIKit gets `bind<List>(_:cellProvider:headerProvider:)` on the Kvo wrapper over
@@ -13,14 +15,33 @@ All notable changes to basekit are documented here. The format follows
   Compose gets a header slot over the new `DeltaSections`; React gets `SectionedViewModelList` with
   string-union (enum) or `kind`-union (sealed) headers. SwiftUI and the RecyclerView helpers stay flat.
   The catalog code generator declares a sectioned list's rows with `@ViewModelList`.
-- Requires deltalist 0.4.0.
+- Requires deltalist 0.4.2.
+- Compose `DeltaRows` and `DeltaSections` never read a lazily mapped row (`lazyMap`, `lazyMapItems`)
+  to compute its key: those rows are keyed by position IDs that follow inserts, removes and moves
+  (`SectionedStableIds`) and are regenerated on a reload. Lists that hold their rows keep identity or
+  object keys. A row renders the cached row from deltalist's `rememberItem`, keeps its `remember`
+  state while that object stays the same, and resets it when an `Update` rebuilds the row. Before, every key read built
+  a new row, so rows without `@ViewModelIdentity` lost their state on every change.
 - Apple navigation: `AppleCloseNavigator(ownerId:host:)` is generated beside the other Apple
   navigators; `onCloseRoot` and `BasekitNavigationControllerHost`'s animator and interaction providers
   are `@MainActor`; `BasekitNavigationRouter(parent:)` forwards closing its root to the router that
   presented it.
 - `basekitViewModel(for:host:factories:)` builds a destination's `Observable{Spec}` from a navigation
-  entry as a `BasekitDestinationModel`, with the navigator under `entry.ownerID`. It throws
-  `BasekitDestinationModelError.missingResponder` or `.noFactory` instead of returning nothing.
+  entry as a `BasekitDestinationModel`, with the navigator under `entry.ownerID`. It does not throw:
+  a destination without a `@ViewModelInject` implementation (or whose implementation takes an
+  `@Assisted` parameter an entry cannot supply) fails the build, naming the destination and where it
+  is declared, and an entry built by hand for a responding destination without a responder stops at
+  a `preconditionFailure`. `BasekitDestinationModelError` is removed.
+- `BasekitDestinationView(for:host:factories:content:)` builds a destination's model once per view
+  identity, observes it while shown, and hands it to `content`. It makes no presentation decisions.
+- `BasekitNavigationRouter.open` (and `open(args:)`, `open(match:)`) gives a responding destination
+  opened without a responder, as from a deep link, a responder that discards its result; the
+  destination responds and closes as when a navigator opens it.
+- `Observable{Vm}` gets the UIKit list binders `Kvo{Vm}` has: `bind<List>(_:cellProvider:)` over
+  `DeltaCollectionDataSource` for flat lists and `bind<List>(_:cellProvider:headerProvider:)` over
+  `SectionedDeltaCollectionDataSource` for sectioned ones, with `Observable{Row}` rows, element enums
+  and header enums prefixed `Observable`. Each row is observed while its cell shows it
+  (`UICollectionViewCell.basekitObserve`), so a SwiftUI row in a `UIHostingConfiguration` redraws.
 - `BasekitModelView` owns a generated SwiftUI view model and observes it while shown; Observable
   wrappers conform to `BasekitObservableViewModel`.
 - Generated bindings expose `ActionIds`, one identifier per action and mutation

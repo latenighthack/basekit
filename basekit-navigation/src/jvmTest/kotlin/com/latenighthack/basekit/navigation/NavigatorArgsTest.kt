@@ -2,6 +2,7 @@ package com.latenighthack.basekit.navigation
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 /**
  * Exercises the JVM in-memory [NavigatorArgs] actual (the same delegate shape used on iOS/JS). The
@@ -25,6 +26,22 @@ class NavigatorArgsTest {
         assertEquals("42", args.id)
         assertEquals(7, args.count)
         assertEquals(true, args.enabled)
+    }
+
+    private class OptionalArgs : NavigatorArgs() {
+        var context: String? by storedProperty()
+    }
+
+    @Test
+    fun a_nullable_argument_set_to_null_reads_back_null() {
+        val args = OptionalArgs().apply { context = null }
+        assertEquals(null, args.context)
+    }
+
+    @Test
+    fun an_argument_never_set_fails_with_its_name() {
+        val failure = assertFailsWith<IllegalStateException> { OptionalArgs().context }
+        assertEquals("Navigation argument context was never set", failure.message)
     }
 
     @Test

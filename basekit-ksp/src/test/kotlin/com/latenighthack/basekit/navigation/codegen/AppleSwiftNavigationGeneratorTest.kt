@@ -73,6 +73,37 @@ class AppleSwiftNavigationGeneratorTest {
         assertContains(source, "self = .contactsOnSearchChangedToRoom")
     }
 
+    @Test
+    fun opensADeepLinkedRespondingDestinationWithADiscardingResponder() {
+        val output = RecordingSwiftCodeGenerator()
+        val destinations = listOf(
+            destination(
+                simpleName = "HomeViewModel",
+                qualifiedName = "sample.HomeViewModel",
+                navName = "home",
+                edges = listOf(NavEdge("home", "onSetUp", "sample.SetupViewModel")),
+            ),
+            destination("SetupViewModel", "sample.SetupViewModel", "setup").copy(
+                argsQualifiedName = "sample.SetupViewModel.Args",
+                argsSwiftName = "SetupViewModelArgs",
+                responseQualifiedName = "sample.SetupResult",
+                responseSwiftName = "SetupResult",
+            ),
+        )
+
+        AppleSwiftNavigationGenerator(output, Dependencies(false), listOf("SampleKit"))
+            .generate(destinations)
+
+        val source = output.source()
+        assertContains(source, "private final class BasekitDiscardingResponder: NSObject, NavigationResponder")
+        assertContains(source, "case .setup(_, _, .none): return true")
+        assertContains(source, "let responder: NavigationResponder? = Self.lacksResponder(route) ? BasekitDiscardingResponder() : nil")
+        // Both the edge-less deep link and the presented route go through the closing proxy.
+        assertContains(source, "path = [.init(id: entryID, route: attach(responder, to: route, entryID: entryID))]")
+        assertContains(source, "receive(ownerID: ownerID, route: route, edge: edge, context: nil, responder: responder)")
+        assertContains(source, "let routed = attach(responder, to: route, entryID: entryID)")
+    }
+
     private fun destination(
         simpleName: String,
         qualifiedName: String,

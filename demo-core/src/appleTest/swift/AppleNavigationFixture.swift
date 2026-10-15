@@ -129,20 +129,24 @@ private struct FixtureDestination: View {
     let factories: GeneratedViewModelFactories
 
     var body: some View {
-        switch try? basekitViewModel(for: entry, host: router, factories: factories) {
-        case .home(let model):
-            BasekitModelView(model) { home in
+        BasekitDestinationView(for: entry, host: router, factories: factories) { model in
+            switch model {
+            case .home(let home):
                 Text("Home").accessibilityIdentifier(ObservableHomeViewModel.ActionIds.onRefresh)
                     .onTapGesture { Task { try? await home.onRefresh() } }
+            case .detail(let detail):
+                Text(String(describing: detail))
+            case .picker:
+                Text("Picker")
             }
-        case .detail(let model):
-            Text(String(describing: model))
-        case .none:
-            Text("No view model")
-        case .picker(let model):
-            BasekitModelView(model) { _ in Text("Picker") }
         }
     }
+}
+
+@available(iOS 18.0, macOS 15.0, *)
+@MainActor
+private func fixtureModel(router: BasekitNavigationRouter, entry: BasekitNavigationEntry, factories: GeneratedViewModelFactories) -> any BasekitObservableViewModel {
+    basekitViewModel(for: entry, host: router, factories: factories).model
 }
 
 @available(iOS 18.0, macOS 15.0, *)
@@ -179,5 +183,35 @@ private func fixtureSectionedBinding(_ model: KvoBindingProbeViewModel, collecti
         case .Group(let group): _ = group.name; return UICollectionReusableView()
         }
     })
+}
+
+@available(iOS 18.0, *)
+@MainActor
+private func fixtureObservableBinding(_ model: ObservableBindingProbeViewModel, collectionView: UICollectionView) -> [AnyObject] {
+    let shelves = model.bindShelves(collectionView, cellProvider: { _, _, row in
+        switch row {
+        case .bindingChild(let child): _ = child.title
+        case .bindingNote(let note): _ = note.text
+        }
+        return UICollectionViewCell()
+    }, headerProvider: { _, _, header in
+        switch header {
+        case .TOP, .BOTTOM: return UICollectionReusableView()
+        }
+    })
+    let sections = model.bindSections(collectionView, cellProvider: { _, _, child in
+        let _: ObservableBindingChildViewModel = child
+        return UICollectionViewCell()
+    }, headerProvider: { _, _, header in
+        switch header {
+        case ObservableBindingProbeViewModelSectionsHeader.Pinned: return UICollectionReusableView()
+        case .Group(let group): _ = group.name; return UICollectionReusableView()
+        }
+    })
+    let rows = model.bindRows(collectionView) { _, _, child in
+        _ = child.title
+        return UICollectionViewCell()
+    }
+    return [shelves, sections, rows]
 }
 #endif

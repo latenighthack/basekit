@@ -77,6 +77,12 @@ kotlin {
     }
 }
 
+// `-Pbasekit.demo.orphanDestination` adds a @Destination with no @ViewModelInject implementation, which
+// scripts/verify-binding-diagnostics.py expects the viewmodel processor to reject.
+if (providers.gradleProperty("basekit.demo.orphanDestination").isPresent) {
+    kotlin.sourceSets.named("commonMain") { kotlin.srcDir("src/orphanDestination/kotlin") }
+}
+
 composeCompiler {
     targetKotlinPlatforms.set(setOf(org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType.androidJvm))
 }

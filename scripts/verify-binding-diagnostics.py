@@ -64,3 +64,11 @@ interface ParentActions { suspend fun refresh() }
     assert 'override suspend fun `refresh`' in generated
     assert 'override suspend fun `save$draft`' in generated
     assert 'override suspend fun `ignoredAction`' not in generated
+
+# A destination without a @ViewModelInject implementation fails the build, naming it and its declaration.
+result = subprocess.run([str(root / 'gradlew'), ':demo-core:kspCommonMainKotlinMetadata', '-Pbasekit.demo.orphanDestination',
+                         '--console=plain'], cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+expected = 'Destination com.latenighthack.basekit.demo.OrphanViewModel (declared at '
+if result.returncode == 0 or expected not in result.stdout or 'OrphanViewModel.kt:' not in result.stdout:
+    raise SystemExit(result.stdout)
+print('KSP rejected a destination without a @ViewModelInject implementation.')

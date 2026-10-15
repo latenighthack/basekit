@@ -7,6 +7,7 @@ import com.google.devtools.ksp.processing.Dependencies
 import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
+import com.google.devtools.ksp.symbol.FileLocation
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSClassifierReference
@@ -72,8 +73,8 @@ class ViewModelProcessor(
     // Every public @ViewModelInject implementation as a factory of its @Assisted parameters, emitted as
     // GeneratedViewModelFactories on the metadata pass for an app component to extend.
     private val factoryInfos = mutableListOf<ViewModelFactoryInfo>()
-    // `BasekitRoute` case names of every @Destination, to know whether the route switch needs `default`.
-    private val destinationCaseNames = mutableSetOf<String>()
+    // Every @Destination by qualified name: each needs a factory once the graph uses generated factories.
+    private val destinationSites = mutableMapOf<String, DestinationSite>()
     private val factorySourceFiles = mutableListOf<KSFile>()
     private var navigationPackage: String? = null
 
@@ -99,7 +100,9 @@ class ViewModelProcessor(
         resolver.getSymbolsWithAnnotation(DESTINATION_ANNOTATION).filterIsInstance<KSClassDeclaration>().forEach { destination ->
             val navName = destination.stringArgument(DESTINATION_ANNOTATION, "navName")?.takeIf { it.isNotEmpty() }
                 ?: destination.simpleName.asString().toDestinationNavName()
-            destinationCaseNames += navName.toUpperCamelCase().replaceFirstChar { it.lowercase() }
+            val qualifiedName = destination.qualifiedName?.asString() ?: return@forEach
+            val location = (destination.location as? FileLocation)?.let { "${it.filePath}:${it.lineNumber}" }
+            destinationSites[qualifiedName] = DestinationSite(navName.toUpperCamelCase().replaceFirstChar { it.lowercase() }, qualifiedName, location)
         }
         for (impl in resolver.getSymbolsWithAnnotation(VIEWMODEL_INJECT_ANNOTATION).filterIsInstance<KSClassDeclaration>().filterNot { it.hasAnnotation(CODEGEN_IGNORE_ANNOTATION) }) {
             buildFactoryInfo(impl)?.let { info ->
@@ -251,6 +254,7 @@ class ViewModelProcessor(
                 val dependencies = Dependencies(aggregating = true, *injectSourceFiles.toTypedArray())
                 ViewModelModuleGenerator(codeGenerator, dependencies).generate(injectInfos, injectPackage)
             }
+            reportMissingDestinationFactories()
             generateFactories()
             return
         }
@@ -274,9 +278,9 @@ class ViewModelProcessor(
                     // A factory taking a navigator means the graph has edges, so the navigation processor
                     // generated BasekitRoute and the Apple navigators this file refers to.
                     val routes = uniqueFactories(warn = false).mapNotNull { factory -> factory.route?.let { factory to it } }
-                    if (routes.any { (_, route) -> RouteParameter.NAVIGATOR in route.parameters }) {
+                    if (routes.any { (_, route) -> RouteParameter.NAVIGATOR in route.parameters } && !reportMissingDestinationFactories()) {
                         val factoryDependencies = Dependencies(aggregating = true, *(sourceFiles + factorySourceFiles).toTypedArray())
-                        DestinationModelGenerator(codeGenerator, factoryDependencies, swiftFrameworkImports).generate(routes, destinationCaseNames)
+                        DestinationModelGenerator(codeGenerator, factoryDependencies, swiftFrameworkImports).generate(routes)
                     }
                 } catch (error: IllegalArgumentException) { logger.error(error.message.orEmpty()) }
                   catch (error: IllegalStateException) { logger.error(error.message.orEmpty()) }
@@ -310,6 +314,19 @@ class ViewModelProcessor(
             )
         }
         return factories
+    }
+
+    /**
+     * Once a factory takes a navigator (the graph uses generated destination models), every destination
+     * needs a factory a navigation entry can supply. Reports a build error naming each one that has none,
+     * on the metadata pass (before any target compiles) and the Apple pass; returns whether any did.
+     */
+    private fun reportMissingDestinationFactories(): Boolean {
+        val factories = uniqueFactories(warn = false)
+        if (factories.none { factory -> factory.route?.parameters?.contains(RouteParameter.NAVIGATOR) == true }) return false
+        val errors = missingDestinationFactories(destinationSites.values, factories)
+        errors.forEach { logger.error(it) }
+        return errors.isNotEmpty()
     }
 
     private fun generateFactories() {
