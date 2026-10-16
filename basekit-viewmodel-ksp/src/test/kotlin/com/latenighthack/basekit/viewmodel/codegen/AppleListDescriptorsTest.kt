@@ -56,6 +56,21 @@ class AppleListDescriptorsTest {
     }
 
     @Test
+    fun rows_are_keyed_by_the_stream_not_by_a_wrapper() {
+        // deltalist keys rows by the stream's stable ids. A wrapper is rebuilt on every
+        // classification, so neither its address nor a value read from it can key a row.
+        val homogeneous = polymorphicList.copy(
+            possibleTypes = listOf(VmListElementType("RowViewModel", "sample.RowViewModel", false)),
+        )
+        for (list in listOf(polymorphicList, homogeneous)) {
+            val source = appleListElementDeclaration(viewModel, list, AppleWrapperStyle.OBSERVABLE) +
+                appleListDescriptorProperty(viewModel, list, AppleWrapperStyle.OBSERVABLE)
+            assertEquals(false, "identity" in source)
+            assertEquals(false, "ObjectIdentifier" in source)
+        }
+    }
+
+    @Test
     fun legacy_binders_do_not_reference_a_wrapper_for_a_marker_interface() {
         assertEquals("", appleListBinder(polymorphicList))
         assertEquals("", appleListBinder(polymorphicList.copy(

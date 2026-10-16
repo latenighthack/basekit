@@ -19,16 +19,12 @@ internal fun appleListElementDeclaration(vm: VmInfo, list: VmList, style: AppleW
     val cases = list.possibleTypes.joinToString("\n") { type ->
         "    case ${type.simpleName.toListCaseName()}(${style.prefix}${type.simpleName})"
     }
-    val identities = list.possibleTypes.joinToString("\n") { type ->
-        val caseName = type.simpleName.toListCaseName()
-        val identity = if (type.identityProperty != null) "AnyHashable(\"${type.qualifiedName}:\" + model.basekitIdentity)" else if (type.hasId) "AnyHashable(model.id)" else "AnyHashable(ObjectIdentifier(model))"
-        "        case .$caseName(let model): return $identity"
-    }
     val observation = if (style == AppleWrapperStyle.OBSERVABLE) {
         val branches = list.possibleTypes.joinToString("\n") { type ->
             "        case .${type.simpleName.toListCaseName()}(let model): await model.observe()"
         }
         """
+        |
         |
         |    @MainActor fileprivate func observeForDeltaList() async {
         |        switch self {
@@ -42,13 +38,7 @@ internal fun appleListElementDeclaration(vm: VmInfo, list: VmList, style: AppleW
     return """
     |/// Exact generated element set for `${vm.simpleName}.${list.propertyName}`.
     |public enum $enumName {
-    |$cases
-    |
-    |    @MainActor fileprivate var deltaListIdentity: AnyHashable {
-    |        switch self {
-    |$identities
-    |        }
-    |    }$observation
+    |$cases$observation
     |}
     """.trimMargin()
 }
@@ -77,11 +67,6 @@ internal fun appleListDescriptorProperty(vm: VmInfo, list: VmList, style: AppleW
         |            preconditionFailure("${vm.simpleName}.${list.propertyName} emitted undeclared type \(Swift.type(of: raw))")
         """.trimMargin()
     }
-    val identity = if (list.possibleTypes.size == 1) {
-        if (list.possibleTypes.single().identityProperty != null) "AnyHashable(\"${list.possibleTypes.single().qualifiedName}:\" + element.basekitIdentity)" else if (list.possibleTypes.single().hasId) "AnyHashable(element.id)" else "AnyHashable(ObjectIdentifier(element))"
-    } else {
-        "element.deltaListIdentity"
-    }
     val observeArgument = when {
         style != AppleWrapperStyle.OBSERVABLE -> ""
         list.possibleTypes.size == 1 -> ",\n            observe: { element in await element.observe() }"
@@ -91,14 +76,14 @@ internal fun appleListDescriptorProperty(vm: VmInfo, list: VmList, style: AppleW
     return """
     |    /// Direct DeltaList-native binding for `${list.propertyName}`. The binding exposes no
     |    /// downstream transformation operations; list semantics remain in the Kotlin ViewModel.
+    |    /// Rows are keyed by the stream's stable ids, which follow each item through its changes.
     |    @available(iOS 15.0, macOS 12.0, *)
     |    ${isolation}public lazy var ${list.propertyName}: ViewModelListBinding<${list.elementSimpleName}, $outputType> = {
     |        ViewModelListBinding(
     |            source: viewModel.${list.swiftName.swiftSourceRef()},
     |            classify: { raw in
     |$classify
-    |            },
-    |            identity: { element in $identity }$observeArgument
+    |            }$observeArgument
     |        )
     |    }()
     """.trimMargin()

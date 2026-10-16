@@ -453,6 +453,11 @@ Section keys follow sections through moves. Rows are keyed per platform:
   state when that object changes, for example when an `Update` rebuilds it.
 - UIKit: deltalist's data source hands cells the cached rows and keys sections and rows
   with `SectionedStableIds` (`sectionKey(at:)`, `itemKey(at:)`).
+- SwiftUI (`DeltaForEach`, `DeltaListView`, `DeltaLazyListView`): every row is keyed by
+  the stream's stable ID (`DeltaList.stableId(at:)`, the same position IDs over one
+  section), loaded or not. The generated binding has no identity of its own: a wrapper
+  is rebuilt on every classification, so neither its address nor a value read from it
+  can key a row.
 - React: the sectioned hook reads rows through the cache, and a held row follows its key
   to its new position.
 
