@@ -6,6 +6,12 @@ All notable changes to basekit are documented here. The format follows
 
 ## Next
 
+- Apple navigation: `BasekitNavigationControllerHost` shows whatever path the router holds. Before, it
+  only followed changes in the path's length, so a path that replaced its top entry kept showing the
+  old screen. A path that adds one entry pushes it; one that drops entries from the top pops back to
+  the screen that stays; any other change sets the stack in one animated step. Screens that stay keep
+  their controllers instead of being rebuilt, and a change during a transition waits for it, then
+  shows the router's path as it is by then.
 - Navigation args on JVM, Apple and JS: a nullable argument set to `null` reads back `null` instead of
   crashing, and reading an argument that was never set fails naming it.
 - Sectioned lists bind on every platform. `@ViewModelList(rows...)` accepts a
