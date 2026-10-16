@@ -47,13 +47,15 @@ public actual open class NavigatorArgs actual constructor() {
     }
 
     protected inner class SerializableBundledProperty<T> : StoredProperty<T> {
+        // A nullable argument may hold null, so whether it was set is the key's presence, not its value.
         @Suppress("UNCHECKED_CAST", "DEPRECATION")
-        override fun getValue(thisRef: Any?, property: KProperty<*>): T =
-            internalBundle.getSerializable(property.name) as T
+        override fun getValue(thisRef: Any?, property: KProperty<*>): T {
+            check(internalBundle.containsKey(property.name)) { "Navigation argument ${property.name} was never set" }
+            return internalBundle.getSerializable(property.name) as T
+        }
 
-        @Suppress("UNCHECKED_CAST")
         override fun setValue(thisRef: Any?, property: KProperty<*>, value: T): Unit =
-            internalBundle.putSerializable(property.name, value as Serializable)
+            internalBundle.putSerializable(property.name, value as Serializable?)
     }
 
     @Suppress("UNCHECKED_CAST")
