@@ -40,6 +40,54 @@ final class NavigationControllerHostTests: XCTestCase {
         XCTAssertEqual(fixture.builtEntryIDs, [fixture.root.id, pushed.id, replacement.id])
     }
 
+    func testAChangeInTheSameTurnAsAPushLeavesOnlyThePathOnTheStack() async throws {
+        let fixture = HostFixture()
+        defer { fixture.close() }
+        try await eventually(fixture) { fixture.hasRootAppeared }
+        let pushed = fixture.entry()
+        let replacement = fixture.entry()
+        fixture.router.reconcilePath([pushed])
+        fixture.router.reconcilePath([replacement])
+
+        try await eventually(fixture) { fixture.isSettled && fixture.shownEntryIDs == [fixture.root.id, replacement.id] }
+        try await Task.sleep(for: .milliseconds(500))
+        XCTAssertEqual(fixture.shownEntryIDs, [fixture.root.id, replacement.id], "Nothing else lands on the stack later")
+        XCTAssertEqual(fixture.navigationController.viewControllers.count, 2)
+    }
+
+    func testAReplaceSoonAfterATransitionThatEndsEarlyLeavesOnlyThePath() async throws {
+        let fixture = HostFixture()
+        defer { fixture.close() }
+        fixture.host.animatorProvider = { _, _, _, _ in EarlyEndingAnimator() }
+        try await eventually(fixture) { fixture.hasRootAppeared }
+        let pushed = fixture.entry()
+        let replacement = fixture.entry()
+        fixture.router.reconcilePath([pushed])
+        try await Task.sleep(for: .milliseconds(150))
+        fixture.router.reconcilePath([replacement])
+
+        try await eventually(fixture) { fixture.isSettled && fixture.shownEntryIDs == [fixture.root.id, replacement.id] }
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertEqual(fixture.shownEntryIDs, [fixture.root.id, replacement.id], "Nothing else lands on the stack later")
+
+        fixture.navigationController.popViewController(animated: true)
+        try await eventually(fixture) { fixture.isSettled && fixture.router.path.isEmpty }
+        XCTAssertEqual(fixture.shownEntryIDs, [fixture.root.id], "Back leaves only the root")
+    }
+
+    func testGoingBackLeavesThePathWithTheScreensThatAreLeft() async throws {
+        let fixture = HostFixture()
+        defer { fixture.close() }
+        try await eventually(fixture) { fixture.hasRootAppeared }
+        let first = fixture.entry()
+        fixture.router.reconcilePath([first])
+        try await eventually(fixture) { fixture.isSettled && fixture.shownEntryIDs == [fixture.root.id, first.id] }
+
+        fixture.navigationController.popViewController(animated: true)
+        try await eventually(fixture) { fixture.isSettled && fixture.router.path.isEmpty }
+        XCTAssertEqual(fixture.shownEntryIDs, [fixture.root.id])
+    }
+
     func testDroppingEntriesFromTheTopPopsBackToTheScreenThatStays() async throws {
         let fixture = HostFixture()
         defer { fixture.close() }
@@ -121,6 +169,33 @@ private final class HostFixture {
 
     func close() {
         window.isHidden = true
+    }
+}
+
+/// A transition that tells UIKit it ended at once and keeps animating the leaving screen for a while,
+/// as a transition that keeps a focused field's keyboard up does.
+@MainActor
+private final class EarlyEndingAnimator: NSObject, UIViewControllerAnimatedTransitioning {
+    func transitionDuration(using transitionContext: UIViewControllerContextTransitioning?) -> TimeInterval { 0.4 }
+
+    func animateTransition(using transitionContext: UIViewControllerContextTransitioning) {
+        let container = transitionContext.containerView
+        let leaving = transitionContext.view(forKey: .from)
+        let leavingController = transitionContext.viewController(forKey: .from)
+        let arriving = transitionContext.view(forKey: .to)
+        if let arriving {
+            container.addSubview(arriving)
+        }
+        transitionContext.completeTransition(true)
+        if let leaving, let arriving {
+            container.insertSubview(leaving, belowSubview: arriving)
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            if leavingController?.navigationController?.topViewController !== leavingController {
+                leaving?.removeFromSuperview()
+            }
+        }
     }
 }
 
