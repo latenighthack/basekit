@@ -236,10 +236,15 @@ The app supplies an exhaustive `@ViewBuilder` switch over `BasekitRoute`. With
 `GeneratedViewModelFactories`, `basekitViewModel(for: entry, host: router, factories: factories)` builds
 the destination's `Observable{Spec}`, returned as a `BasekitDestinationModel` case. It builds the
 navigator under `entry.ownerID` (the owner `close` is matched by) and passes a responding route's
-responder, throwing `.missingResponder` when the entry has none and `.noFactory` for a destination
-without a factory. It is pure: the host keeps the view, the presentation and the model's lifetime.
-`BasekitModelView(model) { model in Screen(model: model) }` owns a model like `@StateObject` and
-observes it while shown. Without factories, construct each ViewModel with the entry's `ownerID` and
+responder. It does not throw: a destination without a `@ViewModelInject` implementation fails the
+build, naming the destination and its declaration, and the router gives every responding entry it
+presents a responder. `router.open` (deep links) gives a responding destination a responder that
+discards its result, since nobody is waiting for it; the destination responds and closes as usual.
+An entry built by hand for a responding destination without a responder stops at a
+`preconditionFailure`. It is pure: the host keeps the view, the presentation and the model's lifetime.
+`BasekitDestinationView(for: entry, host: router, factories: factories) { model in switch model { … } }`
+builds it once per view identity and observes it while shown, deciding nothing about presentation.
+`BasekitModelView(model) { model in Screen(model: model) }` does the same for one concrete model. Without factories, construct each ViewModel with the entry's `ownerID` and
 its generated navigator, e.g. `AppleHomeNavigator(ownerId: entry.ownerID, host: router)`;
 `AppleCloseNavigator` closes for any destination that only closes.
 
@@ -555,7 +560,8 @@ Ready content reads `binding.state`, awaits its typed methods, or launches them 
 type and an optional placeholder. Collection follows the started lifecycle; the DeltaList adapter
 owns row acquisition/release. Existing generated Activities remain the View/RecyclerView integration.
 
-A sectioned `@ViewModelList` binds through UIKit, Compose and React with typed headers; see
+A sectioned `@ViewModelList` binds through UIKit (on `Observable{Vm}` and `Kvo{Vm}`), Compose and React
+with typed headers; see
 [delta lists](docs/guides/delta-lists.md#binding-sections-through-basekit). `@ChildViewModel` is stable and non-null; use a
 destination or a zero/one list for switching children. No extra collection semantics are invented
 in the platform bindings.

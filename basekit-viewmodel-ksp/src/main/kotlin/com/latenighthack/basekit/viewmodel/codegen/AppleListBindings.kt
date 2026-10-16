@@ -102,9 +102,45 @@ internal fun appKitListBinder(list: VmList): String {
     """.trimMargin()
 }
 
+/**
+ * UIKit binder on `Observable{Vm}` for a flat `@ViewModelList`: drives a deltalist
+ * `DeltaCollectionDataSource` through the list's `ViewModelListBinding`, handing the cell provider
+ * `Observable{Row}` rows (or the list's element enum). Each row is observed until its cell shows
+ * another row or is released (see `basekitObserve`), so a row hosted with `@ObservedObject` in a
+ * `UIHostingConfiguration` redraws on state changes.
+ */
+internal fun observableUiKitListBinder(vm: VmInfo, list: VmList): String {
+    val cap = list.propertyName.toUpperCamelCase()
+    val rowType = appleListElementType(vm, list, AppleWrapperStyle.OBSERVABLE)
+    val raw = list.elementSimpleName
+    return """
+    |    #if canImport(UIKit) && !os(watchOS)
+    |    /// Binds `${list.propertyName}` to [collectionView]. Each row the cell provider gets is observed until its
+    |    /// cell shows another row or is released. The collection view holds the returned data source
+    |    /// weakly: keep it.
+    |    @available(iOS 15.0, *)
+    |    @discardableResult
+    |    public func bind$cap(
+    |        _ collectionView: UICollectionView,
+    |        cellProvider: @escaping (UICollectionView, IndexPath, $rowType) -> UICollectionViewCell
+    |    ) -> DeltaCollectionDataSource<$raw> {
+    |        let binding = ${list.propertyName.swiftDeclName()}
+    |        let dataSource = DeltaCollectionDataSource<$raw>(collectionView: collectionView) { cv, indexPath, raw in
+    |            let row = binding.makeElement(for: raw)
+    |            let cell = cellProvider(cv, indexPath, row)
+    |            cell.basekitObserve { await binding.observe(row) }
+    |            return cell
+    |        }
+    |        binding.bind(to: dataSource)
+    |        return dataSource
+    |    }
+    |    #endif
+    """.trimMargin()
+}
+
 /** The generated Swift enum for a sectioned list's headers, e.g. `KvoSidebarViewModelConnectionsHeader`. */
-internal fun appleSectionHeaderType(vm: VmInfo, list: VmList): String =
-    "Kvo${vm.simpleName}${list.propertyName.toUpperCamelCase()}Header"
+internal fun appleSectionHeaderType(vm: VmInfo, list: VmList, style: AppleWrapperStyle = AppleWrapperStyle.KVO): String =
+    "${style.prefix}${vm.simpleName}${list.propertyName.toUpperCamelCase()}Header"
 
 /** An enum case as Swift must spell it: Kotlin spellings are kept, keywords are backticked. */
 private fun swiftCase(name: String): String = name.swiftSourceRef()
@@ -114,14 +150,14 @@ private fun swiftCase(name: String): String = name.swiftSourceRef()
  * Kotlin so hosts can map each to copy. A sealed `object` is a bare case; a sealed class carries its
  * instance.
  */
-internal fun appleSectionHeaderDeclaration(vm: VmInfo, list: VmList): String {
+internal fun appleSectionHeaderDeclaration(vm: VmInfo, list: VmList, style: AppleWrapperStyle = AppleWrapperStyle.KVO): String {
     val header = list.header ?: return ""
     val cases = header.cases.joinToString("\n") { case ->
         if (case.isObject) "    case ${swiftCase(case.name)}" else "    case ${swiftCase(case.name)}(${case.swiftName})"
     }
     return """
     |/// Section headers of `${vm.simpleName}.${list.propertyName}` (`${header.qualifiedName}`), spelled as in Kotlin.
-    |public enum ${appleSectionHeaderType(vm, list)}: Hashable {
+    |public enum ${appleSectionHeaderType(vm, list, style)}: Hashable {
     |$cases
     |}
     """.trimMargin()
@@ -129,30 +165,33 @@ internal fun appleSectionHeaderDeclaration(vm: VmInfo, list: VmList): String {
 
 /**
  * UIKit binder for a sectioned `@ViewModelList`: drives deltalist's `SectionedDeltaCollectionDataSource`
- * from the ViewModel's `SectionedDeltaList`, handing the cell provider `Kvo{Row}` wrappers (or the
+ * from the ViewModel's `SectionedDeltaList`, handing the cell provider `{style}{Row}` wrappers (or the
  * list's element enum when it has several row types) and the header provider typed headers. Sections
- * and rows keep their Kotlin order; nothing is filtered or regrouped here.
+ * and rows keep their Kotlin order; nothing is filtered or regrouped here. On `Observable{Vm}` each row
+ * is observed until its cell shows another row or is released (see `basekitObserve`); a `Kvo{Row}`
+ * observes itself.
  */
-internal fun appleSectionedListBinder(vm: VmInfo, list: VmList): String {
+internal fun appleSectionedListBinder(vm: VmInfo, list: VmList, style: AppleWrapperStyle = AppleWrapperStyle.KVO): String {
     val header = list.header ?: return ""
     val cap = list.propertyName.toUpperCamelCase()
-    val headerType = appleSectionHeaderType(vm, list)
-    val rowType = appleListElementType(vm, list, AppleWrapperStyle.KVO)
+    val headerType = appleSectionHeaderType(vm, list, style)
+    val rowType = appleListElementType(vm, list, style)
+    val prefix = style.prefix
     val raw = list.elementSimpleName
     val undeclared = "preconditionFailure(\"${vm.simpleName}.${list.propertyName} emitted undeclared"
     val classifyRow = if (list.possibleTypes.size == 1) {
         val type = list.possibleTypes.single()
         if (type.qualifiedName == list.elementQualifiedName) {
-            "        return Kvo${type.simpleName}(raw)"
+            "        return $prefix${type.simpleName}(raw)"
         } else {
             """
             |        guard let typed = raw as? ${type.simpleName} else { $undeclared row \(Swift.type(of: raw))") }
-            |        return Kvo${type.simpleName}(typed)
+            |        return $prefix${type.simpleName}(typed)
             """.trimMargin()
         }
     } else {
         list.possibleTypes.joinToString("\n", postfix = "\n        $undeclared row \\(Swift.type(of: raw))\")") { type ->
-            "        if let typed = raw as? ${type.simpleName} { return .${type.simpleName.toListCaseName()}(Kvo${type.simpleName}(typed)) }"
+            "        if let typed = raw as? ${type.simpleName} { return .${type.simpleName.toListCaseName()}($prefix${type.simpleName}(typed)) }"
         }
     }
     val classifyHeader = if (header.isEnum) {
@@ -169,28 +208,40 @@ internal fun appleSectionedListBinder(vm: VmInfo, list: VmList): String {
             else "        if let typed = raw as? ${case.swiftName} { return .${swiftCase(case.name)}(typed) }"
         }
     }
+    // Kvo wrappers are NSObjects whose Swift-only members must opt out of Objective-C exposure.
+    val isolation = if (style == AppleWrapperStyle.KVO) "@MainActor @nonobjc" else "@MainActor"
+    val cellProviderCall = when {
+        style == AppleWrapperStyle.KVO -> "cellProvider(cv, indexPath, Self.${list.propertyName}Row(raw))"
+        else -> {
+            val observe = if (list.possibleTypes.size == 1) "row.observe()" else "row.observeForDeltaList()"
+            "let row = Self.${list.propertyName}Row(raw); let cell = cellProvider(cv, indexPath, row); cell.basekitObserve { await $observe }; return cell"
+        }
+    }
+    val rowObservationDoc = if (style == AppleWrapperStyle.KVO) "" else
+        "\n    |    /// Each row is observed until its cell shows another row or is released."
     return """
     |    #if canImport(UIKit) && !os(watchOS)
-    |    @MainActor @nonobjc private static func ${list.propertyName}Row(_ raw: $raw) -> $rowType {
+    |    $isolation private static func ${list.propertyName}Row(_ raw: $raw) -> $rowType {
     |$classifyRow
     |    }
     |
-    |    @MainActor @nonobjc private static func ${list.propertyName}Header(_ raw: AnyObject) -> $headerType {
+    |    $isolation private static func ${list.propertyName}Header(_ raw: AnyObject) -> $headerType {
     |$classifyHeader
     |    }
     |
     |    /// Binds the sectioned `${list.propertyName}` to [collectionView]: one section per header, in Kotlin's
-    |    /// order. Cells get typed rows and supplementary views typed headers.
+    |    /// order. Cells get typed rows and supplementary views typed headers.$rowObservationDoc
+    |    /// The collection view holds the returned data source weakly: keep it.
     |    ${DeltaListAvailability.UIKIT}
     |    @discardableResult
-    |    @MainActor @nonobjc public func bind$cap(
+    |    $isolation public func bind$cap(
     |        _ collectionView: UICollectionView,
     |        cellProvider: @escaping (UICollectionView, IndexPath, $rowType) -> UICollectionViewCell,
     |        headerProvider: ((UICollectionView, IndexPath, $headerType) -> UICollectionReusableView)? = nil
     |    ) -> SectionedDeltaCollectionDataSource<AnyObject, $raw> {
     |        let dataSource = SectionedDeltaCollectionDataSource<AnyObject, $raw>(
     |            collectionView: collectionView,
-    |            cellProvider: { cv, indexPath, raw in cellProvider(cv, indexPath, Self.${list.propertyName}Row(raw)) },
+    |            cellProvider: { cv, indexPath, raw in $cellProviderCall },
     |            headerProvider: headerProvider.map { provider in
     |                { cv, indexPath, raw in provider(cv, indexPath, Self.${list.propertyName}Header(raw)) }
     |            }

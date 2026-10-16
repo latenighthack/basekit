@@ -38,3 +38,27 @@ public struct BasekitModelView<Model: BasekitObservableViewModel, Content: View>
         content(model).task { await model.observe() }
     }
 }
+
+#if canImport(UIKit) && !os(watchOS)
+import UIKit
+
+@MainActor private let basekitCellObservationKey = UnsafeMutableRawPointer.allocate(byteCount: 1, alignment: 1)
+
+/// Cancels its observation when the cell lets go of it: when the cell is configured with another row,
+/// or released.
+private final class BasekitCellObservation: NSObject {
+    private let task: Task<Void, Never>
+    init(_ task: Task<Void, Never>) { self.task = task }
+    deinit { task.cancel() }
+}
+
+extension UICollectionViewCell {
+    /// Runs [observe] until this cell is configured with another row or released. The generated
+    /// `Observable{ViewModel}` list binders call it with the row they hand the cell provider, so a row
+    /// hosted with `@ObservedObject` (in a `UIHostingConfiguration`, say) redraws while the cell shows it.
+    @MainActor public func basekitObserve(_ observe: @escaping @MainActor () async -> Void) {
+        let observation = BasekitCellObservation(Task { await observe() })
+        objc_setAssociatedObject(self, basekitCellObservationKey, observation, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+}
+#endif

@@ -404,9 +404,12 @@ host maps it to copy. Rows bind to their declared types as in a flat list:
 
 | Platform | Binding |
 | --- | --- |
-| UIKit | `kvoModel.bindItems(collectionView, cellProvider:, headerProvider:)` over deltalist's `SectionedDeltaCollectionDataSource`, with `Kvo{Row}` wrappers (or the list's element enum) and a generated header enum (`case Personal`, `case Custom(…)`) |
+| UIKit | `model.bindItems(collectionView, cellProvider:, headerProvider:)` over deltalist's `SectionedDeltaCollectionDataSource`, on both `Observable{Vm}` and `Kvo{Vm}`. Rows are `Observable{Row}` or `Kvo{Row}` wrappers (or the list's element enum, `Observable{Vm}ItemsElement`) and headers a generated enum (`Observable{Vm}ItemsHeader`: `case Personal`, `case Custom(…)`). On `Observable{Vm}` each row is observed while its cell shows it, so a row hosted with `@ObservedObject` in a `UIHostingConfiguration` redraws. The collection view holds the returned data source weakly: keep it. |
 | Compose | `binding.Items(header = { … }, row = { … })` over `DeltaSections`; the header slot takes the Kotlin header type |
 | React | `SectionedViewModelList<Header, Element>`: `sections` of `{ key, header, items }` with `revision` and `visibleRange(fromSection, fromItem, toSection, toItem)`; headers are a string union (enum) or a `kind`-tagged union (sealed) |
+
+A flat list gets the same UIKit binder on `Observable{Vm}`, `bindItems(collectionView, cellProvider:)`
+over `DeltaCollectionDataSource`, with rows observed per cell.
 
 Section keys follow sections through moves; a row's key is its section's key plus the
 flat row identity. SwiftUI has no sectioned view; the Android RecyclerView helpers stay

@@ -9,7 +9,10 @@ import com.google.devtools.ksp.processing.Dependencies
  * field as an `@Published private(set)` property, seeds them from `initialState`, and keeps them
  * current by collecting the ViewModel's `state` sequence from an `observe()` method the View drives
  * with `.task { await model.observe() }`. Zero-arg actions and single-arg mutators become `async throws`
- * methods; each `@ViewModelList` gets an `observe{List}(into:)` that feeds a deltalist `DeltaList`.
+ * methods; each flat `@ViewModelList` gets a `ViewModelListBinding` for SwiftUI. On UIKit every list
+ * also gets a `bind{List}(_:cellProvider:)` collection-view binder, as `Kvo{Vm}` has, that hands cells
+ * `Observable{Row}` rows and observes each while its cell shows it (see [observableUiKitListBinder] and
+ * [appleSectionedListBinder]).
  *
  * Two-way binding: for every mutator whose noun (see `mutatorNoun`) matches a State property of the same
  * type, a `{noun}Binding: Binding<T>` is generated — its read side returns the published state, its
@@ -97,7 +100,7 @@ class SwiftUIObservableGenerator(
                 """.trimMargin()
             }.joinToString("\n\n")
 
-            // Sectioned lists bind through UIKit only (the Kvo wrapper); SwiftUI has no sectioned view.
+            // Sectioned lists bind through UIKit only; SwiftUI has no sectioned view.
             val flatLists = vm.lists.filterNot { it.sectioned }
             val listObservers = flatLists.joinToString("\n\n") { list ->
                 val cap = list.propertyName.toUpperCamelCase()
@@ -111,7 +114,12 @@ class SwiftUIObservableGenerator(
                 |    }
                 """.trimMargin()
             }
-            val listElements = flatLists.map { appleListElementDeclaration(vm, it, AppleWrapperStyle.OBSERVABLE) }
+            val listElements = (vm.lists.map { appleListElementDeclaration(vm, it, AppleWrapperStyle.OBSERVABLE) } +
+                vm.lists.map { appleSectionHeaderDeclaration(vm, it, AppleWrapperStyle.OBSERVABLE) })
+                .filter { it.isNotEmpty() }
+                .joinToString("\n\n")
+            val listBinders = (flatLists.map { observableUiKitListBinder(vm, it) } +
+                vm.lists.filter { it.sectioned }.map { appleSectionedListBinder(vm, it, AppleWrapperStyle.OBSERVABLE) })
                 .filter { it.isNotEmpty() }
                 .joinToString("\n\n")
             val listDescriptors = flatLists.joinToString("\n\n") {
@@ -125,6 +133,11 @@ class SwiftUIObservableGenerator(
                 appendLine("import Foundation")
                 appendLine("import Combine")
                 appendLine("import SwiftUI")
+                if (listBinders.isNotEmpty()) {
+                    appendLine("#if canImport(UIKit) && !os(watchOS)")
+                    appendLine("import UIKit")
+                    appendLine("#endif")
+                }
                 appendLine()
                 appendLine("// Generated SwiftUI wrapper for ${vm.qualifiedName}.")
                 appendLine("// The exported ViewModel type (${vm.simpleName}), its State, DeltaList and the")
@@ -198,6 +211,10 @@ class SwiftUIObservableGenerator(
                 if (listObservers.isNotEmpty()) {
                     appendLine()
                     appendLine(listObservers)
+                }
+                if (listBinders.isNotEmpty()) {
+                    appendLine()
+                    appendLine(listBinders)
                 }
                 appendLine("}")
             }
