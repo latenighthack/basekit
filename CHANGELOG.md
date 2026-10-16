@@ -15,7 +15,13 @@ All notable changes to basekit are documented here. The format follows
   Compose gets a header slot over the new `DeltaSections`; React gets `SectionedViewModelList` with
   string-union (enum) or `kind`-union (sealed) headers. SwiftUI and the RecyclerView helpers stay flat.
   The catalog code generator declares a sectioned list's rows with `@ViewModelList`.
-- Requires deltalist 0.4.0.
+- Requires deltalist 0.4.2.
+- Compose `DeltaRows` and `DeltaSections` never read a lazily mapped row (`lazyMap`, `lazyMapItems`)
+  to compute its key: those rows are keyed by position IDs that follow inserts, removes and moves
+  (`SectionedStableIds`) and are regenerated on a reload. Lists that hold their rows keep identity or
+  object keys. A row renders the cached row from deltalist's `rememberItem`, keeps its `remember`
+  state while that object stays the same, and resets it when an `Update` rebuilds the row. Before, every key read built
+  a new row, so rows without `@ViewModelIdentity` lost their state on every change.
 - Apple navigation: `AppleCloseNavigator(ownerId:host:)` is generated beside the other Apple
   navigators; `onCloseRoot` and `BasekitNavigationControllerHost`'s animator and interaction providers
   are `@MainActor`; `BasekitNavigationRouter(parent:)` forwards closing its root to the router that

@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 import DemoCore
 @testable import BasekitBindingConsumer
@@ -91,6 +92,45 @@ final class BindingTests: XCTestCase {
         XCTAssertEqual(observer.names, ["fail", "fail", "waitUntilCancelled"])
         XCTAssertEqual(raw.cancelledActions, 1)
         kvo.unbind()
+    }
+
+    /// `sections` is `groupBy` → `lazyMapItems`: cells get the cached row, so a section appearing
+    /// above and then disappearing builds only the new row, and shown rows keep their keys.
+    func testSectionedBindingKeepsLazilyMappedRowsWhenSectionsComeAndGo() async throws {
+        let raw = RealBindingProbeViewModel()
+        let model = KvoBindingProbeViewModel(raw)
+        let layout = UICollectionViewFlowLayout()
+        layout.itemSize = CGSize(width: 300, height: 40)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 640))
+        let collectionView = UICollectionView(frame: window.bounds, collectionViewLayout: layout)
+        collectionView.register(UICollectionViewCell.self, forCellWithReuseIdentifier: "row")
+        window.addSubview(collectionView)
+        window.isHidden = false
+        let dataSource = model.bindSections(collectionView, cellProvider: { cv, indexPath, child in
+            let cell = cv.dequeueReusableCell(withReuseIdentifier: "row", for: indexPath)
+            cell.accessibilityIdentifier = child.basekitIdentity
+            return cell
+        })
+        func shown() -> Set<String> {
+            collectionView.layoutIfNeeded()
+            return Set(collectionView.visibleCells.compactMap(\.accessibilityIdentifier))
+        }
+
+        try await eventually { dataSource.sections.count == 2 }
+        XCTAssertEqual(shown(), ["pinned", "more"])
+        let pinned = try XCTUnwrap(dataSource.itemKey(at: IndexPath(item: 0, section: 0)))
+
+        raw.insertSectionRow(index: 0, section: BindingProbeViewModelSectionGroup(name: "new"), id: "fresh")
+        try await eventually { dataSource.sections.count == 3 }
+        XCTAssertEqual(shown(), ["fresh", "pinned", "more"])
+        XCTAssertEqual(dataSource.itemKey(at: IndexPath(item: 0, section: 1)), pinned)
+
+        raw.removeSectionRow(index: 0)
+        try await eventually { dataSource.sections.count == 2 }
+        XCTAssertEqual(shown(), ["pinned", "more"])
+        XCTAssertEqual(dataSource.itemKey(at: IndexPath(item: 0, section: 0)), pinned)
+        XCTAssertEqual(raw.builtSectionRows, 3)
+        dataSource.unbind()
     }
 
     private func eventually(_ condition: () -> Bool) async throws {

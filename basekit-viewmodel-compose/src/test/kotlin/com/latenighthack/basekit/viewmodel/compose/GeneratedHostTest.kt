@@ -7,6 +7,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.layout.Column
 import androidx.lifecycle.Lifecycle
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -78,5 +79,34 @@ class GeneratedHostTest {
         assertEquals(0, disposals)
         compose.activityRule.scenario.close()
         assertEquals(1, disposals)
+    }
+
+    @Test fun generatedSectionsKeepLazilyMappedRowsWhenSectionsComeAndGo() {
+        val raw = RealBindingProbeViewModel()
+        var remembered = 0
+        compose.setContent {
+            BindingProbeViewModelHost(
+                ownerKey = "sections", storeOwner = compose.activity,
+                prepare = { PreparedViewModel(raw) {} },
+                onActionError = {}, loading = {}, failure = { _, _ -> },
+            ) { model ->
+                model.Sections(header = { header, _ -> BasicText("header:$header") }, bindingChild = { child ->
+                    val slot = remember { remembered++ }
+                    BasicText("${child.state.title}@$slot", Modifier.clickable { child.launch { select() } })
+                })
+            }
+        }
+        compose.onNodeWithText("Row pinned@0").performClick()
+        compose.onNodeWithText("Selected pinned@0").assertExists()
+        compose.onNodeWithText("Row more@1").assertExists()
+
+        // A section appears above, then disappears: the shown rows keep their ViewModel and state.
+        compose.runOnIdle { raw.insertSectionRow(0, BindingProbeViewModel.Section.Group("new"), "fresh") }
+        compose.onNodeWithText("Row fresh@2").assertExists()
+        compose.onNodeWithText("Selected pinned@0").assertExists()
+        compose.runOnIdle { raw.removeSectionRow(0) }
+        compose.onNodeWithText("header:Group(name=new)").assertDoesNotExist()
+        compose.onNodeWithText("Selected pinned@0").assertExists()
+        compose.onNodeWithText("Row more@1").assertExists()
     }
 }

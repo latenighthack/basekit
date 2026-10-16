@@ -17,6 +17,7 @@ data class FactoryRoute(
     val hasArgs: Boolean,
     val responding: Boolean,
     val parameters: List<RouteParameter>,
+    val specQualifiedName: String = specSimpleName,
 )
 
 /**

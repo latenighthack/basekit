@@ -15,6 +15,9 @@ import com.latenighthack.deltalist.Section
 import com.latenighthack.deltalist.SectionedChange
 import com.latenighthack.deltalist.SectionedDelta
 import com.latenighthack.deltalist.SectionedDeltaList
+import com.latenighthack.deltalist.mutableDeltaListOf
+import com.latenighthack.deltalist.operators.groupBy
+import com.latenighthack.deltalist.operators.lazyMapItems
 import kotlinx.coroutines.flow.flowOf
 
 @kotlin.js.JsExport
@@ -108,15 +111,18 @@ class RealBindingProbeViewModel : BindingProbeViewModel,
         activeRowCollectors++
         try { emitAll(mutableRows) } finally { activeRowCollectors-- }
     }
-    override val sections: SectionedDeltaList<BindingProbeViewModel.Section, BindingChildViewModel> = flowOf(
-        SectionedDelta(
-            listOf(
-                Section(BindingProbeViewModel.Section.Pinned, listOf(RealBindingChildViewModel("pinned"))),
-                Section(BindingProbeViewModel.Section.Group("more"), listOf(RealBindingChildViewModel("more"))),
-            ),
-            SectionedChange.Reload,
-        ),
+    private val sectionEntries = mutableDeltaListOf(
+        listOf(BindingProbeViewModel.Section.Pinned to "pinned", BindingProbeViewModel.Section.Group("more") to "more"),
     )
+    var builtSectionRows: Int = 0
+        private set
+    /** Sections come and go with their entries; each row is built when first shown and kept while shown. */
+    override val sections: SectionedDeltaList<BindingProbeViewModel.Section, BindingChildViewModel> = sectionEntries
+        .groupBy(keySelector = { it.first })
+        .lazyMapItems<BindingProbeViewModel.Section, Pair<BindingProbeViewModel.Section, String>, BindingChildViewModel> { (_, id) ->
+            builtSectionRows++
+            RealBindingChildViewModel(id)
+        }
     override val shelves: Flow<SectionedDelta<ProbeShelf, BindingProbeRow>> = flowOf(
         SectionedDelta(
             listOf(
@@ -143,4 +149,6 @@ class RealBindingProbeViewModel : BindingProbeViewModel,
     }
     fun clearRows() { mutableRows.value = Delta(emptyList(), Change.Reload) }
     fun replaceRows() { mutableRows.value = Delta(listOf(RealBindingChildViewModel("child")), Change.Reload) }
+    fun insertSectionRow(index: Int, section: BindingProbeViewModel.Section, id: String) = sectionEntries.insert(index, section to id)
+    fun removeSectionRow(index: Int) = sectionEntries.removeAt(index)
 }

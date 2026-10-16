@@ -6,6 +6,17 @@ import com.google.devtools.ksp.processing.Dependencies
 internal class ComposeGenerator(private val generator: CodeGenerator, private val dependencies: Dependencies) {
     fun generate(models: List<VmInfo>) {
         models.forEach { vm ->
+            // A mutator backs a two-way binding when its noun matches a non-list State property of the
+            // same type and nullability, as in the Swift bindings.
+            val bound = vm.mutators.mapNotNull { mutator ->
+                val noun = mutatorNoun(mutator.name)
+                vm.stateProperties.firstOrNull {
+                    it.name == noun &&
+                        it.typeQualifiedName == mutator.paramTypeQualifiedName &&
+                        it.nullable == mutator.paramTypeNullable &&
+                        it.listElementQualifiedName == null
+                }?.let { mutator to it }
+            }
             generator.createNewFile(dependencies, vm.packageName, "${vm.simpleName}Compose", "kt").use { file ->
                 file.writeln("""
                     package ${vm.packageName}
@@ -20,6 +31,12 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                         private val model: ${vm.qualifiedName},
                         public val state: ${vm.stateQualifiedName},
                         private val launchAction: (suspend () -> Unit) -> Job,
+                """.trimIndent())
+                bound.forEach { (mutator, property) ->
+                    // Two-way binding for `${property.name}`: reads the latest state, writes call the mutator.
+                    file.writeln("    public val ${mutatorNoun(mutator.name)}Binding: MutatorBinding<${mutator.type.kotlinName}>,")
+                }
+                file.writeln("""
                     ) {
                         public fun launch(action: suspend ${vm.simpleName}Binding.() -> Unit): Job = launchAction { action() }
                 """.trimIndent())
@@ -40,9 +57,7 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                         "        ${it.simpleName.toListCaseName()}: @Composable (${it.qualifiedName.substringBeforeLast('.')}.${it.simpleName}Binding) -> Unit"
                     }
                     // A sectioned list adds a typed header slot; rows bind exactly as in a flat list.
-                    val headerSlot = list.header?.let { "        header: @Composable (${it.qualifiedName}) -> Unit,\n" }.orEmpty()
-                    val rowsCall = if (list.sectioned) "DeltaSections(source = model.${list.propertyName}, header = header, " else "DeltaRows(source = model.${list.propertyName}, "
-                    file.writeln("    @Composable public fun ${list.propertyName.toUpperCamelCase()}(\n$headerSlot$rows,\n        modifier: Modifier = Modifier, placeholder: @Composable (Int) -> Unit = {},\n    ) {")
+                    val headerSlot = list.header?.let { "        header: @Composable (header: ${it.qualifiedName}, sectionIndex: Int) -> Unit,\n" }.orEmpty()
                     fun key(type: VmListElementType) = when {
                         type.identityProperty != null -> "\"${type.qualifiedName}:\" + raw.${type.identityProperty}"
                         type.reactId -> "\"${type.qualifiedName}:\" + raw.initialState.id"
@@ -51,24 +66,39 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                     fun render(type: VmListElementType) =
                         "${type.simpleName.toListCaseName()}(${type.qualifiedName.substringBeforeLast('.')}.bind${type.simpleName}(raw, launchAction))"
                     val single = list.possibleTypes.singleOrNull()?.takeIf { it.qualifiedName == list.elementQualifiedName }
-                    if (single != null) {
-                        // `raw` already has the row's type; a `when` would be an always-true check plus a
-                        // redundant `else`.
-                        file.writeln("        ${rowsCall}modifier = modifier, placeholder = placeholder, identity = { raw -> ${key(single)} }) { raw -> ${render(single)} }\n    }")
-                        return@forEach
+                    val name = list.propertyName.toUpperCamelCase()
+                    // Each list binds twice: `Items` scrolls by itself (a LazyColumn), and `ItemsForEach`
+                    // renders its rows in place among other content, as SwiftUI's `DeltaForEach` does.
+                    for (inline in listOf(false, true)) {
+                        val rowsCall = when {
+                            list.sectioned && inline -> "DeltaSectionsForEach(source = model.${list.propertyName}, header = header, "
+                            list.sectioned -> "DeltaSections(source = model.${list.propertyName}, header = header, "
+                            inline -> "DeltaForEach(source = model.${list.propertyName}, "
+                            else -> "DeltaRows(source = model.${list.propertyName}, "
+                        }
+                        val modifierArgument = if (inline) "" else "modifier = modifier, "
+                        val modifierParameter = if (inline) "" else "modifier: Modifier = Modifier, "
+                        val method = if (inline) "${name}ForEach" else name
+                        file.writeln("    @Composable public fun $method(\n$headerSlot$rows,\n        ${modifierParameter}placeholder: @Composable (Int) -> Unit = {},\n    ) {")
+                        if (single != null) {
+                            // `raw` already has the row's type; a `when` would be an always-true check plus a
+                            // redundant `else`.
+                            file.writeln("        ${rowsCall}${modifierArgument}placeholder = placeholder, identity = { raw -> ${key(single)} }) { raw -> ${render(single)} }\n    }")
+                            continue
+                        }
+                        file.writeln("        ${rowsCall}${modifierArgument}placeholder = placeholder, identity = { raw -> when (raw) {")
+                        list.possibleTypes.forEach { file.writeln("            is ${it.qualifiedName} -> ${key(it)}") }
+                        file.writeln("            else -> error(\"Undeclared ${vm.simpleName}.${list.propertyName} child\")\n        } }) { raw -> when (raw) {")
+                        list.possibleTypes.forEach { file.writeln("            is ${it.qualifiedName} -> ${render(it)}") }
+                        file.writeln("            else -> error(\"Undeclared ${vm.simpleName}.${list.propertyName} child\")\n        } }\n    }")
                     }
-                    file.writeln("        ${rowsCall}modifier = modifier, placeholder = placeholder, identity = { raw -> when (raw) {")
-                    list.possibleTypes.forEach { file.writeln("            is ${it.qualifiedName} -> ${key(it)}") }
-                    file.writeln("            else -> error(\"Undeclared ${vm.simpleName}.${list.propertyName} child\")\n        } }) { raw -> when (raw) {")
-                    list.possibleTypes.forEach { file.writeln("            is ${it.qualifiedName} -> ${render(it)}") }
-                    file.writeln("            else -> error(\"Undeclared ${vm.simpleName}.${list.propertyName} child\")\n        } }\n    }")
                 }
                 file.writeln("}")
                 file.writeln("""
                     @Composable
                     public fun bind${vm.simpleName}(model: ${vm.qualifiedName}, launchAction: (suspend () -> Unit) -> Job): ${vm.simpleName}Binding {
                         val state by model.state.collectAsStateWithLifecycle(model.initialState)
-                        return ${vm.simpleName}Binding(model, state, launchAction)
+                        return ${vm.simpleName}Binding(model, state, launchAction${bound.joinToString("") { (mutator, property) -> ",\n                            rememberMutatorBinding(state.${property.name}, launchAction) { model.${mutator.name}(it) }" }})
                     }
 
                     @Composable

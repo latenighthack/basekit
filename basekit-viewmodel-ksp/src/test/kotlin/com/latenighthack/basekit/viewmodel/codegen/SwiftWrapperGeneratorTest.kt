@@ -113,7 +113,10 @@ class SwiftWrapperGeneratorTest {
     @Test
     fun compose_marker_list_keeps_type_dispatch() {
         val source = compose(VmList("rows", "RowMarker", "sample.RowMarker", null, null, listOf(row("TextRowViewModel"), row("ImageRowViewModel"))))
-        assertEquals(2, Regex("when \\(raw\\)").findAll(source).count())
+        // Once for the LazyColumn binding and once for the in-place `RowsForEach`, each for keys and rows.
+        assertEquals(4, Regex("when \\(raw\\)").findAll(source).count())
+        assertContains(source, "@Composable public fun RowsForEach(")
+        assertContains(source, "DeltaForEach(source = model.rows, placeholder = placeholder")
         assertContains(source, "is sample.TextRowViewModel -> textRow(sample.bindTextRowViewModel(raw, launchAction))")
         assertContains(source, "else -> error(\"Undeclared HostViewModel.rows child\")")
     }
@@ -201,7 +204,7 @@ class SwiftWrapperGeneratorTest {
     @Test
     fun compose_sectioned_list_has_a_typed_header_slot() {
         val source = compose(sectioned(sealedHeader, row("RowViewModel", "rowId"), element = "RowViewModel"))
-        assertContains(source, "header: @Composable (sample.HostViewModel.Section) -> Unit,")
+        assertContains(source, "header: @Composable (header: sample.HostViewModel.Section, sectionIndex: Int) -> Unit,")
         assertContains(source, "DeltaSections(source = model.rows, header = header, modifier = modifier, placeholder = placeholder, identity = { raw -> \"sample.RowViewModel:\" + raw.rowId }) { raw -> row(sample.bindRowViewModel(raw, launchAction)) }")
     }
 

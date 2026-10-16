@@ -14,7 +14,7 @@ kotlin-inject-kmp = "0.8.0"
 # TamboUI: the JVM terminal-UI toolkit the `tui` slice renders with. Snapshot-only for now.
 tamboui = "0.5.0-SNAPSHOT"
 # All DeltaList adapters use this same published version. Local overrides are explicit.
-deltalist = "0.4.0"
+deltalist = "0.4.3-sectioned-paging"
 androidx-recyclerview = "1.3.2"
 androidx-activity = "1.9.3"
 androidx-lifecycle = "2.8.7"
@@ -63,6 +63,7 @@ deltalist-react = { module = "com.latenighthack.deltalist:deltalist-react", vers
 # androidx (viewmodel runtime RecyclerView binding)
 androidx-recyclerview = { module = "androidx.recyclerview:recyclerview", version.ref = "androidx-recyclerview" }
 androidx-activity = { module = "androidx.activity:activity", version.ref = "androidx-activity" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
 androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidx-lifecycle" }
 # ViewModelProvider + androidx ViewModel: BaseActivity retains the framework ViewModel across config changes.
 androidx-lifecycle-viewmodel = { module = "androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidx-lifecycle" }

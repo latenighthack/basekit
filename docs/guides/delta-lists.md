@@ -187,6 +187,7 @@ typed key adapter; never weaken domain IDs to strings to accommodate a binder.
 | `mapItems` | Pure on-access mapping preserving shape; no retained instance cache | Cheap immutable projections |
 | `deferredMap` | Deferred uncached mapping | Work safe to repeat |
 | `lazyMap` | Acquired-value caching with positional/lease lifecycle | Child binding or expensive repeated access |
+| `lazyMapItems` | `lazyMap` for each section of a `SectionedDeltaList`; each section's cache follows its items and its section | Sectioned child binding |
 | `Flow.map` | Transforms entire emissions | Metadata/projection changes that preserve valid delta semantics |
 
 Build pipelines once per destination or collector-owned construction, not in a
@@ -395,6 +396,35 @@ It does not fetch the missing page. Group counts/order are partial unless the
 source is fully loaded; do not present them as authoritative whole-feed totals.
 Use typed grouping values, such as `ItemDay`, not formatted heading strings.
 
+### Sections that come and go
+
+When a section is shown only while it has rows (for example connections grouped by
+category), group the domain values, then map rows with `lazyMapItems`:
+
+```kotlin
+val connections: SectionedDeltaList<ConnectionsHeader, ConnectionRow> = entries
+    .filterItemsDynamic(matches)
+    .groupBy(keySelector = { it.category }, headerMapper = { category, _ -> headerOf(category) })
+    .lazyMapItems { entry -> retainedRows.item(entry.id) }
+```
+
+A row is built when a platform binding first shows it. Each section's cache moves
+with its section, so whether a shown row keeps its object depends on what `groupBy`
+emits:
+
+| Upstream change | `groupBy` emits | Cached rows |
+| --- | --- | --- |
+| A group appears or disappears, and every other group keeps its items and order | `Sections` with `Insert`/`Remove` | Kept in the other sections; a new section starts with no cached rows |
+| Inserts, removes, moves or updates inside one group | `Items(section, …)` | Kept and moved with their items; an `Update` rebuilds that item's row only |
+| A header changes and its group's items do not | `Sections` with `Update` | Kept |
+| An upstream reload, groups changing order, edits in more than one group, a group appearing while another group's items change, or a header change together with item changes | `Reload` | Cleared; shown rows are rebuilt |
+
+Moving the only item of a group into another group removes one group and changes
+another in the same emission, so it is a `Reload` and clears every cached row. A row
+that must keep a draft or selection through a reload belongs in a registry keyed by
+its typed ID (see [Mapping and child lifetime](#mapping-and-child-lifetime)); the
+mapper then returns the registered child.
+
 ### Binding sections through Basekit
 
 A `SectionedDeltaList<Header, Row>` (or `Flow<SectionedDelta<Header, Row>>`) property
@@ -411,9 +441,23 @@ host maps it to copy. Rows bind to their declared types as in a flat list:
 A flat list gets the same UIKit binder on `Observable{Vm}`, `bindItems(collectionView, cellProvider:)`
 over `DeltaCollectionDataSource`, with rows observed per cell.
 
-Section keys follow sections through moves; a row's key is its section's key plus the
-flat row identity. SwiftUI has no sectioned view; the Android RecyclerView helpers stay
-flat. Where neither fits, flatten headings/items into a closed polymorphic list:
+Section keys follow sections through moves. Rows are keyed per platform:
+
+- Compose (`DeltaRows`, `DeltaSections`): reading a row of a lazily mapped list
+  (`lazyMap`, `lazyMapItems`) runs the mapper, so those rows are keyed by position IDs
+  that follow inserts, removes and moves and are regenerated on a reload
+  (`SectionedStableIds`; a flat list uses the same IDs over one section). A list that
+  holds its rows keys each row by its `@ViewModelIdentity` or `reactId`, or by the row
+  object when the type has neither; in a section the section's key comes first. A row
+  renders the cached row deltalist's `rememberItem` returns and resets its composition
+  state when that object changes, for example when an `Update` rebuilds it.
+- UIKit: deltalist's data source hands cells the cached rows and keys sections and rows
+  with `SectionedStableIds` (`sectionKey(at:)`, `itemKey(at:)`).
+- React: the sectioned hook reads rows through the cache, and a held row follows its key
+  to its new position.
+
+SwiftUI has no sectioned view, AppKit has no generated sectioned binder, and the
+Android RecyclerView helpers stay flat. Where neither fits, flatten headings/items into a closed polymorphic list:
 
 ```kotlin
 val rows: Flow<Delta<ItemListChild>> = sections.flatten(

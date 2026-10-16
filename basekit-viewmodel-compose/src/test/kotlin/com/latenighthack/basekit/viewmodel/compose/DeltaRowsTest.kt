@@ -1,10 +1,16 @@
 package com.latenighthack.basekit.viewmodel.compose
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import com.latenighthack.deltalist.*
+import com.latenighthack.deltalist.operators.groupBy
+import com.latenighthack.deltalist.operators.lazyMapItems
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
 import org.junit.Test
@@ -48,5 +54,37 @@ class DeltaRowsTest {
         }
         compose.onNodeWithText("replacement").assertDoesNotExist()
         compose.runOnIdle { assertEquals(listOf(0), replacement.released) }
+    }
+
+    @Test fun inlineRowsRenderInPlaceAmongOtherContentAndFollowChanges() {
+        val source = MutableStateFlow(Delta<Row>(Snapshot(listOf(Row("first"), Row("second"))), Change.Reload))
+        compose.setContent {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                BasicText("header")
+                DeltaForEach(source, identity = { it }) { BasicText(it.title) }
+                BasicText("footer")
+            }
+        }
+        compose.onNodeWithText("header").assertExists()
+        compose.onNodeWithText("first").assertExists()
+        compose.onNodeWithText("second").assertExists()
+        compose.onNodeWithText("footer").assertExists()
+        compose.runOnIdle { source.value = Delta(Snapshot(listOf(Row("only"))), Change.Reload) }
+        compose.onNodeWithText("only").assertExists()
+        compose.onNodeWithText("first").assertDoesNotExist()
+        compose.onNodeWithText("footer").assertExists()
+    }
+
+    @Test fun sectionHeadersKnowTheirPosition() {
+        val sections = mutableDeltaListOf(listOf("first" to "a", "second" to "b"))
+            .groupBy(keySelector = { it.first })
+            .lazyMapItems { it.second }
+        compose.setContent {
+            Column {
+                DeltaSectionsForEach(sections, identity = { it }, header = { header, index -> BasicText("$index:$header") }) { BasicText(it) }
+            }
+        }
+        compose.onNodeWithText("0:first").assertExists()
+        compose.onNodeWithText("1:second").assertExists()
     }
 }
