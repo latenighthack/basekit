@@ -20,12 +20,13 @@ dependencies {
     api(libs.compose.foundation)
     api(libs.androidx.lifecycle.runtime.compose)
     api(libs.androidx.lifecycle.viewmodel.compose)
+    // System back, for the generated navigation stack host.
+    api(libs.androidx.activity.compose)
     api(libs.deltalist.android.compose)
     implementation(libs.kotlinx.coroutines.android)
     testImplementation(kotlin("test-junit"))
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(project(":demo-core"))
-    testImplementation("androidx.activity:activity-compose:1.9.3")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("org.robolectric:robolectric:4.14.1")
 }

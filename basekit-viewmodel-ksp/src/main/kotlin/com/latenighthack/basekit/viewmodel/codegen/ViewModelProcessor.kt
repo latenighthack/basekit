@@ -197,6 +197,7 @@ class ViewModelProcessor(
             hasArgs = args != null,
             responding = responding,
             parameters = parameters,
+            specQualifiedName = spec.qualifiedName?.asString() ?: spec.simpleName.asString(),
         )
     }
 
@@ -265,7 +266,16 @@ class ViewModelProcessor(
         when (pass) {
             Pass.ANDROID -> {
                 AndroidBindingGenerator(codeGenerator, dependencies).generate(viewModels)
-                if (options["basekit.viewmodel.compose"] == "true") ComposeGenerator(codeGenerator, dependencies).generate(viewModels)
+                if (options["basekit.viewmodel.compose"] == "true") {
+                    ComposeGenerator(codeGenerator, dependencies).generate(viewModels)
+                    // The Compose counterpart of the Apple pass's destination models.
+                    val routes = uniqueFactories(warn = false).mapNotNull { factory -> factory.route?.let { factory to it } }
+                    if (routes.any { (_, route) -> RouteParameter.NAVIGATOR in route.parameters } && !reportMissingDestinationFactories()) {
+                        val factoryDependencies = Dependencies(aggregating = true, *(sourceFiles + factorySourceFiles).toTypedArray())
+                        val factoriesPackage = commonPackage(uniqueFactories(warn = false).map { it.implQualifiedName.substringBeforeLast('.', "") })
+                        ComposeDestinationModelGenerator(codeGenerator, factoryDependencies, navigationPackage.orEmpty(), factoriesPackage).generate(routes)
+                    }
+                }
             }
             Pass.APPLE -> {
                 try {

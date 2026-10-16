@@ -116,6 +116,13 @@ class NavigationProcessor(
             }
             return
         }
+        if (marker.isAndroidPass()) {
+            // The Compose counterpart of the Apple pass's Swift, for apps that host Compose bindings.
+            if (destinations.isEmpty() || options[COMPOSE_OPTION] != "true") return
+            val dependencies = Dependencies(aggregating = true, *sourceFiles.toTypedArray())
+            ComposeNavigationGenerator(codeGenerator, dependencies, resolveNavigationPackage()).generate(destinations, hostedComponents)
+            return
+        }
         if (!marker.isMetadataPass()) return
         if (destinations.isEmpty()) return
 
@@ -168,6 +175,14 @@ class NavigationProcessor(
             val parts = invariantSeparatorsPath.split('/')
             val kspIndex = parts.indexOf("ksp")
             return kspIndex >= 0 && parts.getOrNull(kspIndex + 1) == "metadata"
+        }
+
+        const val COMPOSE_OPTION = "basekit.viewmodel.compose"
+
+        fun File.isAndroidPass(): Boolean {
+            val parts = invariantSeparatorsPath.split('/')
+            val kspIndex = parts.indexOf("ksp")
+            return kspIndex >= 0 && parts.getOrNull(kspIndex + 1) == "android"
         }
 
         fun File.isApplePass(): Boolean {
