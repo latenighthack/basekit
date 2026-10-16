@@ -85,6 +85,60 @@ public fun <H, T : Any> DeltaSections(
 }
 
 /**
+ * The rows of a [Delta] flow in place, inside whatever lays them out, as SwiftUI's `DeltaForEach` does
+ * in a stack: for a list among a page's other content, in a popup or a menu. Every row composes; use
+ * [DeltaRows] for a list that scrolls by itself. Rows are keyed and rendered as in [DeltaRows].
+ */
+@Composable
+public fun <T : Any> DeltaForEach(
+    source: Flow<Delta<T>>,
+    identity: (T) -> Any,
+    placeholder: @Composable (Int) -> Unit = {},
+    row: @Composable (T) -> Unit,
+) {
+    val keys = remember { RowKeys() }
+    val tracked = remember(source) {
+        flow {
+            val ids = SectionedStableIds()
+            source.collect { delta -> emit(TrackedDelta(delta.items, ids.apply(delta.asOneSection()))) }
+        }
+    }
+    val current by tracked.collectAsStateWithLifecycle(initialValue = null)
+    val snapshot = current ?: return
+    val items = snapshot.items
+    for (index in 0 until items.size) {
+        val itemKey = rowKey(items, index, keys, identity) { "tracked:" + snapshot.ids.itemId(0, index) }
+        key(itemKey) { DeltaRow(items, index, itemKey, placeholder, row) }
+    }
+}
+
+/**
+ * The sectioned peer of [DeltaForEach]: one [header] per section, followed by its rows, in place.
+ * Sections and rows are keyed as in [DeltaSections].
+ */
+@Composable
+public fun <H, T : Any> DeltaSectionsForEach(
+    source: SectionedDeltaList<H, T>,
+    identity: (T) -> Any,
+    header: @Composable (H) -> Unit,
+    placeholder: @Composable (Int) -> Unit = {},
+    row: @Composable (T) -> Unit,
+) {
+    val keys = remember { RowKeys() }
+    val state = source.collectAsSectionedDeltaState()
+    for (section in state.sections) {
+        key(section.key) {
+            header(section.header)
+            val items = section.items
+            for (index in 0 until section.size) {
+                val itemKey = rowKey(items, index, keys, identity, prefix = "${section.key}|") { section.itemKey(index) }
+                key(itemKey) { DeltaRow(items, index, itemKey, placeholder, row) }
+            }
+        }
+    }
+}
+
+/**
  * [identity] of the value at [index] when reading it is free, otherwise [tracked]. Reading a
  * [LazyList] position runs its mapper and returns a new value each time, so its keys are always
  * tracked.
