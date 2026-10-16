@@ -49,7 +49,7 @@ class LazyMappedRowsTest {
         val entries = mutableDeltaListOf(listOf(Entry("a1", "personal"), Entry("a2", "personal")))
         val sections = entries.groupBy(keySelector = { it.category }).lazyMapItems(::row)
         compose.setContent {
-            DeltaSections(sections, identity = { it }, header = { BasicText("header:$it") }) { RowText(it) }
+            DeltaSections(sections, identity = { it }, header = { header, _ -> BasicText("header:$header") }) { RowText(it) }
         }
         assertRows("header:personal", "a1v0@0", "a2v0@1")
 
@@ -97,7 +97,7 @@ class LazyMappedRowsTest {
         }
         val sections = flowOf(SectionedDelta(listOf(Section("x", page)), SectionedChange.Reload)).lazyMapItems(::row)
         compose.setContent {
-            DeltaSections(sections, identity = { it }, header = { BasicText("header:$it") },
+            DeltaSections(sections, identity = { it }, header = { header, _ -> BasicText("header:$header") },
                 placeholder = { BasicText("placeholder:$it") }) { RowText(it) }
         }
         assertRows("header:x", "a1v0@0", "placeholder:1", "placeholder:2")

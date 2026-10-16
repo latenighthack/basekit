@@ -9,6 +9,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import com.latenighthack.deltalist.*
+import com.latenighthack.deltalist.operators.groupBy
+import com.latenighthack.deltalist.operators.lazyMapItems
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
 import org.junit.Test
@@ -71,5 +73,18 @@ class DeltaRowsTest {
         compose.onNodeWithText("only").assertExists()
         compose.onNodeWithText("first").assertDoesNotExist()
         compose.onNodeWithText("footer").assertExists()
+    }
+
+    @Test fun sectionHeadersKnowTheirPosition() {
+        val sections = mutableDeltaListOf(listOf("first" to "a", "second" to "b"))
+            .groupBy(keySelector = { it.first })
+            .lazyMapItems { it.second }
+        compose.setContent {
+            Column {
+                DeltaSectionsForEach(sections, identity = { it }, header = { header, index -> BasicText("$index:$header") }) { BasicText(it) }
+            }
+        }
+        compose.onNodeWithText("0:first").assertExists()
+        compose.onNodeWithText("1:second").assertExists()
     }
 }

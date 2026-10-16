@@ -57,7 +57,7 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                         "        ${it.simpleName.toListCaseName()}: @Composable (${it.qualifiedName.substringBeforeLast('.')}.${it.simpleName}Binding) -> Unit"
                     }
                     // A sectioned list adds a typed header slot; rows bind exactly as in a flat list.
-                    val headerSlot = list.header?.let { "        header: @Composable (${it.qualifiedName}) -> Unit,\n" }.orEmpty()
+                    val headerSlot = list.header?.let { "        header: @Composable (header: ${it.qualifiedName}, sectionIndex: Int) -> Unit,\n" }.orEmpty()
                     fun key(type: VmListElementType) = when {
                         type.identityProperty != null -> "\"${type.qualifiedName}:\" + raw.${type.identityProperty}"
                         type.reactId -> "\"${type.qualifiedName}:\" + raw.initialState.id"

@@ -90,7 +90,7 @@ class GeneratedHostTest {
                 prepare = { PreparedViewModel(raw) {} },
                 onActionError = {}, loading = {}, failure = { _, _ -> },
             ) { model ->
-                model.Sections(header = { BasicText("header:$it") }, bindingChild = { child ->
+                model.Sections(header = { header, _ -> BasicText("header:$header") }, bindingChild = { child ->
                     val slot = remember { remembered++ }
                     BasicText("${child.state.title}@$slot", Modifier.clickable { child.launch { select() } })
                 })

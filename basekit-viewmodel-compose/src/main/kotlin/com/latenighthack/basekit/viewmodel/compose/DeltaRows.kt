@@ -56,7 +56,8 @@ public fun <T : Any> DeltaRows(
 }
 
 /**
- * The sectioned peer of [DeltaRows]: one [header] row per section, followed by its rows, in the
+ * The sectioned peer of [DeltaRows]: one [header] row per section, given the section's position as
+ * a UIKit header provider gets its index path, followed by its rows, in the
  * order the Kotlin list emits them. Section keys follow sections through moves. Rows are keyed as in
  * [DeltaRows], with the section's key in front of [identity]; position ids come from
  * [com.latenighthack.deltalist.android.compose.SectionState.itemKey]. Unloaded rows show
@@ -66,7 +67,7 @@ public fun <T : Any> DeltaRows(
 public fun <H, T : Any> DeltaSections(
     source: SectionedDeltaList<H, T>,
     identity: (T) -> Any,
-    header: @Composable (H) -> Unit,
+    header: @Composable (header: H, sectionIndex: Int) -> Unit,
     modifier: Modifier = Modifier,
     placeholder: @Composable (Int) -> Unit = {},
     row: @Composable (T) -> Unit,
@@ -75,8 +76,8 @@ public fun <H, T : Any> DeltaSections(
     // No itemKey: deltalist would read it from a peeked value, which maps lazily mapped rows.
     val state = source.collectAsSectionedDeltaState()
     LazyColumn(modifier) {
-        for (section in state.sections) {
-            item(key = section.key) { header(section.header) }
+        for ((sectionIndex, section) in state.sections.withIndex()) {
+            item(key = section.key) { header(section.header, sectionIndex) }
             val items = section.items
             val key = { index: Int -> rowKey(items, index, keys, identity, prefix = "${section.key}|") { section.itemKey(index) } }
             items(section.size, key = key) { index -> DeltaRow(items, index, key(index), placeholder, row) }
@@ -120,15 +121,15 @@ public fun <T : Any> DeltaForEach(
 public fun <H, T : Any> DeltaSectionsForEach(
     source: SectionedDeltaList<H, T>,
     identity: (T) -> Any,
-    header: @Composable (H) -> Unit,
+    header: @Composable (header: H, sectionIndex: Int) -> Unit,
     placeholder: @Composable (Int) -> Unit = {},
     row: @Composable (T) -> Unit,
 ) {
     val keys = remember { RowKeys() }
     val state = source.collectAsSectionedDeltaState()
-    for (section in state.sections) {
+    for ((sectionIndex, section) in state.sections.withIndex()) {
         key(section.key) {
-            header(section.header)
+            header(section.header, sectionIndex)
             val items = section.items
             for (index in 0 until section.size) {
                 val itemKey = rowKey(items, index, keys, identity, prefix = "${section.key}|") { section.itemKey(index) }
