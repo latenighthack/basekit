@@ -51,6 +51,11 @@ jobs:
       - name: Validate plugin publication before releasing anything
         run: python3 scripts/verify-plugin-release.py
 
+      # Package the JavaScript integration before publishing, so a stale kotlin-js-store lock
+      # (it records the project version) fails the release before anything reaches Central.
+      - name: Package JavaScript PostHog integration
+        run: ./gradlew :basekit-navigation-posthog:collectBasekitPostHogJavaScript
+
       # Every basekit module is released to Central, including the whole `tui` slice. basekit-tui
       # declares the snapshot-only TamboUI as `compileOnly`, so it never reaches the published POM
       # (Central rejects SNAPSHOT deps) — consumers supply TamboUI themselves. `demo-*` are not
@@ -91,9 +96,6 @@ jobs:
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
-
-      - name: Package JavaScript PostHog integration
-        run: ./gradlew :basekit-navigation-posthog:collectBasekitPostHogJavaScript
 
       - name: Upload JavaScript PostHog package
         uses: actions/upload-artifact@v4
