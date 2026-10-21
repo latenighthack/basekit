@@ -58,19 +58,20 @@ class AndroidListDescriptorsTest {
 
     @Test
     fun single_type_list_binds_through_the_view_factory_helper() {
-        val source = androidListBinder(singleType)
+        val source = androidListBinder(vm(singleType), singleType)
 
         assertContains(source, "protected fun bindMessages(")
         assertContains(source, "viewFactory: (android.view.ViewGroup) -> android.view.View,")
         assertContains(source, "stateBinder: (android.view.View, sample.MessageItemViewModel, sample.MessageItemViewModel.State) -> Unit,")
         assertContains(source, "recyclerView.bindViewModels(")
+        assertContains(source, "viewModel.boundList(\"sample.ChatViewModel\", \"messages\", viewModel.messages),")
         // No row specs for a single-type list: the original shape is preserved exactly.
         assertFalse(source.contains("ViewModelRowSpec"))
     }
 
     @Test
     fun polymorphic_list_emits_one_named_spec_per_declared_type() {
-        val source = androidListBinder(polymorphic)
+        val source = androidListBinder(vm(polymorphic), polymorphic)
 
         assertContains(
             source,
@@ -83,6 +84,7 @@ class AndroidListDescriptorsTest {
                 "sample.StatusMessageItemViewModel, sample.StatusMessageItemViewModel.State>,",
         )
         assertContains(source, "recyclerView.bindViewModelRows(")
+        assertContains(source, "viewModel.boundList(\"sample.ChatViewModel\", \"messages\", viewModel.messages),")
         assertContains(source, "listOf(incomingMessageItem, statusMessageItem),")
         // The marker element type must not leak in as a row type.
         assertFalse(source.contains("sample.ChatRowViewModel,"))
@@ -90,7 +92,7 @@ class AndroidListDescriptorsTest {
 
     @Test
     fun polymorphic_spec_parameters_follow_possibleTypes_order() {
-        val source = androidListBinder(polymorphic)
+        val source = androidListBinder(vm(polymorphic), polymorphic)
 
         assertTrue(source.indexOf("incomingMessageItem:") < source.indexOf("statusMessageItem:"))
     }
@@ -104,17 +106,19 @@ class AndroidListDescriptorsTest {
         )
 
         assertContains(
-            androidListBinder(stateless),
+            androidListBinder(vm(stateless), stateless),
             "emptyRow: com.latenighthack.basekit.viewmodel.ViewModelRowSpec<sample.EmptyRowViewModel, kotlin.Any>,",
         )
     }
 
     @Test
     fun imports_track_which_binder_shapes_the_view_model_actually_uses() {
-        assertEquals(listOf("com.latenighthack.basekit.viewmodel.bindViewModels"), androidListImports(vm(singleType)))
-        assertEquals(listOf("com.latenighthack.basekit.viewmodel.bindViewModelRows"), androidListImports(vm(polymorphic)))
+        val boundList = "com.latenighthack.basekit.viewmodel.boundList"
+        assertEquals(listOf(boundList, "com.latenighthack.basekit.viewmodel.bindViewModels"), androidListImports(vm(singleType)))
+        assertEquals(listOf(boundList, "com.latenighthack.basekit.viewmodel.bindViewModelRows"), androidListImports(vm(polymorphic)))
         assertEquals(
             listOf(
+                boundList,
                 "com.latenighthack.basekit.viewmodel.bindViewModels",
                 "com.latenighthack.basekit.viewmodel.bindViewModelRows",
             ),

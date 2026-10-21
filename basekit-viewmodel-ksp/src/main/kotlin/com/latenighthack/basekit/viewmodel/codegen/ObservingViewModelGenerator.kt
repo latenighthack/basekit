@@ -21,14 +21,26 @@ class ObservingViewModelGenerator(
         appendLine()
         appendLine("import com.latenighthack.basekit.viewmodel.ViewModelActionEvent")
         appendLine("import com.latenighthack.basekit.viewmodel.ViewModelActionObserver")
+        appendLine("import com.latenighthack.basekit.viewmodel.ViewModelFailure")
+        appendLine("import com.latenighthack.basekit.viewmodel.ViewModelFailureHandler")
+        appendLine("import kotlinx.coroutines.flow.Flow")
         appendLine()
         appendLine("public class Observing${vm.simpleName}(")
         appendLine("    private val delegate: ${vm.qualifiedName},")
         appendLine("    internal val actionObserver: ViewModelActionObserver,")
-        appendLine(") : ${vm.qualifiedName} by delegate {")
+        appendLine(") : ${vm.qualifiedName} by delegate, ViewModelFailureHandler<${vm.stateQualifiedName}> {")
+        // Bindings look for the handler on the instance they get, which is this decorator.
+        appendLine("    @Suppress(\"UNCHECKED_CAST\")")
+        appendLine("    override suspend fun onStateFailed(failure: ViewModelFailure, lastState: ${vm.stateQualifiedName}): Flow<${vm.stateQualifiedName}> =")
+        appendLine("        (delegate as? ViewModelFailureHandler<${vm.stateQualifiedName}>)?.onStateFailed(failure, lastState)")
+        appendLine("            ?: super.onStateFailed(failure, lastState)")
+        appendLine()
+        appendLine("    override suspend fun onListFailed(failure: ViewModelFailure) {")
+        appendLine("        (delegate as? ViewModelFailureHandler<*>)?.onListFailed(failure) ?: super.onListFailed(failure)")
+        appendLine("    }")
         vm.actions.forEach { action ->
             appendLine("    override suspend fun `${action.name}`() {")
-            appendLine("        actionObserver.onAction(ViewModelActionEvent(${literal(vm.qualifiedName)}, ${literal(action.name)}, delegate))")
+            appendLine("        actionObserver.onAction(ViewModelActionEvent(${kotlinStringLiteral(vm.qualifiedName)}, ${kotlinStringLiteral(action.name)}, delegate))")
             appendLine("        delegate.`${action.name}`()")
             appendLine("    }")
         }
@@ -39,6 +51,4 @@ class ObservingViewModelGenerator(
         appendLine("    if (observer === ViewModelActionObserver.NoOp || (this is Observing${vm.simpleName} && actionObserver === observer)) this")
         appendLine("    else Observing${vm.simpleName}(this, observer)")
     }
-
-    private fun literal(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$") + "\""
 }

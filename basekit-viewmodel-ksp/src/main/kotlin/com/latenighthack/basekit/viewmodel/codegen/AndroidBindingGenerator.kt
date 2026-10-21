@@ -29,7 +29,7 @@ class AndroidBindingGenerator(
             }
 
             // Sectioned lists bind through Compose; the RecyclerView helpers are flat only.
-            val listBinders = vm.lists.filterNot { it.sectioned }.joinToString("\n\n") { list -> androidListBinder(list) }
+            val listBinders = vm.lists.filterNot { it.sectioned }.joinToString("\n\n") { list -> androidListBinder(vm, list) }
 
             codeGenerator.createNewFile(dependencies, vm.packageName, className, "kt").apply {
                 writeln("package ${vm.packageName}")
@@ -45,6 +45,8 @@ class AndroidBindingGenerator(
                     |/** Generated Android binding for [${vm.qualifiedName}]. */
                     |public abstract class $className :
                     |    com.latenighthack.basekit.viewmodel.BaseActivity<${vm.qualifiedName}, ${vm.stateQualifiedName}>() {
+                    |
+                    |    override val viewModelName: String get() = ${kotlinStringLiteral(vm.qualifiedName)}
                     |
                     |    /** Convenience typed state hook; override instead of the two-arg form. */
                     |    protected open fun onStateChanged(state: ${vm.stateQualifiedName}) {}

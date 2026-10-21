@@ -71,12 +71,15 @@ class SwiftWrapperGeneratorTest {
     }
 
     @Test
-    fun state_sequence_is_collected_without_try() {
+    fun state_is_collected_through_bound_state_without_try() {
         val (kvo, observable) = swift(vm("ItemViewModel", listOf(string("title"))))
         for (source in listOf(kvo, observable)) {
-            assertContains(source, "for await anyState in viewModel.state {")
+            // A throw from `state` aborts the process inside SKIE's collector; `boundState` catches it in Kotlin.
+            assertContains(source, "for await anyState in viewModel.boundState(viewModelName: \"sample.ItemViewModel\") {")
+            assertFalse("viewModel.state" in source)
             assertFalse("try await anyState" in source)
             assertFalse("catch" in source)
+            assertFalse("onError" in source)
         }
     }
 
@@ -87,7 +90,7 @@ class SwiftWrapperGeneratorTest {
             assertFalse("let initial" in source)
             assertFalse("let state" in source)
             assertFalse("let self" in source)
-            assertContains(source, "for await _ in viewModel.state {}")
+            assertContains(source, "for await _ in viewModel.boundState(viewModelName: \"sample.EmptyViewModel\") {}")
         }
         assertFalse("[weak self]" in kvo)
     }
@@ -116,7 +119,8 @@ class SwiftWrapperGeneratorTest {
         // Once for the LazyColumn binding and once for the in-place `RowsForEach`, each for keys and rows.
         assertEquals(4, Regex("when \\(raw\\)").findAll(source).count())
         assertContains(source, "@Composable public fun RowsForEach(")
-        assertContains(source, "DeltaForEach(source = model.rows, placeholder = placeholder")
+        assertContains(source, "DeltaForEach(source = remember(model) { model.boundList(\"sample.HostViewModel\", \"rows\", model.rows) }, placeholder = placeholder")
+        assertContains(source, "val state by remember(model) { model.boundState(\"sample.HostViewModel\") }.collectAsStateWithLifecycle(model.initialState)")
         assertContains(source, "is sample.TextRowViewModel -> textRow(sample.bindTextRowViewModel(raw, launchAction))")
         assertContains(source, "else -> error(\"Undeclared HostViewModel.rows child\")")
     }
@@ -155,7 +159,7 @@ class SwiftWrapperGeneratorTest {
         assertContains(kvo, "if let typed = raw as? TextRowViewModel { return .textRow(KvoTextRowViewModel(typed)) }")
         assertContains(kvo, "#if canImport(UIKit) && !os(watchOS)")
         assertContains(kvo, "-> SectionedDeltaCollectionDataSource<AnyObject, RowMarker> {")
-        assertContains(kvo, "dataSource.bind(to: viewModel.rows)")
+        assertContains(kvo, "dataSource.bind(to: viewModel.boundRows())")
         // No flat ViewModelListBinding for a sectioned list, and no SwiftUI binding at all.
         assertFalse("ViewModelListBinding" in kvo)
     }
@@ -173,7 +177,7 @@ class SwiftWrapperGeneratorTest {
         assertContains(observable, "headerProvider: ((UICollectionView, IndexPath, ObservableHostViewModelRowsHeader) -> UICollectionReusableView)? = nil")
         assertContains(observable, "-> SectionedDeltaCollectionDataSource<AnyObject, RowMarker> {")
         assertContains(observable, "cell.basekitObserve { await row.observeForDeltaList() }")
-        assertContains(observable, "dataSource.bind(to: viewModel.rows)")
+        assertContains(observable, "dataSource.bind(to: viewModel.boundRows())")
         assertFalse("@nonobjc" in observable)
         // Sectioned lists have no SwiftUI binding.
         assertFalse("ViewModelListBinding" in observable)
@@ -189,6 +193,32 @@ class SwiftWrapperGeneratorTest {
         assertContains(observable, "let row = binding.makeElement(for: raw)")
         assertContains(observable, "cell.basekitObserve { await binding.observe(row) }")
         assertContains(observable, "binding.bind(to: dataSource)")
+        assertContains(observable, "source: viewModel.boundRows(),")
+        assertContains(observable, "await list.collect(viewModel.boundRows())")
+    }
+
+    @Test
+    fun apple_bound_lists_wrap_each_list_with_its_exact_type() {
+        val flat = VmList("rows", "RowViewModel", "sample.RowViewModel", null, null, listOf(row("RowViewModel")))
+        val source = AppleBoundListsGenerator(RecordingCodeGenerator(), Dependencies(false))
+            .render(vm("HostViewModel", lists = listOf(flat, sectioned(sealedHeader, row("RowViewModel"), element = "RowViewModel").copy(propertyName = "in"))))
+        assertContains(source, "public fun sample.HostViewModel.boundRows(): kotlinx.coroutines.flow.Flow<com.latenighthack.deltalist.Delta<sample.RowViewModel>> =\n    boundList(\"sample.HostViewModel\", \"rows\", rows)")
+        assertContains(source, "public fun sample.HostViewModel.boundIn(): kotlinx.coroutines.flow.Flow<com.latenighthack.deltalist.SectionedDelta<sample.HostViewModel.Section, sample.RowViewModel>> =\n    boundList(\"sample.HostViewModel\", \"in\", `in`)")
+    }
+
+    @Test
+    fun apple_bound_lists_are_skipped_without_lists() {
+        val out = RecordingCodeGenerator()
+        AppleBoundListsGenerator(out, Dependencies(false)).generate(listOf(vm("EmptyViewModel")))
+        assertEquals(emptySet(), out.files.keys)
+    }
+
+    @Test
+    fun observing_decorator_forwards_the_failure_handler() {
+        val source = ObservingViewModelGenerator(RecordingCodeGenerator(), Dependencies(false)).render(vm("HostViewModel"))
+        assertContains(source, ") : sample.HostViewModel by delegate, ViewModelFailureHandler<sample.HostViewModel.State> {")
+        assertContains(source, "(delegate as? ViewModelFailureHandler<sample.HostViewModel.State>)?.onStateFailed(failure, lastState)\n            ?: super.onStateFailed(failure, lastState)")
+        assertContains(source, "(delegate as? ViewModelFailureHandler<*>)?.onListFailed(failure) ?: super.onListFailed(failure)")
     }
 
     @Test
@@ -205,7 +235,7 @@ class SwiftWrapperGeneratorTest {
     fun compose_sectioned_list_has_a_typed_header_slot() {
         val source = compose(sectioned(sealedHeader, row("RowViewModel", "rowId"), element = "RowViewModel"))
         assertContains(source, "header: @Composable (header: sample.HostViewModel.Section, sectionIndex: Int) -> Unit,")
-        assertContains(source, "DeltaSections(source = model.rows, header = header, modifier = modifier, placeholder = placeholder, identity = { raw -> \"sample.RowViewModel:\" + raw.rowId }) { raw -> row(sample.bindRowViewModel(raw, launchAction)) }")
+        assertContains(source, "DeltaSections(source = remember(model) { model.boundList(\"sample.HostViewModel\", \"rows\", model.rows) }, header = header, modifier = modifier, placeholder = placeholder, identity = { raw -> \"sample.RowViewModel:\" + raw.rowId }) { raw -> row(sample.bindRowViewModel(raw, launchAction)) }")
     }
 
     @Test
@@ -215,7 +245,8 @@ class SwiftWrapperGeneratorTest {
         val out = RecordingCodeGenerator()
         ReactHookGenerator(out, Dependencies(false)).generate(listOf(host, shelves))
         val hook = out.text("HostViewModelReactHook.kt")
-        assertContains(hook, "useMappedSectionedDeltaList(viewModel.rows, ::bindHostViewModelRowsReactHeader, ::bindHostViewModelRowsReactElement)")
+        assertContains(hook, "useMappedSectionedDeltaList(React.useMemo({ viewModel.boundList(\"sample.HostViewModel\", \"rows\", viewModel.rows) }, arrayOf(viewModelArg)), ::bindHostViewModelRowsReactHeader, ::bindHostViewModelRowsReactElement)")
+        assertContains(hook, "bindFlow(viewModel.boundState(\"sample.HostViewModel\")) { s -> setState(s) }")
         assertContains(hook, "is sample.HostViewModel.Section.Custom -> {\n        val header: dynamic = js(\"({})\")\n        header.kind = \"Custom\"")
         assertContains(out.text("ShelfViewModelReactHook.kt"), "(raw as sample.Shelf).name")
         ReactTypesGenerator(out, Dependencies(false)).generate(listOf(host, shelves), "sample-runtime")

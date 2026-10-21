@@ -6,10 +6,12 @@ import com.google.devtools.ksp.processing.Dependencies
 /**
  * Emits, per `@ViewModelSpec`, a Swift `Kvo{Vm}` wrapper (`Kvo{Vm}.swift`). It exposes each State field
  * as an `@objc dynamic` property (KVO-observable), seeds them from `initialState`, and keeps them
- * current by collecting the ViewModel's `state` sequence (SKIE bridges Kotlin `Flow` to Swift
- * `AsyncSequence`). Suspend actions become `async throws` methods; each `@ViewModelList` gets a
- * `bind{ListProp}(_:)` that drives a deltalist collection-view data source, vending `Kvo{ChildVm}`
- * wrappers to the cell/item provider. A sectioned list's binder (UIKit only) also hands the header
+ * current by collecting the ViewModel's `state` through `boundState` (SKIE bridges Kotlin `Flow` to
+ * Swift `AsyncSequence`; `boundState` catches a throw from `state` in Kotlin, before SKIE's collector,
+ * where it would abort the process). Suspend actions become `async throws` methods; each
+ * `@ViewModelList` gets a `bind{ListProp}(_:)` that drives a deltalist collection-view data source over
+ * the list's `bound{List}()` (see [AppleBoundListsGenerator]), vending `Kvo{ChildVm}` wrappers to the
+ * cell/item provider. A sectioned list's binder (UIKit only) also hands the header
  * provider typed headers (see [appleSectionedListBinder]).
  *
  * This is the imperative binding for every Apple platform, not just iOS: `@objc dynamic` properties
@@ -136,7 +138,8 @@ class SwiftKvoGenerator(
                 // A State without fields has nothing to seed or assign, so `initial`, the cast and the
                 // `self` rebind are omitted (Swift warns on each unused binding). The sequence is still
                 // collected: collecting `state` may be what starts the ViewModel's upstream work.
-                // SKIE bridges `state` to a non-throwing AsyncSequence, so the loop needs no `try`.
+                // SKIE's sequence does not throw to Swift: a throw from the Kotlin flow aborts the process
+                // in SKIE's collector. `boundState` catches it in Kotlin first, so the loop needs no `try`.
                 if (seedAssigns.isNotEmpty()) {
                     appendLine("        let initial = viewModel.initialState as! ${vm.stateSwiftName}")
                     appendLine(seedAssigns)
@@ -144,7 +147,7 @@ class SwiftKvoGenerator(
                 appendLine("        super.init()")
                 if (updateAssigns.isNotEmpty()) {
                     appendLine("        startObserving { [weak self] in")
-                    appendLine("            for await anyState in viewModel.state {")
+                    appendLine("            for await anyState in ${appleBoundState(vm)} {")
                     appendLine("                guard let self = self else { break }")
                     appendLine("                guard let state = anyState as? ${vm.stateSwiftName} else { continue }")
                     appendLine(updateAssigns)
@@ -152,7 +155,7 @@ class SwiftKvoGenerator(
                     appendLine("        }")
                 } else {
                     appendLine("        startObserving {")
-                    appendLine("            for await _ in viewModel.state {}")
+                    appendLine("            for await _ in ${appleBoundState(vm)} {}")
                     appendLine("        }")
                 }
                 appendLine("    }")

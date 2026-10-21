@@ -80,7 +80,7 @@ internal fun appleListDescriptorProperty(vm: VmInfo, list: VmList, style: AppleW
     |    @available(iOS 15.0, macOS 12.0, *)
     |    ${isolation}public lazy var ${list.propertyName}: ViewModelListBinding<${list.elementSimpleName}, $outputType> = {
     |        ViewModelListBinding(
-    |            source: viewModel.${list.swiftName.swiftSourceRef()},
+    |            source: ${appleBoundList(list)},
     |            classify: { raw in
     |$classify
     |            }$observeArgument

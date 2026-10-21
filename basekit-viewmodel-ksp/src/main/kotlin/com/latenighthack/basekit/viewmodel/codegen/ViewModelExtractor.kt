@@ -35,6 +35,11 @@ class ViewModelExtractor(private val logger: KSPLogger) {
             logger.error("@ViewModelSpec $simpleName must implement ViewModel<State>", declaration)
             return null
         }
+        // Its handler methods would otherwise bind as an action and a mutator on every platform.
+        if (declaration.getAllSuperTypes().any { it.declaration.qualifiedName?.asString() == VIEWMODEL_FAILURE_HANDLER }) {
+            logger.error("@ViewModelSpec $simpleName extends ViewModelFailureHandler; implement it on the implementation class instead", declaration)
+            return null
+        }
 
         val stateProperties = stateDecl.getAllProperties().filter { it.isPublicBinding() }.mapNotNull { prop ->
             val resolved = prop.type.resolve()

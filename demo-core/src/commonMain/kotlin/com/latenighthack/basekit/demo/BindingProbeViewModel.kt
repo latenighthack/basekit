@@ -19,6 +19,9 @@ import com.latenighthack.deltalist.mutableDeltaListOf
 import com.latenighthack.deltalist.operators.groupBy
 import com.latenighthack.deltalist.operators.lazyMapItems
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.map
 
 @kotlin.js.JsExport
 @kotlin.js.JsName("BrowserProbeMessage")
@@ -86,13 +89,36 @@ class RealBindingChildViewModel(override val identity: String) : BindingChildVie
     override suspend fun select() = update { copy(title = "Selected $identity") }
 }
 
+/** [fail] makes the flows returned by [failing] throw in their current collections only; a later collection is unaffected. */
+private class FailureTrigger {
+    private val failures = MutableSharedFlow<Throwable>(extraBufferCapacity = 1)
+    fun fail(message: String) { failures.tryEmit(IllegalStateException(message)) }
+    fun <T> failing(flow: Flow<T>): Flow<T> = merge(flow, failures.map { throw it })
+}
+
 class RealBindingProbeViewModel : BindingProbeViewModel,
-    StatefulViewModel<BindingProbeViewModel.State>(BindingProbeViewModel.State(ProbeMessage("hello"), null, ProbeFailure.NONE, null, listOf("a"))) {
+    StatefulViewModel<BindingProbeViewModel.State>(BindingProbeViewModel.State(ProbeMessage("hello"), null, ProbeFailure.NONE, null, listOf("a"))),
+    ViewModelFailureHandler<BindingProbeViewModel.State> {
     var activeStateCollectors: Int = 0
         private set
+    private val stateFailures = FailureTrigger()
     override val state: Flow<BindingProbeViewModel.State> = flow {
         activeStateCollectors++
-        try { emitAll(super.state) } finally { activeStateCollectors-- }
+        try { emitAll(stateFailures.failing(super.state)) } finally { activeStateCollectors-- }
+    }
+    /** The failures the bindings passed to this handler, as `source: message`. */
+    val handledFailures: List<String> get() = handled.toList()
+    private val handled = mutableListOf<String>()
+    /** Makes the current `state` collections throw; the handler shows the error in [BindingProbeViewModel.State.note]. */
+    fun failState(message: String) = stateFailures.fail(message)
+    /** Makes the current `rows` collections throw. */
+    fun failRows(message: String) = rowFailures.fail(message)
+    override suspend fun onStateFailed(failure: ViewModelFailure, lastState: BindingProbeViewModel.State): Flow<BindingProbeViewModel.State> {
+        handled += "${failure.source}: ${failure.error.message}"
+        return flowOf(lastState.copy(note = "failed: ${failure.error.message}"))
+    }
+    override suspend fun onListFailed(failure: ViewModelFailure) {
+        handled += "${failure.source}: ${failure.error.message}"
     }
     var startedActions: Int = 0
         private set
@@ -107,9 +133,10 @@ class RealBindingProbeViewModel : BindingProbeViewModel,
     private val mutableRows = MutableStateFlow(Delta<BindingChildViewModel>(emptyList(), Change.Reload))
     var activeRowCollectors: Int = 0
         private set
+    private val rowFailures = FailureTrigger()
     override val rows: Flow<Delta<BindingChildViewModel>> = flow {
         activeRowCollectors++
-        try { emitAll(mutableRows) } finally { activeRowCollectors-- }
+        try { emitAll(rowFailures.failing(mutableRows)) } finally { activeRowCollectors-- }
     }
     private val sectionEntries = mutableDeltaListOf(
         listOf(BindingProbeViewModel.Section.Pinned to "pinned", BindingProbeViewModel.Section.Group("more") to "more"),
@@ -151,4 +178,18 @@ class RealBindingProbeViewModel : BindingProbeViewModel,
     fun replaceRows() { mutableRows.value = Delta(listOf(RealBindingChildViewModel("child")), Change.Reload) }
     fun insertSectionRow(index: Int, section: BindingProbeViewModel.Section, id: String) = sectionEntries.insert(index, section to id)
     fun removeSectionRow(index: Int) = sectionEntries.removeAt(index)
+}
+
+/**
+ * A row whose `state` emits once and then throws, like a cold read of a deleted item. It has no
+ * failure handler, so the failure goes to [ViewModelFailures.unhandled].
+ */
+fun failingBindingChildViewModel(message: String): BindingChildViewModel = object : BindingChildViewModel {
+    override val identity = "failing"
+    override val initialState = BindingChildViewModel.State("initial")
+    override val state: Flow<BindingChildViewModel.State> = flow {
+        emit(BindingChildViewModel.State("loaded"))
+        error(message)
+    }
+    override suspend fun select() {}
 }

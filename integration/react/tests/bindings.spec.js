@@ -69,3 +69,19 @@ test('rows reconnect on same-key replacement and unmount cancels observation and
   await expect.poll(() => page.evaluate(() => window.bindingProbe.cancelledActions)).toBe(1);
   await expect.poll(() => page.evaluate(() => window.bindingProbe.activeStateCollectors)).toBe(0);
 });
+
+test('a throwing state or list goes to the view model handler and keeps what is shown', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Populate', exact: true }).click();
+  await expect(page.getByTestId('row')).toHaveText('Row child');
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.locator('#note')).toHaveText('changed');
+  await page.getByRole('button', { name: 'Fail state', exact: true }).click();
+  await expect(page.locator('#note')).toHaveText('failed: gone');
+  await page.getByRole('button', { name: 'Fail rows', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.bindingProbe.handledFailures)).toEqual(['state: gone', 'rows: rows gone']);
+  await expect(page.getByTestId('row')).toHaveText('Row child');
+  expect(errors).toEqual([]);
+});

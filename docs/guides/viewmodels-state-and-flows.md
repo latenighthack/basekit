@@ -306,6 +306,56 @@ owner. Never apply replay-one sharing, conflation or dropping buffers to already
 computed list mutations. See [Kotlin Flow](https://kotlinlang.org/docs/coroutines-flow.html)
 for collection and context semantics.
 
+## When `state` or a list throws
+
+A cold `state` such as `combine(...).whileCollected { show(useCase.categoryMove(id)) }` throws
+once its read fails, for example with a 404 after the item is deleted. Bindings collect `state`
+through `boundState(viewModelName)` and each `@ViewModelList` through `boundList(...)`, on every
+platform. These catch the throw in Kotlin. Catching it in Swift is not possible: SKIE collects the
+Flow in its own coroutine, and an uncaught throw there aborts the process before Swift runs. A
+`CancellationException` passes through unchanged. The binding keeps the last state and the rows it
+has; nothing resets to `initialState`.
+
+The throw goes to the implementation's `ViewModelFailureHandler`, if it implements one, otherwise
+to `ViewModelFailures.unhandled`. Implement the handler on the implementation class, not on the
+`@ViewModelSpec` interface:
+
+```kotlin
+class CategoryMoveViewModelImpl(
+    private val navigator: CategoryMoveNavigator,
+    // ...
+) : CategoryMoveViewModel, ViewModelFailureHandler<CategoryMoveViewModel.State> {
+    override val state = combine(...).whileCollected { show(useCase.categoryMove(id)) }
+
+    override suspend fun onStateFailed(failure: ViewModelFailure, lastState: State): Flow<State> =
+        when (failure.error) {
+            is NotFound -> { navigator.close(); emptyFlow() }          // back out of the screen
+            is Offline -> flow { delay(5.seconds); emitAll(state) }    // retry
+            else -> flowOf(lastState.copy(error = "Couldn't load"))    // show an error
+        }
+
+    override suspend fun onListFailed(failure: ViewModelFailure) {
+        // failure.source names the list; the binding keeps its rows.
+    }
+}
+```
+
+`onStateFailed` runs in the binding's collecting coroutine, so it can suspend, navigate or wait.
+The binding continues with the flow it returns. If that flow throws, `onStateFailed` runs again.
+Returning `state` without a delay therefore retries immediately, every time it fails. The defaults
+of both methods report to `ViewModelFailures.unhandled` and keep what is shown. A throw from a
+handler goes there too.
+
+Install the fallback once at startup for logging and crash reporting:
+
+```kotlin
+ViewModelFailures.unhandled = { failure -> crashReporter.record(failure.error, failure.viewModelName, failure.source) }
+```
+
+The default prints the failure. `ViewModelFailures.report` catches and prints anything the hook
+throws, because a rethrow on Kotlin/Native would abort the process. The generated `Observing{Vm}`
+decorator forwards both methods to the implementation it wraps.
+
 ## Update reducers are pure; actions may suspend
 
 The protected API is `suspend fun update(updater: State.() -> State)`. The function

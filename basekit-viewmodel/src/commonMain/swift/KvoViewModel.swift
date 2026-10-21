@@ -28,7 +28,10 @@ open class KvoViewModel: NSObject {
     /// whoever awaited them, whereas a target-action thunk is fire-and-forget and has no caller to
     /// return to. Wire this to your telemetry so a failing button is not invisible.
     ///
-    /// (The state subscription cannot fail: SKIE bridges `state` to a non-throwing sequence.)
+    /// The state subscription does not report here. SKIE's sequence never throws to Swift: a throw
+    /// from the Kotlin flow aborts the process in SKIE's collector. The generated subclass collects
+    /// `boundState`, which catches the throw in Kotlin and passes it to the view model's
+    /// `ViewModelFailureHandler`, or to `ViewModelFailures.unhandled`.
     public var onActionError: ((Error) -> Void)?
 
     public override init() {

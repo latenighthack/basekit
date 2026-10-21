@@ -5,11 +5,11 @@ package com.latenighthack.basekit.viewmodel.codegen
  * single-type `@ViewModelList` binds through the plain `bindViewModels` helper, while a polymorphic
  * one dispatches over the exact declared `possibleTypes`.
  */
-internal fun androidListBinder(list: VmList): String =
-    if (list.possibleTypes.size == 1) androidSingleTypeBinder(list) else androidPolymorphicBinder(list)
+internal fun androidListBinder(vm: VmInfo, list: VmList): String =
+    if (list.possibleTypes.size == 1) androidSingleTypeBinder(vm, list) else androidPolymorphicBinder(vm, list)
 
 /** The original shape: one view factory, one child type, that type's State. */
-private fun androidSingleTypeBinder(list: VmList): String {
+private fun androidSingleTypeBinder(vm: VmInfo, list: VmList): String {
     val cap = list.propertyName.toUpperCamelCase()
     val elementState = list.elementStateQualifiedName ?: "kotlin.Any"
     return """
@@ -22,7 +22,7 @@ private fun androidSingleTypeBinder(list: VmList): String {
     |        recyclerView.bindViewModels(
     |            this,
     |            lifecycleScope,
-    |            viewModel.${list.propertyName},
+    |            viewModel.boundList(${kotlinStringLiteral(vm.qualifiedName)}, ${kotlinStringLiteral(list.propertyName)}, viewModel.${list.propertyName.kotlinRef()}),
     |            viewFactory,
     |            binder,
     |            stateBinder,
@@ -40,7 +40,7 @@ private fun androidSingleTypeBinder(list: VmList): String {
  * its own precise State type — a polymorphic list's element type is a bare marker, whose State would
  * otherwise erase to `kotlin.Any`.
  */
-private fun androidPolymorphicBinder(list: VmList): String {
+private fun androidPolymorphicBinder(vm: VmInfo, list: VmList): String {
     val cap = list.propertyName.toUpperCamelCase()
     val parameters = list.possibleTypes.joinToString("\n") { type ->
         val state = type.stateQualifiedName ?: "kotlin.Any"
@@ -57,7 +57,7 @@ private fun androidPolymorphicBinder(list: VmList): String {
     |        recyclerView.bindViewModelRows(
     |            this,
     |            lifecycleScope,
-    |            viewModel.${list.propertyName},
+    |            viewModel.boundList(${kotlinStringLiteral(vm.qualifiedName)}, ${kotlinStringLiteral(list.propertyName)}, viewModel.${list.propertyName.kotlinRef()}),
     |            listOf($specs),
     |        )
     |    }
@@ -66,6 +66,7 @@ private fun androidPolymorphicBinder(list: VmList): String {
 
 /** Runtime imports the generated activity needs for its list binders. */
 internal fun androidListImports(vm: VmInfo): List<String> = buildList {
+    if (vm.lists.any { !it.sectioned }) add("com.latenighthack.basekit.viewmodel.boundList")
     if (vm.lists.any { !it.sectioned && it.possibleTypes.size == 1 }) {
         add("com.latenighthack.basekit.viewmodel.bindViewModels")
     }

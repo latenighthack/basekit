@@ -27,6 +27,11 @@ public interface ViewModel<State> {
      * [StatefulViewModel] supplies hot, replaying, equality-conflated state. Direct implementations
      * document their replay/sharing behavior. Collecting a hot flow does not own its producer;
      * explicit `stateIn`/`shareIn` producers belong to the scope passed to those operators.
+     *
+     * Generated bindings collect this through [boundState], so a throw from `state` does not reach
+     * the platform. The error goes to [ViewModelFailureHandler.onStateFailed] when the implementation
+     * implements it, otherwise to [ViewModelFailures.unhandled], and the binding keeps the last state
+     * it rendered. `@ViewModelList` flows are collected the same way through [boundList].
      */
     public val state: Flow<State>
 }

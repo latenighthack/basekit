@@ -67,7 +67,7 @@ internal fun uiKitListBinder(list: VmList): String {
     |        ) { cv, indexPath, item in
     |            cellProvider(cv, indexPath, $childKvo(item))
     |        }
-    |        dataSource.bind(erased: viewModel.${list.swiftName.swiftSourceRef()})
+    |        dataSource.bind(erased: ${appleBoundList(list)})
     |        return dataSource
     |    }
     """.trimMargin()
@@ -96,7 +96,7 @@ internal fun appKitListBinder(list: VmList): String {
     |        ) { cv, indexPath, item in
     |            itemProvider(cv, indexPath, $childKvo(item))
     |        }
-    |        dataSource.bind(erased: viewModel.${list.swiftName.swiftSourceRef()})
+    |        dataSource.bind(erased: ${appleBoundList(list)})
     |        return dataSource
     |    }
     """.trimMargin()
@@ -246,7 +246,7 @@ internal fun appleSectionedListBinder(vm: VmInfo, list: VmList, style: AppleWrap
     |                { cv, indexPath, raw in provider(cv, indexPath, Self.${list.propertyName}Header(raw)) }
     |            }
     |        )
-    |        dataSource.bind(to: viewModel.${list.swiftName.swiftSourceRef()})
+    |        dataSource.bind(to: ${appleBoundList(list)})
     |        return dataSource
     |    }
     |    #endif

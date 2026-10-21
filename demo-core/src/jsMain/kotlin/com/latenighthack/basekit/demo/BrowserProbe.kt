@@ -23,6 +23,9 @@ class BrowserBindingProbe(metrics: JavaScriptPostHogMetrics? = null) {
     fun staticRows(title: String) = model.replaceStaticRows(title)
     fun populate() = model.replaceRows()
     fun empty() = model.clearRows()
+    fun failState(message: String) = model.failState(message)
+    fun failRows(message: String) = model.failRows(message)
+    val handledFailures: Array<String> get() = model.handledFailures.toTypedArray()
     fun navigate() {
         collector?.onNavigation(NavigationEvent.NavigatedTo(NavigationScreen.DETAIL, DetailViewModel::class, null,
             DetailNavigationTarget.DetailSource.HOME_ON_OPEN_DETAIL, null))

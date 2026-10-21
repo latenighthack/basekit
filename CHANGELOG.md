@@ -6,6 +6,22 @@ All notable changes to basekit are documented here. The format follows
 
 ## Next
 
+- A throw from a view model's `state` or one of its `@ViewModelList` flows no longer crashes the
+  app. On iOS it aborted the process inside SKIE's collector, before any Swift code ran; on Android
+  and Compose it crashed the Activity or the composition. Every generated binding (Observable and Kvo
+  wrappers, the Apple list bindings and binders, Compose `bind{Vm}` and its rows, the React hook and
+  its lists, `BaseActivity` and the RecyclerView helpers) now collects `boundState` and `boundList`.
+  These catch the throw in Kotlin and keep the last state and rows on screen. Cancellation still
+  propagates. The throw goes to the implementation's new `ViewModelFailureHandler`: `onStateFailed`
+  gets the error and the last state and returns the flow to continue with (an error state, nothing,
+  or `state` to retry), and `onListFailed` gets the error and the list's name. Without a handler, it
+  goes to `ViewModelFailures.unhandled`, which apps set at startup and which prints by default. The
+  Apple pass emits `{Vm}BoundLists.kt` with one typed `bound{List}()` extension per list for the Swift
+  wrappers. The generated `Observing{Vm}` forwards the handler. A `@ViewModelSpec` that extends
+  `ViewModelFailureHandler` is a build error.
+- Breaking: the deprecated `onError` property on generated `Observable{Vm}` wrappers is removed. It
+  was never called; failures now go to the view model's handler or `ViewModelFailures.unhandled`.
+
 - Apple navigation: `BasekitNavigationControllerHost` shows whatever path the router holds. Before, it
   only followed changes in the path's length, so a path that replaced its top entry kept showing the
   old screen. A path that adds one entry pushes it; one that drops entries from the top pops back to

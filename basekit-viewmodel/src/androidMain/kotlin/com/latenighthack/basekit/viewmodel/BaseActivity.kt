@@ -21,7 +21,9 @@ import kotlinx.coroutines.launch
  * [androidx.lifecycle.ViewModel] via [ViewModelProvider], so a rotation reuses the same instance
  * (and its state) instead of rebuilding it. State collection runs under
  * [repeatOnLifecycle]`(STARTED)`, so it stops while the Activity is stopped and restarts — replaying
- * the latest conflated state — when it returns to the foreground.
+ * the latest conflated state — when it returns to the foreground. State is collected through
+ * [boundState], so a throw from `state` goes to the view model's [ViewModelFailureHandler] or to
+ * [ViewModelFailures.unhandled] instead of crashing the Activity, and the last state stays rendered.
  */
 public abstract class BaseActivity<VM : ViewModel<State>, State> : ComponentActivity() {
 
@@ -43,7 +45,7 @@ public abstract class BaseActivity<VM : ViewModel<State>, State> : ComponentActi
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.state.collect { state -> onStateChanged(viewModel, state) }
+                viewModel.boundState(viewModelName).collect { state -> onStateChanged(viewModel, state) }
             }
         }
     }
@@ -63,6 +65,12 @@ public abstract class BaseActivity<VM : ViewModel<State>, State> : ComponentActi
 
     protected abstract fun createViewModel(): VM
 
+    /**
+     * Names [viewModel] in the [ViewModelFailure]s its state collection reports. The generated
+     * `Abstract{Vm}Activity` returns the spec's qualified name; the default is the implementation's.
+     */
+    protected open val viewModelName: String get() = viewModel::class.java.name
+
     protected abstract fun createView(context: Context, viewModel: VM): View
 
     protected open fun onBindView(viewModel: VM) {}
@@ -74,7 +82,7 @@ public abstract class BaseActivity<VM : ViewModel<State>, State> : ComponentActi
         onState(child, child.initialState)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                child.state.collect { onState(child, it) }
+                child.boundState(child::class.java.name).collect { onState(child, it) }
             }
         }
     }

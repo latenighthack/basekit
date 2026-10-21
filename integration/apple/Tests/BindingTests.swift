@@ -133,6 +133,82 @@ final class BindingTests: XCTestCase {
         dataSource.unbind()
     }
 
+    /// Without `boundState` this aborts the process inside SKIE's collector.
+    func testThrowingStateGoesToTheHandlerAndObserveReturns() async throws {
+        let raw = RealBindingProbeViewModel()
+        let model = ObservableBindingProbeViewModel(raw)
+        let observation = Task { await model.observe() }
+        try await eventually { raw.activeStateCollectors == 1 }
+        try await model.setNote("edited")
+        try await eventually { model.note == "edited" }
+        raw.failState(message: "gone")
+        // The handler's flow emits once and completes, so `observe()` returns by itself.
+        await observation.value
+        XCTAssertEqual(model.note, "failed: gone")
+        XCTAssertEqual(model.message.text, "hello")
+        XCTAssertEqual(raw.handledFailures, ["state: gone"])
+        XCTAssertEqual(raw.activeStateCollectors, 0)
+    }
+
+    func testKvoThrowingStateGoesToTheHandler() async throws {
+        let raw = RealBindingProbeViewModel()
+        let model = KvoBindingProbeViewModel(raw)
+        try await eventually { raw.activeStateCollectors == 1 }
+        raw.failState(message: "gone")
+        try await eventually { model.note == "failed: gone" }
+        XCTAssertEqual(raw.handledFailures, ["state: gone"])
+        model.unbind()
+    }
+
+    func testThrowingStateWithoutAHandlerGoesToTheGlobalFallback() async throws {
+        let log = FailureLog()
+        let previous = ViewModelFailures.shared.unhandled
+        ViewModelFailures.shared.unhandled = { failure in log.messages.append("\(failure.viewModelName).\(failure.source): \(failure.error.message ?? "")") }
+        defer { ViewModelFailures.shared.unhandled = previous }
+        let model = ObservableBindingChildViewModel(failingBindingChildViewModel(message: "deleted"))
+        await model.observe()
+        XCTAssertEqual(model.title, "loaded")
+        XCTAssertEqual(log.messages, ["com.latenighthack.basekit.demo.BindingChildViewModel.state: deleted"])
+    }
+
+    /// The path `DeltaListView` and `DeltaForEach` collect through.
+    func testThrowingListKeepsItsRowsInADeltaList() async throws {
+        let raw = RealBindingProbeViewModel()
+        let model = ObservableBindingProbeViewModel(raw)
+        let list = DeltaList<BindingChildViewModel>()
+        let collection = Task { await model.rows.collect(into: list) }
+        try await eventually { raw.activeRowCollectors == 1 }
+        raw.replaceRows()
+        try await eventually { list.totalSize == 1 }
+        raw.failRows(message: "rows gone")
+        await collection.value
+        XCTAssertEqual(list.totalSize, 1)
+        XCTAssertEqual(raw.handledFailures, ["rows: rows gone"])
+    }
+
+    func testThrowingListKeepsItsRowsInTheUIKitBinder() async throws {
+        let raw = RealBindingProbeViewModel()
+        let model = ObservableBindingProbeViewModel(raw)
+        let layout = UICollectionViewFlowLayout()
+        layout.itemSize = CGSize(width: 300, height: 40)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 640))
+        let collectionView = UICollectionView(frame: window.bounds, collectionViewLayout: layout)
+        collectionView.register(UICollectionViewCell.self, forCellWithReuseIdentifier: "row")
+        window.addSubview(collectionView)
+        window.isHidden = false
+        let dataSource = model.bindRows(collectionView) { cv, indexPath, _ in
+            cv.dequeueReusableCell(withReuseIdentifier: "row", for: indexPath)
+        }
+        try await eventually { raw.activeRowCollectors == 1 }
+        raw.replaceRows()
+        try await eventually { collectionView.numberOfItems(inSection: 0) == 1 }
+        raw.failRows(message: "rows gone")
+        try await eventually { raw.activeRowCollectors == 0 }
+        XCTAssertEqual(raw.handledFailures, ["rows: rows gone"])
+        XCTAssertEqual(collectionView.numberOfItems(inSection: 0), 1)
+        dataSource.unbind()
+    }
+
     private func eventually(_ condition: () -> Bool) async throws {
         for _ in 0..<200 {
             if condition() { return }
@@ -150,4 +226,8 @@ private final class RecordingResponder: NSObject, NavigationResponder {
 private final class RecordingActionObserver: NSObject, ViewModelActionObserver {
     var names: [String] = []
     func onAction(event: ViewModelActionEvent) { names.append(event.actionName) }
+}
+
+private final class FailureLog {
+    var messages: [String] = []
 }

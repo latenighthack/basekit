@@ -18,6 +18,9 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 api(project(":basekit-viewmodel-annotations"))
+                // Flow is in this module's public API (ViewModel.state, boundState, ViewModelFailureHandler)
+                // and in the generated Observing{Vm} decorators, so consumers compile against it.
+                api(libs.kotlinx.coroutines.core)
                 api(libs.deltalist.core)
                 // kotlin-inject annotations (@Inject/@Assisted/@Provides/@Component) are used by
                 // consumers on their ViewModels and by the generated GeneratedViewModelModule.

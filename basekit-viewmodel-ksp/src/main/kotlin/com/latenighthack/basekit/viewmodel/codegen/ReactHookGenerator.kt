@@ -5,7 +5,8 @@ import com.google.devtools.ksp.processing.Dependencies
 
 /**
  * Emits, per `@ViewModelSpec`, a `@JsExport use{Vm}(viewModel)` React hook (Kotlin/JS). It maps the
- * ViewModel's `state` onto a `useState` box via a `useEffect`-scoped Flow collection, exposes each
+ * ViewModel's `state` onto a `useState` box via a `useEffect`-scoped collection of `boundState` (which
+ * passes a throw from `state` to the view model's failure handler and keeps the last state), exposes each
  * zero-arg action and single-arg mutator as a `Promise`-returning callback, and each `@ViewModelList`
  * as a stable delegated iterable from deltalist-react. Returns a plain JS object for the component to
  * consume. List children are closed generated handles: `kind` selects the exact row, `key` supplies
@@ -20,10 +21,12 @@ class ReactHookGenerator(
             val hookName = "use${vm.simpleName}"
 
             val listHooks = vm.lists.joinToString("\n") { list ->
+                // Memoized per view model: the deltalist hooks restart collection on a new flow instance.
+                val source = "React.useMemo({ viewModel.boundList(${kotlinStringLiteral(vm.qualifiedName)}, ${kotlinStringLiteral(list.propertyName)}, viewModel.${list.propertyName.kotlinRef()}) }, arrayOf(viewModelArg))"
                 if (list.sectioned) {
-                    "    val ${list.propertyName}Value = useMappedSectionedDeltaList(viewModel.${list.propertyName.kotlinRef()}, ::${reactHeaderFactoryName(vm, list)}, ::${reactListFactoryName(vm, list)})"
+                    "    val ${list.propertyName}Value = useMappedSectionedDeltaList($source, ::${reactHeaderFactoryName(vm, list)}, ::${reactListFactoryName(vm, list)})"
                 } else {
-                    "    val ${list.propertyName}Value = useMappedDeltaList(viewModel.${list.propertyName.kotlinRef()}, ::${reactListFactoryName(vm, list)})"
+                    "    val ${list.propertyName}Value = useMappedDeltaList($source, ::${reactListFactoryName(vm, list)})"
                 }
             }
 
@@ -54,6 +57,8 @@ class ReactHookGenerator(
                 writeln("import com.latenighthack.basekit.viewmodel.React")
                 writeln("import com.latenighthack.basekit.viewmodel.bindFlow")
                 writeln("import com.latenighthack.basekit.viewmodel.ReactActionScope")
+                writeln("import com.latenighthack.basekit.viewmodel.boundState")
+                if (vm.lists.isNotEmpty()) writeln("import com.latenighthack.basekit.viewmodel.boundList")
                 writeln("import com.latenighthack.deltalist.react.useMappedDeltaList")
                 if (vm.lists.any { it.sectioned }) writeln("import com.latenighthack.deltalist.react.useMappedSectionedDeltaList")
                 writeln("import kotlinx.coroutines.CoroutineScope")
@@ -96,7 +101,7 @@ class ReactHookGenerator(
                     |
                     |    React.useEffect({
                     |        setState(viewModel.initialState)
-                    |        bindFlow(viewModel.state) { s -> setState(s) }
+                    |        bindFlow(viewModel.boundState(${kotlinStringLiteral(vm.qualifiedName)})) { s -> setState(s) }
                     |    }, arrayOf(viewModelArg))
                     """.trimMargin()
                 )

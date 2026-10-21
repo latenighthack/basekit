@@ -40,6 +40,8 @@ function Probe() {
     <button onClick={() => probe.staticRows('static original')}>Static original</button>
     <button onClick={() => probe.staticRows('static replacement')}>Static replacement</button>
     <button onClick={() => probe.empty()}>Empty rows</button>
+    <button onClick={() => probe.failState('gone')}>Fail state</button>
+    <button onClick={() => probe.failRows('rows gone')}>Fail rows</button>
     <button onClick={() => void model.waitUntilCancelled().catch(() => {})}>Wait</button>
     <div id="rows">{model.rows.map(item => <Row key={item.key} item={item} />)}</div>
     <output id="error">{error}</output>

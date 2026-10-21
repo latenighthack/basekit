@@ -31,6 +31,7 @@ internal const val SECTIONED_DELTA_LIST = "com.latenighthack.deltalist.Sectioned
 internal const val OBJC_NAME_ANNOTATION = "kotlin.native.ObjCName"
 internal const val REACT_ADAPTER_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ReactBindingAdapter"
 internal const val VIEWMODEL_INTERFACE = "com.latenighthack.basekit.viewmodel.ViewModel"
+internal const val VIEWMODEL_FAILURE_HANDLER = "com.latenighthack.basekit.viewmodel.ViewModelFailureHandler"
 private const val INJECT_ANNOTATION = "me.tatarka.inject.annotations.Inject"
 private const val ASSISTED_ANNOTATION = "me.tatarka.inject.annotations.Assisted"
 
@@ -39,7 +40,8 @@ private const val ASSISTED_ANNOTATION = "me.tatarka.inject.annotations.Assisted"
  *
  *  - **android** pass -> [AndroidBindingGenerator] (Kotlin into `androidMain`)
  *  - **apple** passes -> [SwiftKvoGenerator] (`Kvo{Vm}.swift`) + [SwiftUIObservableGenerator]
- *    (`Observable{Vm}.swift`); ios/macos/tvos/watchos all take this branch and emit identical files
+ *    (`Observable{Vm}.swift`), plus the Kotlin list adapters they collect ([AppleBoundListsGenerator]);
+ *    ios/macos/tvos/watchos all take this branch and emit identical files
  *  - **js** pass     -> [ReactHookGenerator] (Kotlin/JS into `jsMain`)
  *
  * The active pass is inferred from the KSP output path (as the reference ViewModel processor does),
@@ -283,6 +285,7 @@ class ViewModelProcessor(
                         vm.stateProperties.forEach { it.swiftBindingType() }
                         vm.mutators.forEach { swiftType(it.type) }
                     }
+                    AppleBoundListsGenerator(codeGenerator, dependencies).generate(viewModels)
                     SwiftKvoGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
                     SwiftUIObservableGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
                     // A factory taking a navigator means the graph has edges, so the navigation processor

@@ -24,6 +24,8 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                     import androidx.compose.ui.Modifier
                     import androidx.lifecycle.ViewModelStoreOwner
                     import androidx.lifecycle.compose.collectAsStateWithLifecycle
+                    import com.latenighthack.basekit.viewmodel.boundList
+                    import com.latenighthack.basekit.viewmodel.boundState
                     import com.latenighthack.basekit.viewmodel.compose.*
                     import kotlinx.coroutines.Job
 
@@ -67,14 +69,16 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                         "${type.simpleName.toListCaseName()}(${type.qualifiedName.substringBeforeLast('.')}.bind${type.simpleName}(raw, launchAction))"
                     val single = list.possibleTypes.singleOrNull()?.takeIf { it.qualifiedName == list.elementQualifiedName }
                     val name = list.propertyName.toUpperCamelCase()
+                    // Remembered per model: the row composables restart collection on a new flow instance.
+                    val source = "remember(model) { model.boundList(${kotlinStringLiteral(vm.qualifiedName)}, ${kotlinStringLiteral(list.propertyName)}, model.${list.propertyName.kotlinRef()}) }"
                     // Each list binds twice: `Items` scrolls by itself (a LazyColumn), and `ItemsForEach`
                     // renders its rows in place among other content, as SwiftUI's `DeltaForEach` does.
                     for (inline in listOf(false, true)) {
                         val rowsCall = when {
-                            list.sectioned && inline -> "DeltaSectionsForEach(source = model.${list.propertyName}, header = header, "
-                            list.sectioned -> "DeltaSections(source = model.${list.propertyName}, header = header, "
-                            inline -> "DeltaForEach(source = model.${list.propertyName}, "
-                            else -> "DeltaRows(source = model.${list.propertyName}, "
+                            list.sectioned && inline -> "DeltaSectionsForEach(source = $source, header = header, "
+                            list.sectioned -> "DeltaSections(source = $source, header = header, "
+                            inline -> "DeltaForEach(source = $source, "
+                            else -> "DeltaRows(source = $source, "
                         }
                         val modifierArgument = if (inline) "" else "modifier = modifier, "
                         val modifierParameter = if (inline) "" else "modifier: Modifier = Modifier, "
@@ -97,7 +101,8 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                 file.writeln("""
                     @Composable
                     public fun bind${vm.simpleName}(model: ${vm.qualifiedName}, launchAction: (suspend () -> Unit) -> Job): ${vm.simpleName}Binding {
-                        val state by model.state.collectAsStateWithLifecycle(model.initialState)
+                        // A throw from `state` goes to the view model's failure handler; the last state stays.
+                        val state by remember(model) { model.boundState(${kotlinStringLiteral(vm.qualifiedName)}) }.collectAsStateWithLifecycle(model.initialState)
                         return ${vm.simpleName}Binding(model, state, launchAction${bound.joinToString("") { (mutator, property) -> ",\n                            rememberMutatorBinding(state.${property.name}, launchAction) { model.${mutator.name}(it) }" }})
                     }
 

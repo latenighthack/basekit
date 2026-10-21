@@ -13,7 +13,8 @@ import kotlinx.coroutines.launch
 /**
  * RecyclerView adapter over a `Flow<Delta<ChildVm>>` where each item is itself a [ViewModel]. The
  * delta mechanics (insert/remove/move/update, stable ids, lazy lists) come from deltalist's
- * [DeltaAdapter]; this layer adds a per-row subscription to each child ViewModel's state.
+ * [DeltaAdapter]; this layer adds a per-row subscription to each child ViewModel's state, collected
+ * through [boundState] and named by the row's implementation class.
  */
 public class ViewModelDeltaAdapter<T : ViewModel<S>, S>(
     deltaList: DeltaList<T>,
@@ -36,7 +37,7 @@ public class ViewModelDeltaAdapter<T : ViewModel<S>, S>(
         binder(holder.itemView, vm)
         stateBinder(holder.itemView, vm, vm.initialState)
         holder.job = scope.launch {
-            vm.state.collect { state -> stateBinder(holder.itemView, vm, state) }
+            vm.boundState(vm::class.java.name).collect { state -> stateBinder(holder.itemView, vm, state) }
         }
     }
 
@@ -68,7 +69,7 @@ public class ViewModelRowSpec<T : ViewModel<S>, S> @PublishedApi internal constr
         binder(view, vm)
         stateBinder(view, vm, vm.initialState)
         return scope.launch {
-            vm.state.collect { state -> stateBinder(view, vm, state) }
+            vm.boundState(vm::class.java.name).collect { state -> stateBinder(view, vm, state) }
         }
     }
 }
