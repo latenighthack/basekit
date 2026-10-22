@@ -30,8 +30,12 @@ interface HomeViewModel :
     NavigationDestination<HomeViewModel.Args>,
     ViewModel<HomeViewModel.State> {
 
+    // "/" captures nothing, so the route sets `welcome` to false and `referrer` to null.
     @Route("/")
-    class Args : NavigatorArgs()
+    class Args : NavigatorArgs() {
+        var welcome: Boolean by storedProperty()
+        var referrer: String? by storedProperty()
+    }
 
     data class State(val title: String, val subtitle: String?)
 

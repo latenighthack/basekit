@@ -103,4 +103,12 @@ class ReactHookGeneratorTest {
         assertContains(types, "{ readonly kind: 'row'; readonly key: string | number; readonly id: string | number; use(): RowViewModelBinding }")
         assertContains(types, "{ readonly kind: 'named'; readonly key: string | number; use(): NamedViewModelBinding }")
     }
+
+    @Test
+    fun compose_bindings_expose_the_view_model_identity_like_swift() {
+        val out = RecordingCodeGenerator()
+        ComposeGenerator(out, Dependencies(false)).generate(listOf(probe.copy(identityProperty = "agentId"), probe.copy(simpleName = "PlainViewModel")))
+        assertContains(out.text("ProbeViewModelCompose.kt"), "    public val basekitIdentity: String get() = model.agentId")
+        assertFalse("basekitIdentity" in out.text("PlainViewModelCompose.kt"))
+    }
 }

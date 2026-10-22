@@ -6,6 +6,20 @@ All notable changes to basekit are documented here. The format follows
 
 ## Next
 
+- Android: a nullable navigation argument (`String?`, `ByteArray?`, `Int?`, `Boolean?`) set to null
+  reads back null. Before, `String?` and `ByteArray?` threw a `NullPointerException`, and `Int?` and
+  `Boolean?` read back `0` and `false`.
+- Android: reading a navigation argument that was never set fails with "Navigation argument … was
+  never set", as on Apple, JVM and JS. Before, an unset `Int` or `Boolean` read back `0` or `false`,
+  and an unset `String` or `ByteArray` threw a `NullPointerException`.
+- Navigation: a route sets every argument of its `Args`. An argument it does not capture is set to
+  `false` for a `Boolean` and `null` for a nullable type. Before, the route left those arguments
+  unset, so opening the destination from its address crashed on Apple when it read one, and read
+  `false` on Android. Any other argument the route does not capture is now a build error.
+- Compose: a generated binding of a view model with a `@ViewModelIdentity` has `basekitIdentity`, as
+  the Swift wrappers do. A list slot can tell which item each row is, for example to map a pager page
+  back to its ID.
+
 - React: the generated hooks read state and lists with `useSyncExternalStore` (React 18 or later),
   from one store per view model instance shared by every component bound to it. Collection starts on
   `Dispatchers.Unconfined` during the first render, so when `state` emits on subscription (a

@@ -111,6 +111,39 @@ class GeneratedHostTest {
         compose.onNodeWithText("Row more@1").assertExists()
     }
 
+    @Test fun listRowsReportTheirIdentityAcrossMovesAndUpdates() {
+        val raw = RealBindingProbeViewModel()
+        compose.setContent {
+            BindingProbeViewModelHost(
+                ownerKey = "identity", storeOwner = compose.activity,
+                prepare = { PreparedViewModel(raw) {} },
+                onActionError = {}, loading = {}, failure = { _, _ -> },
+            ) { model ->
+                Column {
+                    model.SectionsForEach(header = { _, _ -> }, bindingChild = { child ->
+                        BasicText("${child.basekitIdentity}:${child.state.title}", Modifier.clickable { child.launch { select() } })
+                    })
+                    model.RowsForEach(bindingChild = { child -> BasicText("row ${child.basekitIdentity}:${child.state.title}") })
+                }
+            }
+        }
+        compose.onNodeWithText("pinned:Row pinned").performClick()
+        compose.onNodeWithText("pinned:Selected pinned").assertExists()
+        compose.onNodeWithText("more:Row more").assertExists()
+
+        // A row inserted above moves the others; each keeps its identity and its state.
+        compose.runOnIdle { raw.insertSectionRow(0, BindingProbeViewModel.Section.Group("new"), "fresh") }
+        compose.onNodeWithText("fresh:Row fresh").assertExists()
+        compose.onNodeWithText("pinned:Selected pinned").assertExists()
+        compose.onNodeWithText("more:Row more").assertExists()
+
+        // A replaced row with the same identity reports the same identity.
+        compose.runOnIdle { raw.replaceRows() }
+        compose.onNodeWithText("row child:Row child").assertExists()
+        compose.runOnIdle { raw.replaceRows() }
+        compose.onNodeWithText("row child:Row child").assertExists()
+    }
+
     @Test fun theStackHostShowsEachSheetWithTheRouterMadeForIt() {
         val router = BasekitNavigationRouter { request ->
             if (request.edge == AppleNavigationEdge.HOME_ON_PICK) BasekitNavigationDecision(BasekitPresentation.Sheet) else BasekitNavigationDecision()

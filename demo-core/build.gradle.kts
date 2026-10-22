@@ -75,6 +75,13 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.test)
             }
         }
+        // Route tests against the Bundle-backed args, on a real Bundle.
+        val androidUnitTest by getting {
+            dependencies {
+                implementation(kotlin("test-junit"))
+                implementation("org.robolectric:robolectric:4.14.1")
+            }
+        }
     }
 }
 
@@ -82,6 +89,11 @@ kotlin {
 // scripts/verify-binding-diagnostics.py expects the viewmodel processor to reject.
 if (providers.gradleProperty("basekit.demo.orphanDestination").isPresent) {
     kotlin.sourceSets.named("commonMain") { kotlin.srcDir("src/orphanDestination/kotlin") }
+}
+// `-Pbasekit.demo.uncapturedRouteArg` adds a route that leaves an Int argument uncaptured, which
+// scripts/verify-binding-diagnostics.py expects the navigation processor to reject.
+if (providers.gradleProperty("basekit.demo.uncapturedRouteArg").isPresent) {
+    kotlin.sourceSets.named("commonMain") { kotlin.srcDir("src/uncapturedRouteArg/kotlin") }
 }
 
 composeCompiler {

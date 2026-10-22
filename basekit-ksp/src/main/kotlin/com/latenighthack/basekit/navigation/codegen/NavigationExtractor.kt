@@ -201,6 +201,31 @@ class NavigationExtractor(private val logger: KSPLogger) {
             }
         }
 
+        // A route sets every argument: a capture, or the default of an argument it does not capture.
+        // Without one the destination would read an unset argument, which each platform treats
+        // differently, so an argument with no default must be captured.
+        val routeDefaults = if (routePath == null) emptyList() else argsDeclaration
+            ?.getAllProperties()
+            ?.filter { it.isDelegated() && it.isMutable && it.simpleName.asString() !in routeArgs }
+            ?.mapNotNull { prop ->
+                val name = prop.simpleName.asString()
+                val type = prop.type.resolve()
+                when {
+                    type.isMarkedNullable -> name to "null"
+                    type.declaration.qualifiedName?.asString() == "kotlin.Boolean" -> name to "false"
+                    else -> {
+                        logger.error(
+                            "${simpleName}.Args.$name is not captured by \"$routePath\" and has no default; " +
+                                "capture it with @RouteArg, or make it nullable (null) or a Boolean (false)",
+                            prop,
+                        )
+                        null
+                    }
+                }
+            }
+            ?.toList()
+            .orEmpty()
+
         val navNameOverride = declaration.stringArgument(DESTINATION_ANNOTATION, "navName")
             ?.takeIf { it.isNotEmpty() }
         val navName = navNameOverride ?: simpleName.toDestinationNavName()
@@ -221,6 +246,7 @@ class NavigationExtractor(private val logger: KSPLogger) {
             routeArgs = routeArgs,
             edges = edges,
             routeAliases = routeAliases,
+            routeDefaults = routeDefaults,
         )
     }
 

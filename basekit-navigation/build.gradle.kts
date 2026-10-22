@@ -34,5 +34,12 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.test)
             }
         }
+        // The Bundle-backed args need a real Bundle; android.jar's stubs throw.
+        val androidUnitTest by getting {
+            dependencies {
+                implementation(kotlin("test-junit"))
+                implementation("org.robolectric:robolectric:4.14.1")
+            }
+        }
     }
 }

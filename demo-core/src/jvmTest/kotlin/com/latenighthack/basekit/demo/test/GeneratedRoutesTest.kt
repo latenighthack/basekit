@@ -22,6 +22,13 @@ class GeneratedRoutesTest {
     }
 
     @Test
+    fun aRouteSetsTheArgumentsItDoesNotCapture() {
+        val args = demoRoutes.match("/")?.args as HomeViewModel.Args
+        assertEquals(false, args.welcome)
+        assertNull(args.referrer)
+    }
+
+    @Test
     fun aQueryTemplateWithoutItsParameterDoesNotMatch() {
         assertNull(demoRoutes.match("/items"))
         assertNull(demoRoutes.match("/items?item="))

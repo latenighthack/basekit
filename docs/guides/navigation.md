@@ -158,7 +158,9 @@ navigation helpers.
 
 The typed `storedProperty<ItemId>()` shape above needs a qualified platform codec.
 Current Android `NavigatorArgs` stores primitive supported values directly and
-falls back to `Serializable` for other types. A generated ID class is not
+falls back to `Serializable` for other types. A nullable argument stores and reads
+back null on every platform, and reading an argument that was never set fails
+with its name on every platform. A generated ID class is not
 automatically Serializable. Current Apple arguments use in-memory storage; that
 does not establish process restoration. Prove the chosen wrapper's transport or
 provide a narrow adapter before claiming the Args work on every target.
@@ -198,6 +200,19 @@ the registration order. So a plain `/requests`, `/requests?request={requestId}`
 and `/requests?task={taskId}` can open three destinations. Equally specific
 templates keep registration order. A query part that is not `key={name}`, a name
 captured twice, or a `@RouteArg` its route does not capture is a build error.
+
+A route sets every argument of its `Args`, so a destination opened from its address
+never reads an unset one. An argument it does not capture gets a default: `false`
+for a `Boolean`, `null` for a nullable type. Any other argument that the route does
+not capture is a build error; capture it, or make it nullable or a `Boolean`.
+
+```kotlin
+@Route("/sign-up")
+class Args() : NavigatorArgs() {
+    var inviteCode: String? by storedProperty() // null when opened from /sign-up
+    var isAdmin: Boolean by storedProperty()    // false when opened from /sign-up
+}
+```
 
 `GeneratedRoutes` registers each alias with the same args factory as the path.
 An alias must capture the same `{params}` as the path, from its path or its

@@ -73,3 +73,10 @@ expected = 'Destination com.latenighthack.basekit.demo.OrphanViewModel (declared
 if result.returncode == 0 or expected not in result.stdout or 'OrphanViewModel.kt:' not in result.stdout:
     raise SystemExit(result.stdout)
 print('KSP rejected a destination without a @ViewModelInject implementation.')
+# A route must set every argument it does not capture; an Int has no default.
+result = subprocess.run([str(root / 'gradlew'), ':demo-core:kspCommonMainKotlinMetadata', '-Pbasekit.demo.uncapturedRouteArg',
+                         '--console=plain'], cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+expected = 'UncapturedRouteArgViewModel.Args.count is not captured by "/uncaptured" and has no default'
+if result.returncode == 0 or expected not in result.stdout or 'UncapturedRouteArgViewModel.kt:' not in result.stdout:
+    raise SystemExit(result.stdout)
+print('KSP rejected a route that leaves an argument without a default.')

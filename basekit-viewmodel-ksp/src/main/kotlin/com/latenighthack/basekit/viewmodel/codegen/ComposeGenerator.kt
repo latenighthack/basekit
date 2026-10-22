@@ -42,6 +42,12 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                     ) {
                         public fun launch(action: suspend ${vm.simpleName}Binding.() -> Unit): Job = launchAction { action() }
                 """.trimIndent())
+                vm.identityProperty?.let { identity ->
+                    // The row's @ViewModelIdentity, as Swift's `basekitIdentity`: a list slot can tell
+                    // which domain item a row is, e.g. to map a pager page back to its ID.
+                    file.writeln("    /** This view model's `@ViewModelIdentity`; it never changes for the instance. */")
+                    file.writeln("    public val basekitIdentity: String get() = model.${identity.kotlinRef()}")
+                }
                 vm.actions.forEach { file.writeln("    public suspend fun ${it.name}() { model.${it.name}() }") }
                 val identified = vm.actionIdentifierMembers()
                 if (identified.isNotEmpty()) {

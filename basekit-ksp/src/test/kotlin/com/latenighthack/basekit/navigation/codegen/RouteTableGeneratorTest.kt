@@ -52,6 +52,30 @@ class RouteTableGeneratorTest {
     }
 
     @Test
+    fun aRouteSetsEveryArgumentItDoesNotCapture() {
+        val output = RecordingCodeGenerator()
+        fun destination(name: String, path: String, captured: List<String>) = DestinationInfo(
+            simpleName = "${name}ViewModel",
+            qualifiedName = "sample.${name}ViewModel",
+            navName = name.lowercase(),
+            argsQualifiedName = "sample.${name}ViewModel.Args",
+            argsSwiftName = "${name}ViewModelArgs",
+            responseQualifiedName = null,
+            responseSwiftName = null,
+            routePath = path,
+            routeArgs = captured,
+            edges = emptyList(),
+            routeDefaults = listOf("isAdmin" to "false", "inviteCode" to "null"),
+        )
+        RouteTableGenerator(output, Dependencies(false), "sample").generate(
+            listOf(destination("Join", "/sign-up", emptyList()), destination("Agent", "/agents/{agentId}", listOf("agentId"))),
+        )
+        val source = output.source()
+        assertContains(source, "table.register(\"/sign-up\") { params ->\n            sample.JoinViewModel.Args().apply {\n                isAdmin = false\n                inviteCode = null\n            }")
+        assertContains(source, "sample.AgentViewModel.Args().apply {\n                agentId = params.getValue(\"agentId\")\n                isAdmin = false\n                inviteCode = null\n            }")
+    }
+
+    @Test
     fun routeParamsReadsEveryCapture() {
         assertEquals(setOf("id", "tab"), routeParams("/detail/{id}/{tab}"))
         assertEquals(setOf("teamId", "taskId"), routeParams("/teams/{teamId}/requests?task={taskId}"))

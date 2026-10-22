@@ -40,7 +40,9 @@ screens:
   Home:
     spec: com.latenighthack.basekit.demo.HomeViewModel
     navigation:
-      args: {}
+      args:
+        welcome: Boolean
+        referrer: String?
       route: "/"
       route_args: []
       response: null

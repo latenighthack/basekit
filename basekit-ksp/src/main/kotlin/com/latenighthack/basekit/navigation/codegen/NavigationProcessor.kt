@@ -67,6 +67,11 @@ data class DestinationInfo(
     val hosted: Boolean = false,
     /** `@Route(aliases)`: other paths that open the destination, with the same params as [routePath]. */
     val routeAliases: List<String> = emptyList(),
+    /**
+     * The value a route gives each argument it does not capture, as Kotlin source: `false` for a
+     * `Boolean`, `null` for a nullable type. A route sets these so no platform reads an unset argument.
+     */
+    val routeDefaults: List<Pair<String, String>> = emptyList(),
 )
 
 /**
