@@ -6,6 +6,17 @@ All notable changes to basekit are documented here. The format follows
 
 ## Next
 
+- Navigation: route templates capture query parameters. Before, `RouteTable` dropped the query before
+  matching, so an address such as `/requests?request=r1` could not open a destination. Each
+  `key={name}` part after `?` in a `@Route` template (or alias) binds the URL's `key` parameter to the
+  `@RouteArg` named `name`; for example, `@Route("/requests?request={requestId}")`. The value is
+  form-decoded. The template matches only when every captured key has a non-empty value, and
+  query parameters it does not name are ignored. When several templates match, the one capturing
+  more query parameters wins over registration order, so `/requests` and
+  `/requests?task={taskId}` open different destinations. Path-only tables resolve as before. A query
+  part that is not `key={name}`, a name captured twice, or a `@RouteArg` its route does not capture is
+  now a build error. The last one was a crash at match time before.
+
 - Generated navigation: sheets stack. The generated `BasekitNavigationRouter` (Swift and Compose) now
   makes a router of its own for every entry it presents other than by push: a sheet, a full-screen
   cover or a custom presentation. `router.host(for: entry)` (Compose: `router.host(entry)`) returns the

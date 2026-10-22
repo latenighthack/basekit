@@ -163,7 +163,7 @@ automatically Serializable. Current Apple arguments use in-memory storage; that
 does not establish process restoration. Prove the chosen wrapper's transport or
 provide a narrow adapter before claiming the Args work on every target.
 
-The current `@RouteArg` path binding requires `String`. Confine any such generated
+The current `@RouteArg` binding requires `String`. Confine any such generated
 encoded field to a route adapter, immediately decode it into `ItemId`, and pass
 only typed arguments to the application factory. Use distinct adapter types if
 needed; never add a public raw-string ID overload or weaken domain Args to satisfy
@@ -179,9 +179,29 @@ lists the others as aliases:
 class Args() : NavigatorArgs()
 ```
 
+A template can also capture query parameters. Each `key={name}` part after `?`
+binds the URL's `key` parameter to the `@RouteArg` named `name`:
+
+```kotlin
+@Route("/requests?request={requestId}")
+class Args() : NavigatorArgs() {
+    @RouteArg var requestId: String by storedProperty()
+}
+```
+
+`/requests?request=r1` opens it with `requestId = "r1"`. The value is decoded as
+a form value (`+` is a space, `%XX` an escaped byte). The template matches only
+when every key it captures has a non-empty value. Query parameters it does not
+name are ignored, and a repeated key gives its first value. When several
+templates match one URL, the one capturing more query parameters wins, whatever
+the registration order. So a plain `/requests`, `/requests?request={requestId}`
+and `/requests?task={taskId}` can open three destinations. Equally specific
+templates keep registration order. A query part that is not `key={name}`, a name
+captured twice, or a `@RouteArg` its route does not capture is a build error.
+
 `GeneratedRoutes` registers each alias with the same args factory as the path.
-An alias must capture the same `{params}` as the path, because the factory binds
-every `@RouteArg` from the match; the build fails otherwise. The catalog records
+An alias must capture the same `{params}` as the path, from its path or its
+query, because the factory binds every `@RouteArg` from the match; the build fails otherwise. The catalog records
 aliases as `route_aliases`.
 
 Tokens, proofs, SDK objects, pending continuations and arbitrary return URLs do

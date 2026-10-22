@@ -6,7 +6,8 @@ import com.google.devtools.ksp.processing.Dependencies
 /**
  * Emits `GeneratedRoutes.register(table)`, which registers one deep-link route per `@Route`
  * destination, plus one per `@Route` alias, into a [com.latenighthack.basekit.navigation.RouteTable].
- * Path parameters annotated `@RouteArg` are bound from the matched URL (String-valued in this slice).
+ * Properties annotated `@RouteArg` are bound from the matched URL's path and query captures
+ * (String-valued in this slice).
  */
 class RouteTableGenerator(
     private val codeGenerator: CodeGenerator,

@@ -13,6 +13,7 @@ screens:
     navigation:
       args: { id: String }
       route: "/detail/{id}"
+      route_aliases: ["/items?item={id}"]
       route_args: [id]
       response: null
 

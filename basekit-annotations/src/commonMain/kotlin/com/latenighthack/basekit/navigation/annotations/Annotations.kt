@@ -29,15 +29,20 @@ public annotation class Destination(val webPath: String = "", val navName: Strin
 public annotation class HostedComponent(val navName: String = "")
 
 /**
- * Declares the deep-link path template for a destination's `Args` type, e.g. `/detail/{id}`.
+ * Declares the deep-link template for a destination's `Args` type, e.g. `/detail/{id}`. A template can
+ * also capture query parameters: each `key={name}` part after `?` binds the URL's `key` parameter, so
+ * `/requests?request={requestId}` opens for `/requests?request=7` with `requestId` = `7`. It opens only
+ * when every captured key has a non-empty value; other query parameters are ignored. When several
+ * templates match, one capturing more query parameters wins, so `/requests` and
+ * `/requests?request={requestId}` can open different destinations.
  *
- * @param aliases other paths that open the same destination, such as an old URL kept working. Each
- *   must capture the same `{params}` as [path].
+ * @param aliases other templates that open the same destination, such as an old URL kept working. Each
+ *   must capture the same `{params}` as [path], from its path or its query.
  */
 @Target(AnnotationTarget.CLASS)
 public annotation class Route(val path: String = "", val aliases: Array<String> = [])
 
-/** Marks an `Args` property as a route (path) parameter bound from the matched URL. */
+/** Marks an `Args` property as a route parameter bound from the matched URL's path or query capture of the same name. */
 @Target(AnnotationTarget.PROPERTY)
 public annotation class RouteArg
 

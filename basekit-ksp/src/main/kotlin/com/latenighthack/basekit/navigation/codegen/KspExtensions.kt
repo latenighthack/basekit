@@ -19,9 +19,31 @@ fun KSAnnotated.stringListArgument(annotationFqn: String, argumentName: String):
         ?.arguments?.firstOrNull { it.name?.asString() == argumentName }
         ?.value as? List<*>).orEmpty().filterIsInstance<String>()
 
-/** The `{name}` parameters a route template captures, e.g. `/detail/{id}` -> `[id]`. */
-fun routeParams(template: String): Set<String> =
-    Regex("""\{([^/}]+)}""").findAll(template).map { it.groupValues[1] }.toSet()
+/**
+ * The `{name}` parameters a route template captures from its path and its query, e.g.
+ * `/detail/{id}` -> `[id]` and `/requests?request={requestId}` -> `[requestId]`.
+ */
+fun routeParams(template: String): Set<String> = routeCaptures(template).toSet()
+
+private fun routeCaptures(template: String): List<String> =
+    Regex("""\{([^/}]+)}""").findAll(template).map { it.groupValues[1] }.toList()
+
+/**
+ * Why `RouteTable.register` would reject [template], or nothing: each part after `?` must be
+ * `key={name}`, and no name may be captured twice.
+ */
+fun routeTemplateProblems(template: String): List<String> = buildList {
+    template.substringAfter('?', "").split('&').filter { it.isNotEmpty() }.forEach { part ->
+        val key = part.substringBefore('=')
+        val value = part.substringAfter('=', "")
+        if (key.isEmpty() || value.length < 2 || !value.startsWith("{") || !value.endsWith("}")) {
+            add("query part \"$part\" must be key={name}")
+        }
+    }
+    routeCaptures(template).groupingBy { it }.eachCount().filterValues { it > 1 }.keys.forEach {
+        add("\"{$it}\" is captured more than once")
+    }
+}
 
 /** Kotlin/Native flattens nested classes into their enclosing class chain for Swift export. */
 fun KSClassDeclaration.swiftExportName(): String {

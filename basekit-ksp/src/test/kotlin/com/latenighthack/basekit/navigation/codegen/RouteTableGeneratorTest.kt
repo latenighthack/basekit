@@ -30,8 +30,39 @@ class RouteTableGeneratorTest {
     }
 
     @Test
+    fun aQueryCaptureBindsItsArgLikeAPathCapture() {
+        val output = RecordingCodeGenerator()
+        val request = DestinationInfo(
+            simpleName = "RequestViewModel",
+            qualifiedName = "sample.RequestViewModel",
+            navName = "request",
+            argsQualifiedName = "sample.RequestViewModel.Args",
+            argsSwiftName = "RequestViewModelArgs",
+            responseQualifiedName = null,
+            responseSwiftName = null,
+            routePath = "/requests?request={requestId}",
+            routeArgs = listOf("requestId"),
+            edges = emptyList(),
+        )
+        RouteTableGenerator(output, Dependencies(false), "sample").generate(listOf(request))
+        assertContains(
+            output.source(),
+            "table.register(\"/requests?request={requestId}\") { params ->\n            sample.RequestViewModel.Args().apply {\n                requestId = params.getValue(\"requestId\")",
+        )
+    }
+
+    @Test
     fun routeParamsReadsEveryCapture() {
         assertEquals(setOf("id", "tab"), routeParams("/detail/{id}/{tab}"))
+        assertEquals(setOf("teamId", "taskId"), routeParams("/teams/{teamId}/requests?task={taskId}"))
         assertEquals(emptySet(), routeParams("/settings/people"))
+    }
+
+    @Test
+    fun routeTemplateProblemsNamesWhatRegisterWouldReject() {
+        assertEquals(emptyList(), routeTemplateProblems("/requests?request={requestId}&tab={tab}"))
+        assertEquals(listOf("query part \"request=7\" must be key={name}"), routeTemplateProblems("/requests?request=7"))
+        assertEquals(listOf("query part \"={id}\" must be key={name}"), routeTemplateProblems("/requests?={id}"))
+        assertEquals(listOf("\"{id}\" is captured more than once"), routeTemplateProblems("/requests/{id}?request={id}"))
     }
 }

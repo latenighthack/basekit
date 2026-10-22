@@ -30,7 +30,8 @@ interface DetailViewModel :
     NavigationDestination<DetailViewModel.Args>,
     ViewModel<DetailViewModel.State> {
 
-    @Route("/detail/{id}")
+    // The alias captures the same {id} from the query: /items?item=7 opens detail 7.
+    @Route("/detail/{id}", aliases = ["/items?item={id}"])
     class Args : NavigatorArgs() {
         @RouteArg
         var id: String by storedProperty()

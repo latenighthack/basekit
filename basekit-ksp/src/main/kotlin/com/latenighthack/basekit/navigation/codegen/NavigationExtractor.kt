@@ -154,6 +154,11 @@ class NavigationExtractor(private val logger: KSPLogger) {
         if (routeAliases.isNotEmpty() && routePath == null) {
             logger.error("@Route aliases on $simpleName need a route path", argsDeclaration)
         }
+        (listOfNotNull(routePath) + routeAliases).forEach { template ->
+            routeTemplateProblems(template).forEach { problem ->
+                logger.error("@Route \"$template\" on $simpleName: $problem", argsDeclaration ?: declaration)
+            }
+        }
         // An alias registers the same args factory, which binds every @RouteArg from the match.
         routePath?.let(::routeParams)?.let { params ->
             routeAliases.filter { routeParams(it) != params }.forEach { alias ->
@@ -185,6 +190,16 @@ class NavigationExtractor(private val logger: KSPLogger) {
             }
 
         val routeArgs = routeArgProperties.map { it.simpleName.asString() }
+        // The generated factory reads every @RouteArg from the match, so each must be captured.
+        routePath?.let(::routeParams)?.let { captured ->
+            routeArgProperties.filter { it.simpleName.asString() !in captured }.forEach { prop ->
+                logger.error(
+                    "@RouteArg ${simpleName}.${prop.simpleName.asString()} is not captured by \"$routePath\"; " +
+                        "add {${prop.simpleName.asString()}} to its path or query (key={${prop.simpleName.asString()}})",
+                    prop,
+                )
+            }
+        }
 
         val navNameOverride = declaration.stringArgument(DESTINATION_ANNOTATION, "navName")
             ?.takeIf { it.isNotEmpty() }

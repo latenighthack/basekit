@@ -13,6 +13,8 @@ class RouteTableTest {
     private class HomeArgs : NavigatorArgs()
     private class DetailArgs : NavigatorArgs()
     private class NewDetailArgs : NavigatorArgs()
+    private class RequestArgs : NavigatorArgs()
+    private class TaskArgs : NavigatorArgs()
 
     @Test
     fun resolves_a_url_to_its_registered_factory() {
@@ -30,6 +32,25 @@ class RouteTableTest {
     fun an_unmatched_url_returns_null() {
         val table = RouteTable().apply { register("/detail/{id}") { DetailArgs() } }
         assertNull(table.match("/settings"))
+    }
+
+    // The same path opens different destinations by the query parameter it carries, whatever the
+    // registration order: a template capturing more query parameters wins.
+    @Test
+    fun a_query_capture_wins_over_the_same_path_without_one() {
+        val table = RouteTable().apply {
+            register("/requests") { HomeArgs() }
+            register("/requests?request={requestId}") { RequestArgs() }
+            register("/requests?task={taskId}") { TaskArgs() }
+        }
+        assertEquals(HomeArgs::class, table.match("/requests")?.args?.let { it::class })
+        assertEquals(HomeArgs::class, table.match("/requests?ref=mail")?.args?.let { it::class })
+        val request = table.match("/requests?request=r1")
+        assertEquals(RequestArgs::class, request?.args?.let { it::class })
+        assertEquals(mapOf("requestId" to "r1"), request?.params)
+        assertEquals(TaskArgs::class, table.match("/requests?task=t1")?.args?.let { it::class })
+        // Equally specific templates keep registration order.
+        assertEquals(RequestArgs::class, table.match("/requests?task=t1&request=r1")?.args?.let { it::class })
     }
 
     // Overlapping templates resolve in registration order, not by specificity: a literal "/detail/new"

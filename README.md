@@ -326,8 +326,8 @@ the convention plugins under [`basekit-gradle-plugin/`](basekit-gradle-plugin/sr
 | Annotation | Slice | On | Purpose |
 |---|---|---|---|
 | `@Destination(webPath, navName)` | navigation | interface | Marks a navigable destination; `navName` disambiguates colliding names |
-| `@Route(path, aliases)` | navigation | `Args` class | Deep-link template, e.g. `/detail/{id}`; `aliases` are other paths with the same params |
-| `@RouteArg` | navigation | `Args` property | Binds a path param from the URL (must be `String`) |
+| `@Route(path, aliases)` | navigation | `Args` class | Deep-link template, e.g. `/detail/{id}` or `/requests?request={requestId}`; `aliases` are other templates with the same params |
+| `@RouteArg` | navigation | `Args` property | Binds the path or query capture of the same name from the URL (must be `String`) |
 | `@NavigateTo(target)` | navigation | function | Declares a navigation edge from this action to `target` |
 | `@RedirectsTo(targets)` | navigation | interface | Destinations this `@Destination` may replace itself with, without a user action; each joins its navigator with source `<SCREEN>_REDIRECT` |
 | `@ViewModelSpec(webPath)` | viewmodel | interface | Marks a ViewModel; drives the platform binding codegen |
