@@ -1,5 +1,5 @@
 import { createBindingProbe, createBindingChild, BrowserProbeMessage as ProbeMessage } from 'basekit-demo-core';
-import { useBindingProbeViewModel, type BindingProbeViewModelBinding, type PickerViewModelOptionsElement } from 'basekit-react';
+import { useBindingProbeViewModel, type BindingProbeViewModelBinding, type BindingProbeViewModelShelvesHeader, type PickerViewModelOptionsElement } from 'basekit-react';
 import posthog from 'posthog-js';
 import { createPostHogMetrics } from '@latenighthack/basekit-navigation-posthog';
 import { BrowserBindingProbe } from 'basekit-demo-core';
@@ -16,7 +16,11 @@ function contracts() {
   const text: string = state.message.text;
   const optional: string | undefined = state.optionalMessage?.text;
   state.setNote(null); state.setNote(text); state.setMessage(new ProbeMessage('ok'));
-  state.setTags(['one']); state.setFailure('RETRY');
+  state.setTags(['one']); state.setFailure('try-again'); state.setFailure('none');
+  const failure: 'none' | 'try-again' = state.failure;
+  // @ts-expect-error React spells enum entries with the module option and @ReactEnumName
+  state.setFailure('RETRY');
+  const key: string | number | undefined = state.rows.keyAt(0);
   // @ts-expect-error wrong mutator argument
   state.setNote(42);
   // @ts-expect-error state property does not exist
@@ -25,7 +29,7 @@ function contracts() {
   useBindingProbeViewModel({});
   // @ts-expect-error reference belongs to a different specification
   useBindingProbeViewModel(createBindingChild());
-  return optional;
+  return [optional, failure, key];
 }
 function exhaustive(child: PickerViewModelOptionsElement): void {
   switch (child.kind) {
@@ -39,6 +43,9 @@ function incomplete(child: PickerViewModelOptionsElement): void {
   // @ts-expect-error missing pickerEmpty
   const never: never = child;
 }
+const shelf: BindingProbeViewModelShelvesHeader = 'top';
+// @ts-expect-error enum section headers use the React spelling too
+const kotlinShelf: BindingProbeViewModelShelvesHeader = 'TOP';
 type IsAny<T> = 0 extends (1 & T) ? true : false;
 const noAny: IsAny<ReturnType<typeof useBindingProbeViewModel>> = false;
 const noStateAny: IsAny<BindingProbeViewModelBinding['message']> = false;

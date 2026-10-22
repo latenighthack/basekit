@@ -6,6 +6,36 @@ All notable changes to basekit are documented here. The format follows
 
 ## Next
 
+- React: the generated hooks read state and lists with `useSyncExternalStore` (React 18 or later),
+  from one store per view model instance shared by every component bound to it. Collection starts on
+  `Dispatchers.Unconfined` during the first render, so when `state` emits on subscription (a
+  `StateFlow`, or a `combine` of them) the first render shows that state, not `initialState`, and a
+  list whose source emits on subscription has its rows in the first render. Before, the first render
+  always showed `initialState` and no rows, and real values arrived with a second render one task
+  later. StrictMode's unmount and remount reuse one collection. When no component is mounted, the
+  collection stops after `ReactFlowStore.defaultGraceMillis` (1000 ms), which also stops a
+  collection started by a render React discards. A remount no longer resets to `initialState`; it
+  starts from the last state shown.
+- React: the object a hook returns keeps its identity while the state, each list's revision and each
+  child's object are unchanged, and action and mutator functions keep theirs for the view model's
+  lifetime. Converted lists and adapter values are reused while their Kotlin value is the same
+  instance. Before, every render built a new object and new functions.
+- React: in-flight actions are cancelled when the state collection stops, that is one grace period
+  after the last component unmounts, not at each unmount. An action called while no component is
+  mounted runs instead of rejecting.
+- React: the `basekit.viewmodel.reactEnumNames` KSP option spells enum entries in the bindings:
+  `name` (default, unchanged) or `lowerCamel` (`SIGNED_IN` is `signedIn`). `@ReactEnumName("…")` on
+  an entry overrides it. The TypeScript union, state values, mutator arguments and sectioned-list
+  enum headers all use the spelling; a mutator maps it back with a generated `when`, and an unknown
+  string throws `IllegalArgumentException`. Two entries with one spelling fail the build. Swift and
+  Compose keep the Kotlin names.
+- React: the `.d.ts` types `ViewModelList.keyAt(index)` and the `id` on rows whose key comes from
+  `State.id`.
+- Breaking (Kotlin/JS runtime): `bindFlow` and `ReactActionScope` are removed; the generated hooks
+  no longer use them. `ReactViewModelBinding`, `ReactBindingCache` and `ReactConversion` replace them.
+- Requires deltalist 0.4.7, whose React hooks and new `ReactFlowStore`, `ReactDeltaListStore` and
+  `ReactSectionedDeltaListStore` work the same way.
+
 - Navigation: route templates capture query parameters. Before, `RouteTable` dropped the query before
   matching, so an address such as `/requests?request=r1` could not open a destination. Each
   `key={name}` part after `?` in a `@Route` template (or alias) binds the URL's `key` parameter to the

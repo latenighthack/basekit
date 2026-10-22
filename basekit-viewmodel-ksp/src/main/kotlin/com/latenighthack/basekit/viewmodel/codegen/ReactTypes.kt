@@ -9,7 +9,7 @@ private val kotlinLists = setOf("kotlin.collections.List", "kotlin.collections.M
 internal fun reactType(type: VmType, adapter: ReactAdapter? = null): String {
     val base = when {
         adapter != null -> "Runtime.${adapter.exportedType}"
-        type.enumCases != null -> type.enumCases.joinToString(" | ") { "\"$it\"" }
+        type.enumCases != null -> type.reactEnumNames!!.joinToString(" | ") { "\"$it\"" }
         type.qualifiedName in jsNumbers -> "number"
         type.qualifiedName == "kotlin.Boolean" -> "boolean"
         type.qualifiedName == "kotlin.String" -> "string"
@@ -20,11 +20,15 @@ internal fun reactType(type: VmType, adapter: ReactAdapter? = null): String {
     return if (type.nullable) "($base) | null" else base
 }
 
+/** Whether [reactToJs] builds a new JS value on each call: a converted list or an adapter's value. */
+internal fun reactConvertsToNewObject(type: VmType, adapter: ReactAdapter? = null): Boolean =
+    adapter != null || type.qualifiedName in kotlinLists
+
 internal fun reactToJs(type: VmType, expression: String, adapter: ReactAdapter? = null): String {
     if (type.nullable) return "$expression?.let { value -> ${reactToJs(type.copy(nullable = false), "value", adapter)} }"
     return when {
         adapter != null -> "${adapter.toJs}($expression)"
-        type.enumCases != null -> "$expression.name"
+        type.enumCases != null -> reactEnumToJs(type, expression)
         type.qualifiedName in kotlinLists -> "$expression.map { element -> ${reactToJs(type.arguments.single(), "element")} }.toTypedArray()"
         else -> expression
     }
@@ -37,7 +41,7 @@ internal fun reactFromJs(type: VmType, expression: String, adapter: ReactAdapter
             require(adapter.fromJs.isNotBlank()) { "React mutator adapter requires fromJs" }
             "${adapter.fromJs}($expression)"
         }
-        type.enumCases != null -> "${type.qualifiedName}.valueOf($expression.unsafeCast<String>())"
+        type.enumCases != null -> reactEnumFromJs(type, expression)
         type.qualifiedName in kotlinLists -> "$expression.unsafeCast<Array<dynamic>>().map { element -> ${reactFromJs(type.arguments.single(), "element")} }" +
             if (type.qualifiedName.endsWith("MutableList")) ".toMutableList()" else ""
         else -> "$expression.unsafeCast<${type.kotlinName}>()"
@@ -56,6 +60,8 @@ internal class ReactTypesGenerator(private val generator: CodeGenerator, private
             appendLine("  readonly length: number; readonly size: number; readonly totalSize: number; readonly loadedCount: number; readonly revision: number;")
             appendLine("  readonly [index: number]: T | undefined;")
             appendLine("  map<R>(render: (item: T, index: number) => R): R[];")
+            appendLine("  /** The row key at [index], loaded or not; undefined when the list has no keys or [index] is out of range. */")
+            appendLine("  keyAt(index: number): string | number | undefined;")
             appendLine("  visibleRange(start: number, endInclusive: number): void;")
             appendLine("}")
             appendLine("/** One section of a SectionedViewModelList: a typed header and its delegated rows. */")
@@ -82,7 +88,9 @@ internal class ReactTypesGenerator(private val generator: CodeGenerator, private
                     if (list.sectioned) appendLine(reactHeaderType(vm, list))
                     appendLine("export type ${vm.simpleName}${list.propertyName.toUpperCamelCase()}Element =")
                     appendLine(list.possibleTypes.joinToString(" |\n") {
-                        "  { readonly kind: '${it.simpleName.toListCaseName()}'; readonly key: string | number; use(): ${it.simpleName}Binding }"
+                        // The element factory sets `id` only when the row has no @ViewModelIdentity.
+                        val id = if (it.identityProperty == null && it.reactId) " readonly id: string | number;" else ""
+                        "  { readonly kind: '${it.simpleName.toListCaseName()}'; readonly key: string | number;$id use(): ${it.simpleName}Binding }"
                     } + ";")
                 }
                 appendLine("export declare function use${vm.simpleName}(viewModel: ${vm.simpleName}Ref): ${vm.simpleName}Binding;")

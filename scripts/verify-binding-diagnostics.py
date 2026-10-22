@@ -28,8 +28,9 @@ kotlin { jvmToolchain(17) }
     specimen.write_text('''
 import com.latenighthack.basekit.viewmodel.ViewModel
 import com.latenighthack.basekit.viewmodel.annotations.*
+enum class Mode { A, @ReactEnumName("A") B }
 @ViewModelSpec interface Invalid : ViewModel<Invalid.State> {
-    data class State(val value: String)
+    data class State(val value: String, val mode: Mode)
     @ViewModelIdentity var key: Int?
     @ChildViewModel val child: Invalid?
     @ViewModelList(Invalid::class) val rows: String
@@ -39,7 +40,7 @@ import com.latenighthack.basekit.viewmodel.annotations.*
 }
 ''')
     result = subprocess.run([str(root / 'gradlew'), '-p', str(work), 'compileKotlin', '--console=plain'], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    expected = ['multiple parameters', 'returning Unit', 'stable non-null val', 'must be Flow<Delta<ChildVm>>', 'public non-null String val']
+    expected = ['multiple parameters', 'returning Unit', 'stable non-null val', 'must be Flow<Delta<ChildVm>>', 'public non-null String val', 'A, B -> "A"']
     if result.returncode == 0 or any(message not in result.stdout for message in expected):
         raise SystemExit(result.stdout)
     if 'Action intentionallyUnbound' in result.stdout: raise SystemExit(result.stdout)

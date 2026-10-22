@@ -29,8 +29,9 @@ test('generated package preserves typed actions, custom values and effect lifeti
   await expect(page.locator('#note')).toHaveText('null');
   await page.getByRole('button', {name: 'Custom', exact: true}).click();
   await expect(page.locator('#message')).toHaveText('custom');
+  await expect(page.locator('#failure')).toHaveText('none');
   await page.getByRole('button', {name: 'Enum', exact: true}).click();
-  await expect(page.locator('#failure')).toHaveText('RETRY');
+  await expect(page.locator('#failure')).toHaveText('try-again');
   await page.getByRole('button', {name: 'Fail', exact: true}).click();
   await expect(page.locator('#error')).toContainText('probe failure');
   for (let i = 0; i < 3; i++) {
@@ -84,4 +85,52 @@ test('a throwing state or list goes to the view model handler and keeps what is 
   await expect.poll(() => page.evaluate(() => window.bindingProbe.handledFailures)).toEqual(['state: gone', 'rows: rows gone']);
   await expect(page.getByTestId('row')).toHaveText('Row child');
   expect(errors).toEqual([]);
+});
+
+test('a hot state and list render their real values on the first render, with one collection under StrictMode', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#render-hot')).toHaveText('hot:0:Row one,Row two');
+  const renders = await page.evaluate(() => window.renders.hot);
+  expect(renders.length).toBeGreaterThan(0);
+  expect(renders.filter(r => r.greeting !== 'hot' || r.rows !== 2)).toEqual([]);
+  // The hot probe is bound by two components, each mounted twice by StrictMode.
+  const counts = await page.evaluate(() => [window.renderProbes.hot.startedStateCollectors, window.renderProbes.hot.startedRowCollectors]);
+  expect(counts).toEqual([1, 1]);
+});
+
+test('a delayed source shows the initial state first, then its value', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#render-delayed')).toHaveText('hot:0:Row one,Row two');
+  const renders = await page.evaluate(() => window.renders.delayed);
+  expect(renders[0]).toEqual({ greeting: 'initial', count: -1, rows: 0 });
+  expect(renders[renders.length - 1]).toEqual({ greeting: 'hot', count: 0, rows: 2 });
+  expect(await page.evaluate(() => window.renderProbes.delayed.startedStateCollectors)).toBe(1);
+});
+
+test('the binding object and its functions keep their identity until state changes', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#render-hot')).toHaveText('hot:0:Row one,Row two');
+  await page.evaluate(() => { window.identity.sameObject.length = 0; window.identity.sameIncrement.length = 0; window.identity.sameRows.length = 0; });
+  await page.getByRole('button', { name: 'Rerender', exact: true }).click();
+  await page.getByRole('button', { name: 'Rerender', exact: true }).click();
+  let identity = await page.evaluate(() => window.identity);
+  expect(identity.sameObject.length).toBeGreaterThan(0);
+  expect(identity.sameObject.every(Boolean)).toBe(true);
+  expect(identity.sameIncrement.every(Boolean)).toBe(true);
+  await page.evaluate(() => { window.identity.sameObject.length = 0; window.identity.sameIncrement.length = 0; window.identity.sameRows.length = 0; });
+  await page.getByRole('button', { name: 'Increment', exact: true }).click();
+  await expect(page.locator('#render-hot')).toHaveText('hot:1:Row one,Row two');
+  identity = await page.evaluate(() => window.identity);
+  expect(identity.sameObject).toContain(false);
+  expect(identity.sameIncrement.every(Boolean)).toBe(true);
+  expect(identity.sameRows.every(Boolean)).toBe(true);
+});
+
+test('a render abandoned in a transition leaves no collection after the grace period', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Abandon', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.renderProbes.abandoned.startedStateCollectors)).toBeGreaterThan(0);
+  await expect(page.locator('#committed')).toHaveText('current');
+  await expect.poll(() => page.evaluate(() => [window.renderProbes.abandoned.activeStateCollectors, window.renderProbes.abandoned.activeRowCollectors])).toEqual([0, 0]);
+  await expect(page.locator('#committed')).toHaveText('current');
 });

@@ -50,7 +50,7 @@ class BindingTypesTest {
         val enum = VmType("sample.Failure", enumCases = listOf("NONE", "RETRY"))
         assertEquals("\"NONE\" | \"RETRY\"", reactType(enum))
         assertEquals("state.failure.name", reactToJs(enum, "state.failure"))
-        assertContains(reactFromJs(enum, "value"), "sample.Failure.valueOf")
+        assertContains(reactFromJs(enum, "value"), "\"RETRY\" -> sample.Failure.RETRY")
         val adapter = ReactAdapter("sample.encode", "sample.decode", "BrowserMessage")
         assertEquals("Runtime.BrowserMessage", reactType(VmType("sample.Message"), adapter))
         assertEquals("sample.encode(value)", reactToJs(VmType("sample.Message"), "value", adapter))

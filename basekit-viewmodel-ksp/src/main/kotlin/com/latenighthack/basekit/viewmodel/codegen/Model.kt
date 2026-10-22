@@ -58,13 +58,15 @@ data class VmListElementType(
 
 /** One case of a sectioned list's header: an enum entry, or a direct subclass of a sealed header. */
 data class VmHeaderCase(
-    /** The Kotlin spelling (`Personal`, `ALWAYS`), kept on every platform so hosts can map it to copy. */
+    /** The Kotlin spelling (`Personal`, `ALWAYS`), kept on every platform except React's enum headers. */
     val name: String,
     /** The sealed subclass; null for an enum entry. */
     val qualifiedName: String? = null,
     val swiftName: String? = null,
     /** A sealed `object` subclass carries no value; a class subclass carries its instance. */
     val isObject: Boolean = true,
+    /** An enum entry's React spelling; see [VmType.enumJsNames]. Sealed cases keep [name]. */
+    val jsName: String = name,
 )
 
 /** The header type of a sectioned list: an enum or a sealed type, never free-form text. */
@@ -130,6 +132,8 @@ data class VmType(
     val arguments: List<VmType> = emptyList(),
     val swiftName: String = qualifiedName.substringAfterLast('.'),
     val enumCases: List<String>? = null,
+    /** The React spelling of each of [enumCases], in the same order; null keeps the Kotlin names. */
+    val enumJsNames: List<String>? = null,
     val jsExported: Boolean = false,
     val objcRepresentable: Boolean = true,
     val jsName: String = qualifiedName.substringAfterLast('.'),

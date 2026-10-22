@@ -58,7 +58,11 @@ class ViewModelProcessor(
     private val swiftFrameworkImports: List<String> =
         options[SWIFT_FRAMEWORK_IMPORTS_OPTION]?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
 
-    private val extractor = ViewModelExtractor(logger)
+    private val reactEnumNames: ReactEnumNames = ReactEnumNames.parse(options[REACT_ENUM_NAMES_OPTION]) ?: run {
+        logger.error("$REACT_ENUM_NAMES_OPTION must be one of ${ReactEnumNames.entries.joinToString { it.option }}, not \"${options[REACT_ENUM_NAMES_OPTION]}\"")
+        ReactEnumNames.NAME
+    }
+    private val extractor = ViewModelExtractor(logger, reactEnumNames)
     private val viewModels = mutableListOf<VmInfo>()
     private var sourceFiles: List<KSFile> = emptyList()
     private var platformCollected = false

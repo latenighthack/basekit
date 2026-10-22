@@ -546,6 +546,9 @@ their own collection. Marshal snapshot/mutation application onto the UI executor
 React's DeltaList proxy can retain reference identity while its revision changes.
 Virtualizers must observe revision and declare visibleRange, request soft slots and
 release offscreen items. A stable proxy reference alone does not prove no update.
+The generated hooks keep one list store per view model instance and read its revision
+with `useSyncExternalStore`, so a source that emits on subscription has its rows in
+the first render, and every component bound to the instance shares one collection.
 Do not inspect sparse holes as absence of remote content. Call generated child
 hooks inside stable row components; the platform view does not own domain filtering.
 

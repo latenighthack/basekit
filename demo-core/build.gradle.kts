@@ -17,6 +17,7 @@ ksp {
     arg("basekit.viewmodel.compose", "true")
     arg("basekit.viewmodel.reactPackageVersion", project.version.toString())
     arg("basekit.viewmodel.reactModule", "basekit-demo-core")
+    arg("basekit.viewmodel.reactEnumNames", "lowerCamel")
     arg("Basekit_NavigationPackage", "com.latenighthack.basekit.demo")
     // Also generate the ViewModel test harness (TestViewModelRegistry + TestClientNavigator) into
     // com.latenighthack.basekit.demo.test — proves the harness codegen end-to-end.

@@ -8,13 +8,16 @@ internal fun reactHeaderTypeName(vm: VmInfo, list: VmList): String =
     "${vm.simpleName}${list.propertyName.toUpperCamelCase()}Header"
 
 /**
- * A sectioned list's header for React, spelled as in Kotlin: an enum entry's name (a string-literal
- * union), or `{ kind }` for a sealed subclass (a `kind`-tagged union).
+ * A sectioned list's header for React: an enum entry's React spelling (a string-literal union; see
+ * [ReactEnumNames]), or `{ kind }` for a sealed subclass (a `kind`-tagged union) spelled as in Kotlin.
  */
 internal fun reactHeaderFactory(vm: VmInfo, list: VmList): String {
     val header = list.header ?: return ""
-    val body = if (header.isEnum) {
+    val body = if (header.isEnum && header.cases.all { it.jsName == it.name }) {
         "(raw as ${header.qualifiedName}).name"
+    } else if (header.isEnum) {
+        val branches = header.cases.joinToString("; ") { "${header.qualifiedName}.${it.name} -> \"${it.jsName}\"" }
+        "when (raw as ${header.qualifiedName}) { $branches }"
     } else {
         val branches = header.cases.joinToString("\n") { case ->
             "    is ${case.qualifiedName} -> {\n        val header: dynamic = js(\"({})\")\n        header.kind = \"${case.name}\"\n        header\n    }"
@@ -31,7 +34,7 @@ internal fun reactHeaderFactory(vm: VmInfo, list: VmList): String {
 internal fun reactHeaderType(vm: VmInfo, list: VmList): String {
     val header = list.header ?: return ""
     val cases = if (header.isEnum) {
-        header.cases.joinToString(" | ") { "'${it.name}'" }
+        header.cases.joinToString(" | ") { "'${it.jsName}'" }
     } else {
         header.cases.joinToString(" | ") { "{ readonly kind: '${it.name}' }" }
     }

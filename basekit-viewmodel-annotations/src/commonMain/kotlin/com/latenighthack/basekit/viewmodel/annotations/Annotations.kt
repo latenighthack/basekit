@@ -76,3 +76,11 @@ public annotation class ReactBindingAdapter(
     val exportedType: String,
     val fromJs: String = "",
 )
+
+/**
+ * The spelling of this enum entry in the React bindings: its TypeScript string literal, the value
+ * state carries, and the value a mutator accepts. It overrides the module's
+ * `basekit.viewmodel.reactEnumNames` option for this entry. Other platforms keep the Kotlin name.
+ */
+@Target(AnnotationTarget.FIELD, AnnotationTarget.CLASS)
+public annotation class ReactEnumName(val value: String)

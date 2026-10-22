@@ -27,7 +27,8 @@ import kotlinx.coroutines.flow.map
 @kotlin.js.JsName("BrowserProbeMessage")
 class ProbeMessage(val text: String)
 
-enum class ProbeFailure { NONE, RETRY }
+/** React spells these `none` and `try-again`: the module uses `lowerCamel`, and RETRY overrides it. */
+enum class ProbeFailure { NONE, @ReactEnumName("try-again") RETRY }
 
 /** An enum section header. */
 enum class ProbeShelf { TOP, BOTTOM }

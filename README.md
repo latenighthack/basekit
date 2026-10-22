@@ -490,9 +490,31 @@ Then import `useHomeViewModel` from the generated bindings package and pass that
 returns typed state, `Promise<void>` actions/mutators, stable delegated lists, and closed child unions.
 Switch on `child.kind` in a row component and call `child.use()` there. Raw child ViewModels and their
 `initialState` are not part of this contract. Numeric indexed list access can return `undefined`;
-`map` visits loaded rows and `visibleRange(start, endInclusive)` controls positional loading.
+`map` visits loaded rows, `keyAt(index)` gives a row's key whether or not it is loaded, and
+`visibleRange(start, endInclusive)` controls positional loading.
 
-Primitives, nullable values, lists, enum case strings, and exported custom JS classes are supported.
+The hooks need React 18 or later. They read state and lists with `useSyncExternalStore`, from one
+store per view model instance that every component bound to that instance shares:
+
+- Collection starts on `Dispatchers.Unconfined` during the first render. When `state` emits on
+  subscription, as a `StateFlow` or a `combine` of `StateFlow`s does, the first render shows that
+  state and not `initialState`. A list whose source emits on subscription has its rows in the first
+  render. Other sources show `initialState` and no rows until they emit.
+- One collection serves every mounted component. When the last one unmounts, the collection stops
+  after `ReactFlowStore.defaultGraceMillis` (1000 ms) unless another mounts first, so StrictMode's
+  remount reuses it, and a render React discards does not leave a collection running. A component
+  that mounts after the collection stopped starts it again from the last state it showed.
+- In-flight actions are cancelled when the state collection stops.
+- The returned object keeps its identity while the state, each list's revision and each child's
+  object are unchanged. Action and mutator functions keep theirs for the view model's lifetime.
+  Converted lists and adapter values are reused while their Kotlin value is the same instance.
+
+Primitives, nullable values, lists, enum entries, and exported custom JS classes are supported.
+Enum entries are string literals spelled by the `basekit.viewmodel.reactEnumNames` KSP option:
+`name` (the default) keeps the Kotlin name, `lowerCamel` turns `SIGNED_IN` into `signedIn`.
+`@ReactEnumName("…")` on an entry overrides the option for that entry. The spelling applies to the
+TypeScript union, state values, mutator arguments and sectioned-list enum headers. Two entries with
+one spelling fail the build. Swift and Compose keep the Kotlin names.
 For a custom browser representation, annotate its state property and mutator parameter with
 `@ReactBindingAdapter(toJs = "app.encodeMessage", exportedType = "BrowserMessage",
 fromJs = "app.decodeMessage")`. Supply qualified conversion functions in Kotlin/JS and an `@JsExport`

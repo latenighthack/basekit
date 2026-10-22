@@ -15,8 +15,13 @@ import com.google.devtools.ksp.symbol.Modifier
 /**
  * Builds the [VmInfo] model for one `@ViewModelSpec` interface and reports invalid declarations to
  * [logger]. [ViewModelProcessor] and the catalog processor both read specs through this class.
+ * [reactEnumNames] spells enum entries that have no `@ReactEnumName`.
  */
-class ViewModelExtractor(private val logger: KSPLogger) {
+class ViewModelExtractor(
+    private val logger: KSPLogger,
+    private val reactEnumNames: ReactEnumNames = ReactEnumNames.NAME,
+) {
+    private val reportedEnumCollisions = mutableSetOf<String>()
 
     fun build(declaration: KSClassDeclaration): VmInfo? {
         if (declaration.classKind != ClassKind.INTERFACE || !declaration.isPublicBinding()) {
@@ -183,11 +188,8 @@ class ViewModelExtractor(private val logger: KSPLogger) {
         val qualifiedName = declaration?.qualifiedName?.asString()
         val cases = when {
             declaration == null || qualifiedName == null || type.isMarkedNullable -> null
-            declaration.classKind == ClassKind.ENUM_CLASS -> declaration.declarations
-                .filterIsInstance<KSClassDeclaration>()
-                .filter { it.classKind == ClassKind.ENUM_ENTRY }
-                .map { VmHeaderCase(it.simpleName.asString()) }
-                .toList()
+            declaration.classKind == ClassKind.ENUM_CLASS -> declaration.reactEnumEntries()
+                .map { (name, jsName) -> VmHeaderCase(name, jsName = jsName) }
             Modifier.SEALED in declaration.modifiers -> declaration.getSealedSubclasses()
                 .map {
                     VmHeaderCase(
@@ -372,17 +374,38 @@ class ViewModelExtractor(private val logger: KSPLogger) {
 
     private fun KSType.bindingType(): VmType {
         val klass = declaration as? KSClassDeclaration
+        val enumEntries = klass?.takeIf { it.classKind == ClassKind.ENUM_CLASS }?.reactEnumEntries()
         return VmType(
             qualifiedName = declaration.qualifiedName?.asString() ?: "kotlin.Any",
             nullable = isMarkedNullable,
             arguments = arguments.map { it.type?.resolve()?.bindingType() ?: VmType("kotlin.Any", true) },
             jsName = klass?.jsExportName() ?: declaration.simpleName.asString(),
             swiftName = klass?.swiftExportName() ?: declaration.simpleName.asString(),
-            enumCases = klass?.takeIf { it.classKind == ClassKind.ENUM_CLASS }?.declarations
-                ?.filterIsInstance<KSClassDeclaration>()?.filter { it.classKind == ClassKind.ENUM_ENTRY }
-                ?.map { it.simpleName.asString() }?.toList(),
+            enumCases = enumEntries?.map { it.first },
+            enumJsNames = enumEntries?.map { it.second },
             jsExported = declaration.hasAnnotation("kotlin.js.JsExport") || declaration.containingFile?.hasAnnotation("kotlin.js.JsExport") == true,
             objcRepresentable = klass != null && Modifier.VALUE !in klass.modifiers && Modifier.INLINE !in klass.modifiers,
         )
+    }
+
+    /**
+     * Each entry's Kotlin name and React spelling: its `@ReactEnumName`, else [reactEnumNames]
+     * applied to the Kotlin name. Two entries with one spelling are reported once per enum.
+     */
+    private fun KSClassDeclaration.reactEnumEntries(): List<Pair<String, String>> {
+        val entries = declarations.filterIsInstance<KSClassDeclaration>()
+            .filter { it.classKind == ClassKind.ENUM_ENTRY }
+            .map { entry ->
+                val name = entry.simpleName.asString()
+                name to (entry.stringArgument(REACT_ENUM_NAME_ANNOTATION, "value") ?: reactEnumNames.spell(name))
+            }
+            .toList()
+        val collisions = entries.groupBy { it.second }.filterValues { it.size > 1 }
+        val enumName = qualifiedName?.asString().orEmpty()
+        if (collisions.isNotEmpty() && reportedEnumCollisions.add(enumName)) {
+            val detail = collisions.entries.joinToString("; ") { (jsName, cases) -> cases.joinToString(", ") { it.first } + " -> \"$jsName\"" }
+            logger.error("Enum $enumName has entries with the same React name ($detail); give one a @ReactEnumName", this)
+        }
+        return entries
     }
 }
