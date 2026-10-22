@@ -29,6 +29,7 @@ internal const val DELTA_LIST = "com.latenighthack.deltalist.DeltaList"
 internal const val SECTIONED_DELTA_LIST = "com.latenighthack.deltalist.SectionedDeltaList"
 internal const val NAVIGATION_DESTINATION = "com.latenighthack.basekit.navigation.NavigationDestination"
 internal const val RESPONDING_DESTINATION = "com.latenighthack.basekit.navigation.RespondingDestination"
+internal const val VIEWMODEL_ACTION_OBSERVER = "com.latenighthack.basekit.viewmodel.ViewModelActionObserver"
 private const val NAVIGATION_PACKAGE_OPTION = "Basekit_NavigationPackage"
 private const val GENERATE_TEST_NAVIGATOR_OPTION = "Basekit_GenerateTestNavigator"
 private const val SWIFT_FRAMEWORK_IMPORTS_OPTION = "basekit.navigation.swiftFrameworkImports"
@@ -88,10 +89,13 @@ class NavigationProcessor(
     private val hostedComponents = mutableListOf<DestinationInfo>()
     private var sourceFiles: List<KSFile> = emptyList()
     private var collected = false
+    /** Whether basekit-viewmodel is on the classpath, so the generated routers can carry an action observer. */
+    private var actionObservers = false
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
         if (collected) return emptyList()
         collected = true
+        actionObservers = resolver.getClassDeclarationByName(resolver.getKSNameFromString(VIEWMODEL_ACTION_OBSERVER)) != null
 
         val graph = NavigationExtractor(logger).extract(resolver)
         sourceFiles = graph.sourceFiles
@@ -115,7 +119,7 @@ class NavigationProcessor(
                     ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
                     .orEmpty()
             val dependencies = Dependencies(aggregating = true, *sourceFiles.toTypedArray())
-            AppleSwiftNavigationGenerator(codeGenerator, dependencies, imports).generate(destinations, hostedComponents)
+            AppleSwiftNavigationGenerator(codeGenerator, dependencies, imports, actionObservers).generate(destinations, hostedComponents)
             if (options["basekit.navigation.posthog"] == "true") {
                 ApplePostHogBridgeGenerator(codeGenerator, dependencies, imports).generate()
             }
@@ -125,7 +129,7 @@ class NavigationProcessor(
             // The Compose counterpart of the Apple pass's Swift, for apps that host Compose bindings.
             if (destinations.isEmpty() || options[COMPOSE_OPTION] != "true") return
             val dependencies = Dependencies(aggregating = true, *sourceFiles.toTypedArray())
-            ComposeNavigationGenerator(codeGenerator, dependencies, resolveNavigationPackage()).generate(destinations, hostedComponents)
+            ComposeNavigationGenerator(codeGenerator, dependencies, resolveNavigationPackage(), actionObservers).generate(destinations, hostedComponents)
             return
         }
         if (!marker.isMetadataPass()) return

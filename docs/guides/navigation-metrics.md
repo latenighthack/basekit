@@ -9,9 +9,54 @@ The app initializes PostHog and retains ownership of identity, consent, batching
 The shared reporter sees only `capture(event, properties)` and `screen(name, properties)`.
 There is no global installation or per-action application instrumentation.
 
+## Install on the router
+
+Apps that show destinations through the generated `BasekitNavigationRouter` pass the collector to the
+root router as both observers. Nothing else is needed for screens the router shows:
+
+```swift
+let metrics = postHogMetrics(client: PostHogSDK.shared)
+let router = BasekitNavigationRouter(policy: policy, navigationObserver: metrics, actionObserver: metrics)
+```
+
+```kotlin
+val metrics = postHogMetrics(PostHog)
+val router = BasekitNavigationRouter(policy, navigationObserver = metrics, actionObserver = metrics)
+```
+
+The Kotlin router keeps its `BasekitNavigationRouter()`, `(policy)` and `{ request -> … }` constructors;
+the observers have a constructor of their own that takes both (pass `NoOp` for one you don't observe).
+Routers made for presented entries (`host(for:)` / `host(entry)`) and routers made with the `parent`
+initializer report to their parent's observers.
+
+`basekitViewModel` and `BasekitDestinationView` build each destination's navigator as
+`Observing<X>Navigator(Apple<X>Navigator(…), router.navigationObserver)` and wrap its view model in
+`Observing<Spec>` reporting to `router.actionObserver`. With `NoOp` observers the view model is not
+wrapped and nothing is reported.
+
+The router reports the screens no navigator opened or closed, so each screen is reported once:
+
+| Change | Reported by | Event |
+| --- | --- | --- |
+| `navigateTo…` / `close` from a view model | its `Observing<X>Navigator` | `NavigatedTo` / `Closed` |
+| A root, or an entry the host built, the first time it shows | the router (`didShow`) | `NavigatedTo` |
+| `open(route)`, `open(args:)`, `open(match:)` | the router, before presenting | `NavigatedTo` |
+| Back, a swipe, a dragged-down sheet, `reconcilePath`, `updateSheet(null)`, `dismiss(entryID)` | the router, for each entry removed | `Closed` |
+
+`BasekitDestinationView`, `BasekitNavigationStackHost` and `BasekitNavigationControllerHost` call
+`router.didShow(entry)` as an entry appears. A host that shows entries another way calls it itself; it
+reports an entry only once, and never one a navigator opened (an entry with an edge). Screen events
+therefore need no `recordScreen` call: keep `recordScreen` for screens outside BaseKit navigation.
+
+Navigators the app builds itself, such as a `@HostedComponent`'s, are not wrapped by the router: wrap
+them in their `Observing<X>Navigator` with `router.navigationObserver`, and their view models with
+`observingActions(router.actionObserver)`. Child and row view models a destination builds are not
+covered by the destination's decorator; install decorators at their factories as below.
+
 ## Install at factory boundaries
 
-Use the same collector for the navigator and the ViewModel returned by each factory:
+Without the generated router, use the same collector for the navigator and the ViewModel returned by
+each factory:
 
 ```kotlin
 fun home(navigator: HomeNavigator): HomeViewModel =
@@ -118,7 +163,8 @@ let navigator = ObservingHomeNavigator(delegate: realNavigator, observer: metric
 let model = ObservingHomeViewModel(delegate: realModel, actionObserver: metrics)
 ```
 
-Pass observed instances into the existing native wrappers or your shared client factory. No
+With the generated router, pass `metrics` to its initializer instead (see Install on the router).
+Otherwise pass observed instances into the existing native wrappers or your shared client factory. No
 generated binding file needs editing. The reporter forwards synchronous SDK methods without a
 main-actor hop, so shared Kotlin actions can report from their calling dispatcher.
 
@@ -126,20 +172,24 @@ main-actor hop, so shared Kotlin actions can report from their calling dispatche
 
 | Observation | Event | Timing |
 | --- | --- | --- |
-| Zero-argument action | `basekit action invoked` | Before invoking the implementation |
+| Zero-argument action | `action_invoked` | Before invoking the implementation |
 | Navigation request | `$screen` | Before invoking the concrete navigator |
-| Close request | `basekit navigation closed` | Before invoking the concrete navigator |
-| Responding navigation | `basekit navigation responded` | After successful return, including null dismissal |
+| Close request | `navigation_closed` | Before invoking the concrete navigator |
+| Responding navigation | `navigation_responded` | After successful return, including null dismissal |
+| Router: root shown, deep link | `$screen` | When the entry first shows; before presenting a deep link |
+| Router: Back, swipe, dismissed sheet | `navigation_closed` | Before the router removes the entry |
 | `recordScreen` | `$screen` | When the host calls it |
 
 All platforms use `$screen` with `$screen_name`. JavaScript deliberately uses this convention
 instead of `$pageview`. Automatic navigation metrics record intent; a failed presentation can
-still have a request event. Initial screens and host-driven back gestures need a host
-`recordScreen(name, properties)` call. Avoid calling it again for an already observed request.
-Disable overlapping SDK screen autocapture for Basekit-managed screens in your SDK configuration.
+still have a request event. With the collector on the router, initial screens, deep links and
+host-driven back gestures are reported automatically; call `recordScreen(name, properties)` only for
+screens outside BaseKit navigation. Disable overlapping SDK screen autocapture for BaseKit-managed
+screens in your SDK configuration.
 
-Built-in properties are `basekit_viewmodel`, `basekit_action`, `basekit_screen`,
-`basekit_navigation_operation` and, when generated source enums exist, `basekit_source`.
+Built-in properties are `view_model`, `action`, `screen`, `navigation_operation` (`navigate`,
+`close` or `respond`) and, when generated source enums exist, `source`. Nothing BaseKit sends is
+prefixed with `basekit`.
 Screen names default to generated enum names. ViewModel names are qualified specification names
 and action names are source method names; no runtime class reflection is used. Custom non-enum
 screen identifiers default to `unknown`; provide a screen-name mapper for their explicit names.
@@ -169,7 +219,8 @@ keys. Nested null values are supported; omit absent top-level properties. Domain
 non-finite numbers and excessively deep structures are rejected without stringifying them.
 
 Static properties merge first, then manual screen properties and property providers in order.
-The `basekit_` namespace and `$screen_name` are reserved for authoritative metadata. Use the
+The built-in property names above and `$screen_name` are reserved for authoritative metadata: a static
+property or provider using one of them is dropped. Other names, including any `basekit_` name, pass through. Use the
 screen-name mapper to change a screen name; custom event naming does not rename `$screen` events.
 Callbacks run synchronously on the calling thread and must be fast and safe for concurrent calls.
 An extension or reporting failure discards that report and calls the guarded error handler;

@@ -48,7 +48,10 @@ public class PostHogMetricsCollector(
         report(MetricsObservation.Navigation(event))
     }
 
-    /** Call once when an initial screen or a host-driven back transition is displayed. */
+    /**
+     * Call once when a screen outside BaseKit navigation is displayed. Screens a generated router shows or
+     * dismisses (roots, deep links, back gestures) are reported through it when it has this collector.
+     */
     public fun recordScreen(name: String, properties: Map<String, Any> = emptyMap()) {
         report(MetricsObservation.Screen(name, properties))
     }
@@ -60,26 +63,26 @@ public class PostHogMetricsCollector(
             var screen: String? = null
             val defaultName = when (observation) {
                 is MetricsObservation.Action -> {
-                    metadata["basekit_viewmodel"] = observation.event.viewModelName
-                    metadata["basekit_action"] = observation.event.actionName
-                    "basekit action invoked"
+                    metadata["view_model"] = observation.event.viewModelName
+                    metadata["action"] = observation.event.actionName
+                    "action_invoked"
                 }
                 is MetricsObservation.Navigation -> when (val event = observation.event) {
                     is NavigationEvent.NavigatedTo -> {
                         screen = name(event.screen)
-                        metadata["basekit_navigation_operation"] = "navigate"
-                        (event.source as? Enum<*>)?.let { metadata["basekit_source"] = it.name }
+                        metadata["navigation_operation"] = "navigate"
+                        (event.source as? Enum<*>)?.let { metadata["source"] = it.name }
                         "\$screen"
                     }
                     is NavigationEvent.Closed -> {
-                        metadata["basekit_screen"] = name(event.screen)
-                        metadata["basekit_navigation_operation"] = "close"
-                        "basekit navigation closed"
+                        metadata["screen"] = name(event.screen)
+                        metadata["navigation_operation"] = "close"
+                        "navigation_closed"
                     }
                     is NavigationEvent.Responded -> {
-                        metadata["basekit_screen"] = name(event.screen)
-                        metadata["basekit_navigation_operation"] = "respond"
-                        "basekit navigation responded"
+                        metadata["screen"] = name(event.screen)
+                        metadata["navigation_operation"] = "respond"
+                        "navigation_responded"
                     }
                 }
                 is MetricsObservation.Screen -> {
@@ -91,14 +94,14 @@ public class PostHogMetricsCollector(
             require(eventName.isNotBlank()) { "Metrics event name must not be blank" }
             screen?.let {
                 require(it.isNotBlank()) { "Metrics screen name must not be blank" }
-                metadata["basekit_screen"] = it
+                metadata["screen"] = it
                 metadata["\$screen_name"] = it
             }
             val extras = properties.toMutableMap()
             if (observation is MetricsObservation.Screen) extras.putAll(observation.properties)
             providers.forEach { extras.putAll(it(observation)) }
-            // Providers may override one another, but cannot forge Basekit's identifying metadata.
-            extras.keys.removeAll { it.startsWith("basekit_") || it == "\$screen_name" }
+            // Providers may override one another, but cannot forge the identifying metadata.
+            extras.keys.removeAll { it in RESERVED_PROPERTIES }
             extras.putAll(metadata)
             val snapshot = jsonProperties(extras)
             if (screen != null) reporter.screen(screen, snapshot) else reporter.capture(eventName, snapshot)
@@ -110,6 +113,9 @@ public class PostHogMetricsCollector(
     private fun name(screen: NavigationScreenId): String = options.screenName?.invoke(screen)
         ?: (screen as? Enum<*>)?.name ?: "unknown"
 }
+
+/** The built-in properties: static properties and providers cannot set them. */
+private val RESERVED_PROPERTIES = setOf("view_model", "action", "screen", "navigation_operation", "source", "\$screen_name")
 
 /** Validate and copy before crossing SDK boundaries; never stringify arbitrary domain objects. */
 internal fun jsonProperties(properties: Map<String, Any>): Map<String, Any> =

@@ -28,30 +28,48 @@ class PostHogMetricsCollectorTest {
         metrics.onNavigation(NavigationEvent.Responded(Screen.DETAIL, privateValue))
         metrics.onNavigation(NavigationEvent.Responded(Screen.DETAIL, null))
         metrics.recordScreen("HOME")
-        assertEquals(listOf("basekit action invoked", "\$screen", "basekit navigation closed", "basekit navigation responded", "basekit navigation responded", "\$screen"), sink.reports.map { it.event })
-        assertEquals(mapOf("basekit_viewmodel" to "app.HomeViewModel", "basekit_action" to "open"), sink.reports[0].properties)
-        assertEquals("HOME_OPEN", sink.reports[1].properties["basekit_source"])
+        assertEquals(listOf("action_invoked", "\$screen", "navigation_closed", "navigation_responded", "navigation_responded", "\$screen"), sink.reports.map { it.event })
+        assertEquals(mapOf("view_model" to "app.HomeViewModel", "action" to "open"), sink.reports[0].properties)
+        assertEquals("HOME_OPEN", sink.reports[1].properties["source"])
         assertEquals("DETAIL", sink.reports[1].properties["\$screen_name"])
         assertTrue(sink.reports.none { it.properties.values.any { value -> value === privateValue } })
         assertEquals(sink.reports[3], sink.reports[4])
+        assertEquals("close", sink.reports[2].properties["navigation_operation"])
+        assertEquals("respond", sink.reports[3].properties["navigation_operation"])
+        // Nothing BaseKit names reaches PostHog with a "basekit" prefix.
+        assertTrue(sink.reports.none { report -> "basekit" in report.event || report.properties.keys.any { "basekit" in it } })
+    }
+
+    @Test fun reservesExactlyTheBuiltInProperties() {
+        val sink = Recorder()
+        val metrics = PostHogMetricsCollector(sink, PostHogMetricsOptions(
+            properties = mapOf(
+                "view_model" to "forged", "action" to "forged", "screen" to "forged",
+                "navigation_operation" to "forged", "source" to "forged", "basekit_custom" to "kept",
+            ),
+        ))
+        metrics.onAction(ViewModelActionEvent("app.Spec", "activate", PrivateValue()))
+        metrics.onNavigation(NavigationEvent.Closed(Screen.HOME, null))
+        assertEquals(mapOf("basekit_custom" to "kept", "view_model" to "app.Spec", "action" to "activate"), sink.reports[0].properties)
+        assertEquals(mapOf("basekit_custom" to "kept", "screen" to "HOME", "navigation_operation" to "close"), sink.reports[1].properties)
     }
 
     @Test fun providersSeeRawEventsAndPrecedenceProtectsMetadata() {
         val sink = Recorder()
         val privateValue = PrivateValue()
         val metrics = PostHogMetricsCollector(sink, PostHogMetricsOptions(
-            properties = mapOf("app" to "fixture", "level" to 1, "basekit_action" to "forged"),
+            properties = mapOf("app" to "fixture", "level" to 1, "action" to "forged"),
             propertyProviders = listOf(
                 { observation ->
                     assertSame(privateValue, (observation as MetricsObservation.Action).event.viewModel)
                     mapOf("level" to 2, "domain" to "explicit")
                 },
-                { mapOf("level" to 3, "basekit_action" to "forged again") },
+                { mapOf("level" to 3, "action" to "forged again") },
             ),
             eventName = { _, _ -> "feature activated" },
         ))
         metrics.onAction(ViewModelActionEvent("app.Spec", "activate", privateValue))
-        assertEquals(Report("feature activated", mapOf("app" to "fixture", "level" to 3, "domain" to "explicit", "basekit_viewmodel" to "app.Spec", "basekit_action" to "activate")), sink.reports.single())
+        assertEquals(Report("feature activated", mapOf("app" to "fixture", "level" to 3, "domain" to "explicit", "view_model" to "app.Spec", "action" to "activate")), sink.reports.single())
     }
 
     @Test fun customScreenIdsNeverSerializeTheirDomainDescription() {
@@ -60,13 +78,13 @@ class PostHogMetricsCollectorTest {
         }
         val sink = Recorder()
         PostHogMetricsCollector(sink).onNavigation(NavigationEvent.Closed(customScreen, null))
-        assertEquals("unknown", sink.reports.single().properties["basekit_screen"])
+        assertEquals("unknown", sink.reports.single().properties["screen"])
         val mapped = PostHogMetricsCollector(sink, PostHogMetricsOptions(screenName = {
             assertSame(customScreen, it)
             "custom"
         }))
         mapped.onNavigation(NavigationEvent.Closed(customScreen, null))
-        assertEquals("custom", sink.reports.last().properties["basekit_screen"])
+        assertEquals("custom", sink.reports.last().properties["screen"])
     }
 
     @Test fun screenMappingFilteringAndManualProperties() {

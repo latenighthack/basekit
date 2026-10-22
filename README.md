@@ -242,8 +242,12 @@ presents a responder. `router.open` (deep links) gives a responding destination 
 discards its result, since nobody is waiting for it; the destination responds and closes as usual.
 An entry built by hand for a responding destination without a responder stops at a
 `preconditionFailure`. It is pure: the host keeps the view, the presentation and the model's lifetime.
+With a router `host`, it wraps the navigator in `Observing{X}Navigator` reporting to the router's
+`navigationObserver`, and the view model in `Observing{Spec}` reporting to its `actionObserver` (not
+when that is `NoOp`); see [navigation metrics](docs/guides/navigation-metrics.md#install-on-the-router).
 `BasekitDestinationView(for: entry, host: router, factories: factories) { model in switch model { … } }`
-builds it once per view identity and observes it while shown, deciding nothing about presentation.
+builds it once per view identity and observes it while shown, deciding nothing about presentation. As
+it appears it calls `router.didShow(entry)`, which reports a root or other entry no navigator opened.
 `BasekitModelView(model) { model in Screen(model: model) }` does the same for one concrete model. Without factories, construct each ViewModel with the entry's `ownerID` and
 its generated navigator, e.g. `AppleHomeNavigator(ownerId: entry.ownerID, host: router)`;
 `AppleCloseNavigator` closes for any destination that only closes.
@@ -261,7 +265,8 @@ That includes a lower router presenting a new sheet in its slot. Which presentat
 with the policy and the screen's handler.
 
 `BasekitNavigationRouter(parent:)` creates such a router: closing its root closes the owner's entry in
-`parent`, resolving its responder as a swipe-dismiss there does. `onCloseRoot` and the other router
+`parent`, resolving its responder as a swipe-dismiss there does. It, and every router made for a
+presented entry, reports to `parent`'s observers. `onCloseRoot` and the other router
 callbacks are `@MainActor`.
 
 Generated wrappers expose `ActionIds` (`ObservableSidebarViewModel.ActionIds.onAccountTapped ==
@@ -359,7 +364,12 @@ the convention plugins under [`basekit-gradle-plugin/`](basekit-gradle-plugin/sr
 `basekit-navigation-metrics` observes navigation and zero-argument ViewModel actions without an SDK
 dependency. `basekit-navigation-posthog` adds native Android and JavaScript SDK adapters; the
 `BasekitNavigationPostHog` Swift Package adds the iOS adapter. Supply your configured PostHog client
-and install the generated decorators in your factories. Mutators remain untracked.
+to the generated `BasekitNavigationRouter` as its `navigationObserver` and `actionObserver`: the
+destinations it builds report their navigation and actions, and the router reports roots, deep links
+and back gestures. Without the router, install the generated decorators in your factories. Mutators
+remain untracked. Events are `$screen`, `action_invoked`, `navigation_closed` and
+`navigation_responded`, with the properties `view_model`, `action`, `screen`, `navigation_operation`
+and `source`.
 
 See [the setup guide](docs/guides/navigation-metrics.md) for drop-in examples, property providers,
 the generated Swift bridge, and the unified `$screen` event convention.

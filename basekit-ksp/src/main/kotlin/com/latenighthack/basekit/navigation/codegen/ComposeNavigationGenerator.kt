@@ -9,11 +9,15 @@ import com.google.devtools.ksp.processing.Dependencies
  * the same types and the same router behaviour. Its router implements the generated
  * `AppleNavigationHost`, so the generated `Apple<X>Navigator`s report to it as they do on Apple
  * platforms, and its edges are that host's `AppleNavigationEdge`.
+ *
+ * As on Apple platforms the router carries a `NavigationObserver` and, when [actionObservers] is set, a
+ * `ViewModelActionObserver`, and reports the screens it shows or dismisses without a navigator.
  */
 class ComposeNavigationGenerator(
     private val codeGenerator: CodeGenerator,
     private val dependencies: Dependencies,
     private val navigationPackage: String,
+    private val actionObservers: Boolean = true,
 ) {
     fun generate(destinations: List<DestinationInfo>, hostedComponents: List<DestinationInfo> = emptyList()) {
         val byName = destinations.associateBy { it.qualifiedName }
@@ -56,10 +60,12 @@ class ComposeNavigationGenerator(
         appendLine("import androidx.compose.ui.unit.LayoutDirection")
         appendLine("import androidx.compose.ui.window.Dialog")
         appendLine("import androidx.compose.ui.window.DialogProperties")
+        appendLine("import com.latenighthack.basekit.navigation.NavigationObserver")
         appendLine("import com.latenighthack.basekit.navigation.NavigationResponder")
         appendLine("import com.latenighthack.basekit.navigation.NavigatorArgs")
         appendLine("import com.latenighthack.basekit.navigation.RouteMatch")
         appendLine("import com.latenighthack.basekit.navigation.runOnMainThread")
+        if (actionObservers) appendLine("import com.latenighthack.basekit.viewmodel.ViewModelActionObserver")
         appendLine("import java.util.UUID")
         appendLine("import java.util.concurrent.atomic.AtomicBoolean")
         appendLine()
@@ -170,10 +176,40 @@ class ComposeNavigationGenerator(
         appendLine("public typealias BasekitPlatformPresenter = (BasekitNavigationEntry, String) -> Unit")
         appendLine()
 
-        appendLine("/** Call it on the main thread, as the generated navigators do. */")
-        appendLine("public class BasekitNavigationRouter(")
-        appendLine("    private val policy: BasekitNavigationPolicy = BasekitDefaultNavigationPolicy,")
+        appendLine("/**")
+        appendLine(" * Call it on the main thread, as the generated navigators do.")
+        appendLine(" *")
+        appendLine(" * [navigationObserver] receives the screens this router shows or dismisses without a navigator: a")
+        appendLine(" * root or other entry the host made, a deep link, system back or a dismissed sheet. `basekitViewModel`")
+        appendLine(" * also wraps each navigator it builds with this router in an `Observing…Navigator` reporting to it")
+        if (actionObservers) {
+            appendLine(" * and each view model in `observingActions([actionObserver])`. The routers this one makes, and those")
+        } else {
+            appendLine(" * The routers this one makes, and those")
+        }
+        appendLine(" * made with the `parent` constructor, report to their parent's observers.")
+        appendLine(" */")
+        appendLine("public class BasekitNavigationRouter private constructor(")
+        appendLine("    private val policy: BasekitNavigationPolicy,")
+        appendLine("    public val navigationObserver: NavigationObserver,")
+        if (actionObservers) appendLine("    public val actionObserver: ViewModelActionObserver,")
+        appendLine("    private val parent: BasekitNavigationRouter?,")
         appendLine(") : AppleNavigationHost {")
+        val noOpAction = if (actionObservers) " ViewModelActionObserver.NoOp," else ""
+        appendLine("    public constructor(policy: BasekitNavigationPolicy = BasekitDefaultNavigationPolicy) : this(policy, NavigationObserver.NoOp,$noOpAction null)")
+        appendLine()
+        appendLine("    /** A router reporting to [navigationObserver]${if (actionObservers) " and [actionObserver]" else ""}; pass `NoOp` for one you don't observe. */")
+        if (actionObservers) {
+            appendLine("    public constructor(")
+            appendLine("        policy: BasekitNavigationPolicy = BasekitDefaultNavigationPolicy,")
+            appendLine("        navigationObserver: NavigationObserver,")
+            appendLine("        actionObserver: ViewModelActionObserver,")
+            appendLine("    ) : this(policy, navigationObserver, actionObserver, null)")
+        } else {
+            // Policy is required here so a trailing lambda still means the policy.
+            appendLine("    public constructor(policy: BasekitNavigationPolicy, navigationObserver: NavigationObserver) : this(policy, navigationObserver, null)")
+        }
+        appendLine()
         appendLine("    private val pathEntries = mutableStateListOf<BasekitNavigationEntry>()")
         appendLine("    public val path: List<BasekitNavigationEntry> get() = pathEntries")
         appendLine("    public var sheet: BasekitNavigationEntry? by mutableStateOf(null)")
@@ -190,20 +226,24 @@ class ComposeNavigationGenerator(
         appendLine("    private val customEntries = mutableMapOf<UUID, BasekitNavigationEntry>()")
         appendLine("    /** The router made for each entry this router presents other than by push. */")
         appendLine("    private val children = mutableMapOf<UUID, BasekitNavigationRouter>()")
-        appendLine("    private var parent: BasekitNavigationRouter? = null")
         appendLine("    /** Set once this router's entry has left its parent: it presents nothing more. */")
         appendLine("    private var closed = false")
         appendLine("    /** This router's platform presenter, or else its parent's, as it is when used. */")
         appendLine("    private val presenter: BasekitPlatformPresenter? get() = platformPresenter ?: parent?.presenter")
         appendLine("    private val dismisser: ((UUID) -> Unit)? get() = platformDismisser ?: parent?.dismisser")
+        appendLine("    /** The router at the top of this one's tree, which remembers the entries reported shown. */")
+        appendLine("    private val topRouter: BasekitNavigationRouter get() = parent?.topRouter ?: this")
+        appendLine("    /** The entries without an edge (roots, deep links) whose showing this tree has reported. */")
+        appendLine("    private val reportedEntryIds = mutableSetOf<UUID>()")
         appendLine()
         appendLine("    /** A router for content presented by [parent], such as a modal that has its own stack and sheets.")
         appendLine("     * Closing this router's root (an owner it does not present) closes that owner's entry in [parent],")
         appendLine("     * which also resolves its responder, as a dismiss in [parent] does. Without a platform presenter")
-        appendLine("     * or dismisser of its own it uses [parent]'s. This decides nothing about how [parent] presents")
-        appendLine("     * the entry. [parent] makes one for each entry it presents other than by push; see [host]. */")
-        appendLine("    public constructor(parent: BasekitNavigationRouter, policy: BasekitNavigationPolicy = BasekitDefaultNavigationPolicy) : this(policy) {")
-        appendLine("        this.parent = parent")
+        appendLine("     * or dismisser of its own it uses [parent]'s, and it reports to [parent]'s observers. This decides")
+        appendLine("     * nothing about how [parent] presents the entry. [parent] makes one for each entry it presents")
+        appendLine("     * other than by push; see [host]. */")
+        val parentAction = if (actionObservers) " parent.actionObserver," else ""
+        appendLine("    public constructor(parent: BasekitNavigationRouter, policy: BasekitNavigationPolicy = BasekitDefaultNavigationPolicy) : this(policy, parent.navigationObserver,$parentAction parent) {")
         appendLine("        onCloseRoot = { ownerId, context -> parent.close(ownerId, context) }")
         appendLine("    }")
         appendLine()
@@ -217,22 +257,35 @@ class ComposeNavigationGenerator(
         appendLine("    public fun root(route: BasekitRoute, ownerId: String = UUID.randomUUID().toString()): BasekitNavigationEntry = BasekitNavigationEntry(ownerId = ownerId, route = route)")
         appendLine("    /** Opens [route] from outside the graph, such as a deep link. A responding destination opened")
         appendLine("     * without a responder gets one that discards its result, since nobody is waiting for it; it runs,")
-        appendLine("     * responds and closes as it does when a navigator opens it. */")
+        appendLine("     * responds and closes as it does when a navigator opens it. It is reported to [navigationObserver]")
+        appendLine("     * as a `NavigatedTo` before it is presented. */")
         appendLine("    public fun open(route: BasekitRoute, ownerId: String = \"deep-link\") {")
         appendLine("        val responder: NavigationResponder<*>? = if (lacksResponder(route)) BasekitDiscardingResponder<Any>() else null")
+        appendLine("        if (!closed) reportShown(route)")
         appendLine("        val edge = route.edge")
         appendLine("        if (edge != null) {")
         appendLine("            receive(ownerId, route, edge, null, responder)")
         appendLine("        } else {")
-        appendLine("            val entryId = UUID.randomUUID(); replacePath(listOf(BasekitNavigationEntry(id = entryId, route = attach(responder, route, entryId))))")
+        appendLine("            val entryId = UUID.randomUUID(); topRouter.reportedEntryIds += entryId")
+        appendLine("            replacePath(listOf(BasekitNavigationEntry(id = entryId, route = attach(responder, route, entryId))))")
         appendLine("        }")
         appendLine("    }")
         appendLine("    public fun open(args: NavigatorArgs, ownerId: String = \"deep-link\"): Boolean { val route = BasekitRoute.of(args) ?: return false; open(route, ownerId); return true }")
         appendLine("    public fun open(match: RouteMatch, ownerId: String = \"deep-link\"): Boolean = open(match.args, ownerId)")
         appendLine()
-        appendLine("    /** Sets the sheet, as a dismiss does with null; the replaced entry's responder resolves with null. */")
-        appendLine("    public fun updateSheet(entry: BasekitNavigationEntry?) { replaceSheet(entry) }")
-        appendLine("    public fun updateFullScreenCover(entry: BasekitNavigationEntry?) { replaceFullScreenCover(entry) }")
+        appendLine("    /** Reports [entry] shown, once, when neither a navigator nor [open] opened it: a root, or an entry")
+        appendLine("     * the host made itself. `BasekitDestinationView` and the stack host call it as an entry appears; a")
+        appendLine("     * host that shows entries its own way calls it too. An entry a navigator opened has an edge and was")
+        appendLine("     * reported by its `Observing…Navigator`, so it is not reported again. */")
+        appendLine("    public fun didShow(entry: BasekitNavigationEntry) {")
+        appendLine("        if (closed || entry.edge != null || !topRouter.reportedEntryIds.add(entry.id)) return")
+        appendLine("        reportShown(entry.route)")
+        appendLine("    }")
+        appendLine()
+        appendLine("    /** Sets the sheet, as a dismiss does with null; the replaced entry is reported closed and its")
+        appendLine("     * responder resolves with null. */")
+        appendLine("    public fun updateSheet(entry: BasekitNavigationEntry?) { sheet?.takeIf { it.id != entry?.id }?.let { reportClosed(listOf(it)) }; replaceSheet(entry) }")
+        appendLine("    public fun updateFullScreenCover(entry: BasekitNavigationEntry?) { fullScreenCover?.takeIf { it.id != entry?.id }?.let { reportClosed(listOf(it)) }; replaceFullScreenCover(entry) }")
         appendLine()
         appendLine("    public fun register(ownerId: String, handler: BasekitNavigationHandler): UUID {")
         appendLine("        val token = UUID.randomUUID(); handlers[ownerId] = token to handler; return token")
@@ -247,8 +300,10 @@ class ComposeNavigationGenerator(
         appendLine("        if (index < 0) { onCloseRoot?.invoke(ownerId, context); return }")
         appendLine("        val removed = pathEntries.subList(index, pathEntries.size).toList(); removeFrom(index); removed.forEach { resolve(it.id, null, dismiss = false) }")
         appendLine("    }")
-        appendLine("    public fun finish(entryId: UUID, result: Any?) { resolve(entryId, result, dismiss = true) }")
-        appendLine("    public fun dismiss(entryId: UUID) { resolve(entryId, null, dismiss = true) }")
+        appendLine("    /** Finishes or dismisses entry [entryId] for the host, such as a custom presentation it dismissed:")
+        appendLine("     * the entries it removes are reported closed. */")
+        appendLine("    public fun finish(entryId: UUID, result: Any?) { reportClosed(presentedRemovedBy(entryId)); resolve(entryId, result, dismiss = true) }")
+        appendLine("    public fun dismiss(entryId: UUID) { reportClosed(presentedRemovedBy(entryId)); resolve(entryId, null, dismiss = true) }")
 
         targets.forEach { target ->
             val params = buildList {
@@ -339,8 +394,36 @@ class ComposeNavigationGenerator(
         appendLine("        children.values.forEach { child -> child.routerHolding(entry)?.let { return it } }")
         appendLine("        return null")
         appendLine("    }")
+        appendLine("    /** Sets the path as the host shows it, such as after system back. Each entry it removes is reported")
+        appendLine("     * closed, top first, and its responder answers null. */")
         appendLine("    public fun reconcilePath(newPath: List<BasekitNavigationEntry>) {")
-        appendLine("        val retained = newPath.map { it.id }.toSet(); pathEntries.filter { it.id !in retained }.forEach { resolve(it.id, null, dismiss = false) }; replacePath(newPath)")
+        appendLine("        val retained = newPath.map { it.id }.toSet(); val removed = pathEntries.filter { it.id !in retained }")
+        appendLine("        reportClosed(removed.asReversed()); removed.forEach { resolve(it.id, null, dismiss = false) }; replacePath(newPath)")
+        appendLine("    }")
+        appendLine("    /** The entries that leave when entry [entryId] is dismissed, top first: it and, on the path, those over it. */")
+        appendLine("    private fun presentedRemovedBy(entryId: UUID): List<BasekitNavigationEntry> {")
+        appendLine("        sheet?.takeIf { it.id == entryId }?.let { return listOf(it) }")
+        appendLine("        fullScreenCover?.takeIf { it.id == entryId }?.let { return listOf(it) }")
+        appendLine("        customEntries[entryId]?.let { return listOf(it) }")
+        appendLine("        val index = pathEntries.indexOfFirst { it.id == entryId }")
+        appendLine("        return if (index < 0) emptyList() else pathEntries.subList(index, pathEntries.size).toList().asReversed()")
+        appendLine("    }")
+        appendLine("    private fun reportShown(route: BasekitRoute) {")
+        appendLine("        navigationObserver.onNavigation(HostNavigationEvents.navigatedTo(screen(route), args(route)))")
+        appendLine("    }")
+        appendLine("    private fun reportClosed(entries: List<BasekitNavigationEntry>) {")
+        appendLine("        entries.forEach { navigationObserver.onNavigation(HostNavigationEvents.closed(screen(it.route))) }")
+        appendLine("    }")
+        appendLine("    private fun screen(route: BasekitRoute): NavigationScreen = when (route) {")
+        destinations.forEach { destination ->
+            appendLine("        is BasekitRoute.${destination.routeClass} -> NavigationScreen.${destination.screenName}")
+        }
+        appendLine("    }")
+        appendLine("    private fun args(route: BasekitRoute): NavigatorArgs? = when (route) {")
+        destinations.forEach { destination ->
+            val value = if (destination.argsQualifiedName != null) "route.args" else "null"
+            appendLine("        is BasekitRoute.${destination.routeClass} -> $value")
+        }
         appendLine("    }")
         appendLine("    private fun replacePath(newPath: List<BasekitNavigationEntry>) { pathEntries.clear(); pathEntries.addAll(newPath) }")
         appendLine("    private fun removeFrom(index: Int) { pathEntries.subList(index, pathEntries.size).clear() }")
@@ -452,6 +535,7 @@ class ComposeNavigationGenerator(
         appendLine("        stack.forEachIndexed { index, entry ->")
         appendLine("            key(entry.id) {")
         appendLine("                val isRoot = index == 0")
+        appendLine("                LaunchedEffect(Unit) { router.didShow(entry) }")
         appendLine("                val isLeaving = entry in leaving")
         appendLine("                val progress = remember { Animatable(if (isRoot) 0f else 1f) }")
         appendLine("                if (!isRoot) {")

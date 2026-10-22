@@ -10,10 +10,10 @@ test('real PostHog captures one action and unified navigation events through the
   });
   expect(await page.evaluate(() => window.metricsErrors)).toEqual([]);
   const events = await page.evaluate(() => window.metricsEvents.filter(e => e.properties.app === 'browser-fixture'));
-  expect(events.map(e => e.event)).toEqual(['basekit action invoked', '$screen', 'basekit navigation closed', 'basekit navigation responded', '$screen']);
-  expect(events[0].properties.basekit_action).toBe('fail');
+  expect(events.map(e => e.event)).toEqual(['action_invoked', '$screen', 'navigation_closed', 'navigation_responded', '$screen']);
+  expect(events[0].properties.action).toBe('fail');
   expect(events[1].properties.$screen_name).toBe('DETAIL');
-  expect(events[1].properties.basekit_source).toBe('HOME_ON_OPEN_DETAIL');
+  expect(events[1].properties.source).toBe('HOME_ON_OPEN_DETAIL');
   expect(events[1].properties.nested).toEqual({ number: 2, flag: true });
   expect(events[4].properties.$screen_name).toBe('HOME');
   expect(events[4].properties.entry).toBe('cold');

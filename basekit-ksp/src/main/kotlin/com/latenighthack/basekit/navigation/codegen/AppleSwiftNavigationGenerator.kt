@@ -3,11 +3,18 @@ package com.latenighthack.basekit.navigation.codegen
 import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Dependencies
 
-/** Emits the app-specific Swift route model, router, interception API, and native renderers. */
+/**
+ * Emits the app-specific Swift route model, router, interception API, and native renderers.
+ *
+ * The router carries a `NavigationObserver` and, when [actionObservers] is set (basekit-viewmodel is on
+ * the classpath), a `ViewModelActionObserver`: `basekitViewModel` wraps the navigators and view models it
+ * builds with them, and the router itself reports the screens it shows or dismisses without a navigator.
+ */
 class AppleSwiftNavigationGenerator(
     private val codeGenerator: CodeGenerator,
     private val dependencies: Dependencies,
     private val frameworkImports: List<String>,
+    private val actionObservers: Boolean = true,
 ) {
     private data class Site(
         val edge: NavEdge,
@@ -209,6 +216,15 @@ class AppleSwiftNavigationGenerator(
         appendLine("    /// Called on the main actor when `close` names an owner this router does not present: the owner of")
         appendLine("    /// its root. Forward it to whatever presented this router (see `init(parent:policy:)`).")
         appendLine("    public var onCloseRoot: (@MainActor (String, Any?) -> Void)?")
+        appendLine("    /// Receives the screens this router shows or dismisses without a navigator: a root or other entry")
+        appendLine("    /// the host made, a deep link, Back, a swipe or a dragged-down sheet. `basekitViewModel` also wraps")
+        appendLine("    /// each navigator it builds with this router in an `Observing…Navigator` reporting to it. The routers")
+        appendLine("    /// this one makes, and those made with `init(parent:)`, report to their parent's observers.")
+        appendLine("    public let navigationObserver: NavigationObserver")
+        if (actionObservers) {
+            appendLine("    /// `basekitViewModel` wraps each view model it builds with this router in `Observing…` reporting to it.")
+            appendLine("    public let actionObserver: ViewModelActionObserver")
+        }
         appendLine("    private let policy: BasekitNavigationPolicy")
         appendLine("    private var handlers: [String: (UUID, BasekitNavigationHandler)] = [:]")
         appendLine("    private var responders: [UUID: NavigationResponder] = [:]")
@@ -221,15 +237,36 @@ class AppleSwiftNavigationGenerator(
         appendLine("    /// This router's platform presenter, or else its parent's, as it is when used.")
         appendLine("    private var presenter: BasekitPlatformPresenter? { platformPresenter ?? parentRouter?.presenter }")
         appendLine("    private var dismisser: (@MainActor (UUID) -> Void)? { platformDismisser ?? parentRouter?.dismisser }")
+        appendLine("    /// The router at the top of this one's tree, which remembers the entries reported shown.")
+        appendLine("    private var topRouter: BasekitNavigationRouter { parentRouter?.topRouter ?? self }")
+        appendLine("    /// The entries without an edge (roots, deep links) whose showing this tree has reported.")
+        appendLine("    private var reportedEntryIDs: Set<UUID> = []")
         appendLine()
-        appendLine("    public init(policy: BasekitNavigationPolicy = BasekitDefaultNavigationPolicy()) { self.policy = policy; super.init() }")
+        if (actionObservers) {
+            appendLine("    public init(")
+            appendLine("        policy: BasekitNavigationPolicy = BasekitDefaultNavigationPolicy(),")
+            appendLine("        navigationObserver: NavigationObserver = NavigationObserverCompanion.shared.NoOp,")
+            appendLine("        actionObserver: ViewModelActionObserver = ViewModelActionObserverCompanion.shared.NoOp")
+            appendLine("    ) {")
+            appendLine("        self.policy = policy; self.navigationObserver = navigationObserver; self.actionObserver = actionObserver; super.init()")
+            appendLine("    }")
+        } else {
+            appendLine("    public init(policy: BasekitNavigationPolicy = BasekitDefaultNavigationPolicy(), navigationObserver: NavigationObserver = NavigationObserverCompanion.shared.NoOp) {")
+            appendLine("        self.policy = policy; self.navigationObserver = navigationObserver; super.init()")
+            appendLine("    }")
+        }
         appendLine("    /// A router for content presented by [parent], such as a modal that has its own stack and sheets.")
         appendLine("    /// Closing this router's root (an owner it does not present) closes that owner's entry in [parent],")
         appendLine("    /// which also resolves its responder, as a swipe-dismiss in [parent] does. Without a platform presenter")
-        appendLine("    /// or dismisser of its own it uses [parent]'s. This decides nothing about how [parent] presents the")
-        appendLine("    /// entry. [parent] makes one for each entry it presents other than by push; see `host(for:)`.")
+        appendLine("    /// or dismisser of its own it uses [parent]'s, and it reports to [parent]'s observers. This decides")
+        appendLine("    /// nothing about how [parent] presents the entry. [parent] makes one for each entry it presents other")
+        appendLine("    /// than by push; see `host(for:)`.")
         appendLine("    public convenience init(parent: BasekitNavigationRouter, policy: BasekitNavigationPolicy = BasekitDefaultNavigationPolicy()) {")
-        appendLine("        self.init(policy: policy)")
+        if (actionObservers) {
+            appendLine("        self.init(policy: policy, navigationObserver: parent.navigationObserver, actionObserver: parent.actionObserver)")
+        } else {
+            appendLine("        self.init(policy: policy, navigationObserver: parent.navigationObserver)")
+        }
         appendLine("        parentRouter = parent")
         appendLine("        onCloseRoot = { [weak parent] ownerID, context in parent?.close(ownerId: ownerID, context: context) }")
         appendLine("    }")
@@ -241,21 +278,45 @@ class AppleSwiftNavigationGenerator(
         appendLine("    public func host(for entry: BasekitNavigationEntry) -> BasekitNavigationRouter { router(holding: entry) ?? self }")
         appendLine("    /// Opens [route] from outside the graph, such as a deep link. A responding destination opened")
         appendLine("    /// without a responder gets one that discards its result, since nobody is waiting for it; it runs,")
-        appendLine("    /// responds and closes as it does when a navigator opens it.")
+        appendLine("    /// responds and closes as it does when a navigator opens it. It is reported to `navigationObserver`")
+        appendLine("    /// as a `NavigatedTo` before it is presented.")
         appendLine("    public func open(_ route: BasekitRoute, ownerID: String = \"deep-link\") {")
         appendLine("        let responder: NavigationResponder? = Self.lacksResponder(route) ? BasekitDiscardingResponder() : nil")
+        appendLine("        if !closed { reportShown(route) }")
         appendLine("        if let edge = Self.edge(of: route) {")
         appendLine("            receive(ownerID: ownerID, route: route, edge: edge, context: nil, responder: responder)")
         appendLine("        } else {")
-        appendLine("            let entryID = UUID(); path = [.init(id: entryID, route: attach(responder, to: route, entryID: entryID))]")
+        appendLine("            let entryID = UUID(); topRouter.reportedEntryIDs.insert(entryID)")
+        appendLine("            path = [.init(id: entryID, route: attach(responder, to: route, entryID: entryID))]")
         appendLine("        }")
         appendLine("    }")
         appendLine("    @discardableResult public func open(args: NavigatorArgs, ownerID: String = \"deep-link\") -> Bool { guard let route = BasekitRoute(args: args) else { return false }; open(route, ownerID: ownerID); return true }")
         appendLine("    @discardableResult public func open(match: RouteMatch, ownerID: String = \"deep-link\") -> Bool { open(args: match.args, ownerID: ownerID) }")
         appendLine()
+        appendLine("    /// Reports [entry] shown, once, when neither a navigator nor `open` opened it: a root, or an entry the")
+        appendLine("    /// host made itself. `BasekitDestinationView` and the stack hosts call it as an entry appears; a host")
+        appendLine("    /// that shows entries its own way calls it too. An entry a navigator opened has an edge and was")
+        appendLine("    /// reported by its `Observing…Navigator`, so it is not reported again.")
+        appendLine("    public func didShow(_ entry: BasekitNavigationEntry) {")
+        appendLine("        guard !closed, entry.edge == nil, topRouter.reportedEntryIDs.insert(entry.id).inserted else { return }")
+        appendLine("        reportShown(entry.route)")
+        appendLine("    }")
+        appendLine()
+        appendLine("    /// The stack, sheet and cover as the host shows them. A host-driven change (Back, a swipe, a dragged-down")
+        appendLine("    /// sheet) reports each entry it removes closed; one that matches the router's own state reports nothing.")
         appendLine("    public var pathBinding: Binding<[BasekitNavigationEntry]> { Binding(get: { self.path }, set: { self.reconcilePath($0) }) }")
-        appendLine("    public var sheetBinding: Binding<BasekitNavigationEntry?> { Binding(get: { self.sheet }, set: { self.replaceModal(&self.sheet, with: $0) }) }")
-        appendLine("    public var fullScreenCoverBinding: Binding<BasekitNavigationEntry?> { Binding(get: { self.fullScreenCover }, set: { self.replaceModal(&self.fullScreenCover, with: $0) }) }")
+        appendLine("    public var sheetBinding: Binding<BasekitNavigationEntry?> {")
+        appendLine("        Binding(get: { self.sheet }, set: { replacement in")
+        appendLine("            if let removed = self.sheet, removed.id != replacement?.id { self.reportClosed([removed]) }")
+        appendLine("            self.replaceModal(&self.sheet, with: replacement)")
+        appendLine("        })")
+        appendLine("    }")
+        appendLine("    public var fullScreenCoverBinding: Binding<BasekitNavigationEntry?> {")
+        appendLine("        Binding(get: { self.fullScreenCover }, set: { replacement in")
+        appendLine("            if let removed = self.fullScreenCover, removed.id != replacement?.id { self.reportClosed([removed]) }")
+        appendLine("            self.replaceModal(&self.fullScreenCover, with: replacement)")
+        appendLine("        })")
+        appendLine("    }")
         appendLine()
         appendLine("    @discardableResult public func register(ownerID: String, handler: @escaping BasekitNavigationHandler) -> UUID {")
         appendLine("        let token = UUID(); handlers[ownerID] = (token, handler); return token")
@@ -269,8 +330,10 @@ class AppleSwiftNavigationGenerator(
         appendLine("        guard let index = path.firstIndex(where: { $0.ownerID == ownerId }) else { onCloseRoot?(ownerId, context); return }")
         appendLine("        let removed = Array(path[index...]); path.removeSubrange(index...); removed.forEach { resolve(entryID: $0.id, result: nil, dismiss: false) }")
         appendLine("    }")
-        appendLine("    public func finish(entryID: UUID, with result: Any?) { resolve(entryID: entryID, result: result, dismiss: true) }")
-        appendLine("    public func dismiss(entryID: UUID) { resolve(entryID: entryID, result: nil, dismiss: true) }")
+        appendLine("    /// Finishes or dismisses entry [entryID] for the host, such as a custom presentation it dismissed: the")
+        appendLine("    /// entries it removes are reported closed.")
+        appendLine("    public func finish(entryID: UUID, with result: Any?) { reportClosed(presented(removedBy: entryID)); resolve(entryID: entryID, result: result, dismiss: true) }")
+        appendLine("    public func dismiss(entryID: UUID) { reportClosed(presented(removedBy: entryID)); resolve(entryID: entryID, result: nil, dismiss: true) }")
 
         val sitesByTarget = sites.groupBy { it.target.qualifiedName }
         for (targetSites in sitesByTarget.values) {
@@ -358,8 +421,25 @@ class AppleSwiftNavigationGenerator(
         appendLine("        for child in children.values { if let found = child.router(holding: entry) { return found } }")
         appendLine("        return nil")
         appendLine("    }")
+        appendLine("    /// Sets the path as the host shows it, such as after Back or a swipe. Each entry it removes is reported")
+        appendLine("    /// closed, top first, and its responder answers nil.")
         appendLine("    public func reconcilePath(_ newPath: [BasekitNavigationEntry]) {")
-        appendLine("        let retained = Set(newPath.map(\\.id)); path.filter { !retained.contains($0.id) }.forEach { resolve(entryID: $0.id, result: nil, dismiss: false) }; path = newPath")
+        appendLine("        let retained = Set(newPath.map(\\.id)); let removed = path.filter { !retained.contains($0.id) }")
+        appendLine("        reportClosed(removed.reversed()); removed.forEach { resolve(entryID: $0.id, result: nil, dismiss: false) }; path = newPath")
+        appendLine("    }")
+        appendLine("    /// The entries that leave when entry [entryID] is dismissed, top first: it and, on the path, those over it.")
+        appendLine("    private func presented(removedBy entryID: UUID) -> [BasekitNavigationEntry] {")
+        appendLine("        if let sheet, sheet.id == entryID { return [sheet] }")
+        appendLine("        if let fullScreenCover, fullScreenCover.id == entryID { return [fullScreenCover] }")
+        appendLine("        if let custom = customEntries[entryID] { return [custom] }")
+        appendLine("        if let index = path.firstIndex(where: { $0.id == entryID }) { return Array(path[index...].reversed()) }")
+        appendLine("        return []")
+        appendLine("    }")
+        appendLine("    private func reportShown(_ route: BasekitRoute) {")
+        appendLine("        navigationObserver.onNavigation(event: HostNavigationEvents.shared.navigatedTo(screen: Self.screen(of: route), args: Self.args(of: route)))")
+        appendLine("    }")
+        appendLine("    private func reportClosed(_ entries: [BasekitNavigationEntry]) {")
+        appendLine("        entries.forEach { navigationObserver.onNavigation(event: HostNavigationEvents.shared.closed(screen: Self.screen(of: $0.route))) }")
         appendLine("    }")
         appendLine("    private func replaceModal(_ slot: inout BasekitNavigationEntry?, with replacement: BasekitNavigationEntry?) {")
         appendLine("        let removedID = slot?.id != replacement?.id ? slot?.id : nil; if let replacement { adopt(replacement) }; slot = replacement")
@@ -375,6 +455,30 @@ class AppleSwiftNavigationGenerator(
                 if (destination.responseQualifiedName != null) add("_")
             }.joinToString(", ")
             appendLine("        case .$routeName($ignored): return edge")
+        }
+        appendLine("        }")
+        appendLine("    }")
+        appendLine("    private static func screen(of route: BasekitRoute) -> NavigationScreen {")
+        appendLine("        switch route {")
+        destinations.forEach { destination ->
+            appendLine("        case .${destination.navName.toSwiftCase()}: return .${destination.screenName.toSwiftEnumCase()}")
+        }
+        appendLine("        }")
+        appendLine("    }")
+        appendLine("    private static func args(of route: BasekitRoute) -> NavigatorArgs? {")
+        appendLine("        switch route {")
+        destinations.forEach { destination ->
+            val routeName = destination.navName.toSwiftCase()
+            if (destination.argsSwiftName == null) {
+                appendLine("        case .$routeName: return nil")
+            } else {
+                val pattern = buildList {
+                    add("let args")
+                    add("_")
+                    if (destination.responseQualifiedName != null) add("_")
+                }.joinToString(", ")
+                appendLine("        case .$routeName($pattern): return args")
+            }
         }
         appendLine("        }")
         appendLine("    }")
@@ -449,7 +553,9 @@ class AppleSwiftNavigationGenerator(
         appendLine("    public init(router: BasekitNavigationRouter, rootEntry: BasekitNavigationEntry, @ViewBuilder root: @escaping (BasekitNavigationEntry, BasekitNavigationRouter, Namespace.ID) -> Root, @ViewBuilder destination: @escaping (BasekitNavigationEntry, BasekitNavigationRouter, Namespace.ID) -> Destination) { self.router = router; self.rootEntry = rootEntry; self.root = root; self.destination = destination }")
         appendLine("    public var body: some View {")
         appendLine("        NavigationStack(path: router.pathBinding) {")
-        appendLine("            root(rootEntry, router, namespace).navigationDestination(for: BasekitNavigationEntry.self) { entry in transitioned(entry, destination(entry, router, namespace)) }")
+        appendLine("            root(rootEntry, router, namespace).onAppear { router.didShow(rootEntry) }.navigationDestination(for: BasekitNavigationEntry.self) { entry in")
+        appendLine("                transitioned(entry, destination(entry, router, namespace)).onAppear { router.didShow(entry) }")
+        appendLine("            }")
         appendLine("        }.sheet(item: router.sheetBinding) { transitioned($0, presented($0)) }")
         appendLine("#if canImport(UIKit)")
         appendLine("        .fullScreenCover(item: router.fullScreenCoverBinding) { transitioned($0, presented($0)) }")
@@ -507,7 +613,7 @@ class AppleSwiftNavigationGenerator(
         appendLine("    public convenience init(router: BasekitNavigationRouter, root: BasekitNavigationEntry, factory: @escaping Factory) { self.init(router: router, root: root, navigationController: UINavigationController(), factory: factory) }")
         appendLine("    private func controller(for entry: BasekitNavigationEntry) -> UIViewController {")
         appendLine("        if let existing = controllers[entry.id] { return existing }")
-        appendLine("        let made = factory(entry); controllers[entry.id] = made; return made")
+        appendLine("        let made = factory(entry); controllers[entry.id] = made; router.didShow(entry); return made")
         appendLine("    }")
         appendLine("    /// The stack to finish with once UIKit shows the push or pop that leads to it.")
         appendLine("    private var stackAfterTransition: [UIViewController]?")

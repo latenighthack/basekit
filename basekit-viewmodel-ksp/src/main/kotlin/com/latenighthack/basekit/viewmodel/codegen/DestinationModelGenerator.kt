@@ -28,7 +28,10 @@ data class FactoryRoute(
  *
  * `basekitViewModel` is pure: it creates the view model and nothing else, so the host keeps the view,
  * the presentation and the model's lifetime. The navigator always reports to the host under
- * `entry.ownerID`, the owner the router closes the entry by. It does not throw: every destination has
+ * `entry.ownerID`, the owner the router closes the entry by. When the host is the generated
+ * `BasekitNavigationRouter`, the navigator is wrapped in its `Observing…Navigator` reporting to the
+ * router's `navigationObserver`, and the view model in its `Observing…` decorator reporting to the
+ * router's `actionObserver` unless that is `NoOp`. It does not throw: every destination has
  * a factory (the processor fails the build otherwise, see [missingDestinationFactories]), and the
  * router gives every responding entry it presents a responder, deep links included. An entry built by
  * hand for a responding destination without one stops at a `preconditionFailure`.
@@ -64,6 +67,9 @@ class DestinationModelGenerator(
             appendLine("/// `entry.ownerID`, which is the owner the router closes the entry by. Pass the router the stack host")
             appendLine("/// gives with the entry, or `router.host(for: entry)`: a presented entry reports to the router made for it.")
             appendLine("///")
+            appendLine("/// When [host] is a `BasekitNavigationRouter`, the navigator reports to its `navigationObserver` and the")
+            appendLine("/// view model's actions to its `actionObserver`.")
+            appendLine("///")
             appendLine("/// A responding destination's entry must carry a responder. `BasekitNavigationRouter` attaches one to")
             appendLine("/// every entry it presents; an entry built by hand without one stops at a `preconditionFailure`.")
             appendLine("@available(iOS 18.0, macOS 15.0, *)")
@@ -73,6 +79,11 @@ class DestinationModelGenerator(
             appendLine("    host: AppleNavigationHost,")
             appendLine("    factories: GeneratedViewModelFactories")
             appendLine(") -> BasekitDestinationModel {")
+            appendLine("    // The observers of the router the entry reports to; another kind of host observes nothing.")
+            appendLine("    let router = host as? BasekitNavigationRouter")
+            appendLine("    let navigationObserver = router?.navigationObserver ?? NavigationObserverCompanion.shared.NoOp")
+            appendLine("    let actionObserver = router?.actionObserver ?? ViewModelActionObserverCompanion.shared.NoOp")
+            appendLine("    let observesActions = actionObserver !== ViewModelActionObserverCompanion.shared.NoOp")
             appendLine("    switch entry.route {")
             sorted.forEach { (factory, route) -> append(routeCase(factory, route)) }
             appendLine("    }")
@@ -81,11 +92,14 @@ class DestinationModelGenerator(
             appendLine("/// Builds [entry]'s view model once per view identity, observes it while shown, and shows [content]")
             appendLine("/// for it. A re-render or layout change that keeps the view's identity keeps the model, as")
             appendLine("/// `BasekitModelView` does. It decides nothing about presentation: wrap it in a stack, sheet or")
-            appendLine("/// detents as the host likes.")
+            appendLine("/// detents as the host likes. As it appears it tells a `BasekitNavigationRouter` host it shows")
+            appendLine("/// [entry] (`didShow`), which reports an entry no navigator opened, such as the root.")
             appendLine("@available(iOS 18.0, macOS 15.0, *)")
             appendLine("@MainActor")
             appendLine("public struct BasekitDestinationView<Content: View>: View {")
             appendLine("    @StateObject private var holder: BasekitDestinationModelHolder")
+            appendLine("    private let entry: BasekitNavigationEntry")
+            appendLine("    private let router: BasekitNavigationRouter?")
             appendLine("    private let content: (BasekitDestinationModel) -> Content")
             appendLine()
             appendLine("    public init(")
@@ -95,11 +109,13 @@ class DestinationModelGenerator(
             appendLine("        @ViewBuilder content: @escaping (BasekitDestinationModel) -> Content")
             appendLine("    ) {")
             appendLine("        _holder = StateObject(wrappedValue: BasekitDestinationModelHolder(basekitViewModel(for: entry, host: host, factories: factories)))")
+            appendLine("        self.entry = entry")
+            appendLine("        self.router = host as? BasekitNavigationRouter")
             appendLine("        self.content = content")
             appendLine("    }")
             appendLine()
             appendLine("    public var body: some View {")
-            appendLine("        content(holder.model).task { await holder.model.model.observe() }")
+            appendLine("        content(holder.model).task { await holder.model.model.observe() }.onAppear { router?.didShow(entry) }")
             appendLine("    }")
             appendLine("}")
             appendLine()
@@ -135,13 +151,19 @@ class DestinationModelGenerator(
         val arguments = route.parameters.joinToString(", ") { parameter ->
             when (parameter) {
                 RouteParameter.ARGS -> "args"
-                RouteParameter.NAVIGATOR -> "${route.navigatorType}(ownerId: entry.ownerID, host: host)"
+                RouteParameter.NAVIGATOR ->
+                    "${route.observingNavigatorType}(delegate: ${route.navigatorType}(ownerId: entry.ownerID, host: host), observer: navigationObserver)"
                 RouteParameter.RESPONDER -> "responder"
             }
         }
-        appendLine("        return .${route.caseName}(Observable${route.specSimpleName}(factories.${factory.name}($arguments)))")
+        val spec = route.specSimpleName
+        appendLine("        let model: $spec = factories.${factory.name}($arguments)")
+        appendLine("        return .${route.caseName}(Observable$spec(observesActions ? Observing$spec(delegate: model, actionObserver: actionObserver) : model))")
     }
 }
+
+/** The generated decorator of [FactoryRoute.navigatorType] (`AppleHomeNavigator`): `ObservingHomeNavigator`. */
+internal val FactoryRoute.observingNavigatorType: String get() = "Observing" + navigatorType.removePrefix("Apple")
 
 /** A `@Destination` as a build error names it: its `BasekitRoute` case, its spec and where it is declared. */
 data class DestinationSite(val caseName: String, val qualifiedName: String, val location: String?)

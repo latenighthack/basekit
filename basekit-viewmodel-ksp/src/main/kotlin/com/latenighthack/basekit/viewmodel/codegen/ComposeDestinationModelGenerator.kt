@@ -13,7 +13,9 @@ import com.google.devtools.ksp.processing.Dependencies
  *
  * `basekitViewModel` is pure, as on Apple platforms: it creates the view model and nothing else, so
  * the host keeps the screen, the presentation and the model's lifetime. The navigator reports to the
- * host under `entry.ownerId`.
+ * host under `entry.ownerId`. When the host is the generated `BasekitNavigationRouter`, the navigator is
+ * wrapped in its `Observing…Navigator` and the view model in `observingActions`, reporting to the
+ * router's observers.
  */
 class ComposeDestinationModelGenerator(
     private val codeGenerator: CodeGenerator,
@@ -31,7 +33,13 @@ class ComposeDestinationModelGenerator(
                 appendLine()
             }
             appendLine("import androidx.compose.runtime.Composable")
+            appendLine("import androidx.compose.runtime.LaunchedEffect")
             appendLine("import androidx.compose.runtime.remember")
+            appendLine("import com.latenighthack.basekit.navigation.NavigationObserver")
+            appendLine("import com.latenighthack.basekit.viewmodel.ViewModelActionObserver")
+            // `observingActions` is an extension declared beside each spec.
+            sorted.map { (_, route) -> route.specPackage }.filter { it.isNotEmpty() }.distinct().sorted()
+                .forEach { appendLine("import $it.observingActions") }
             appendLine("import kotlinx.coroutines.Job")
             appendLine()
             appendLine("/** A destination's view model, built by `basekitViewModel(entry, host, factories)`. */")
@@ -50,6 +58,9 @@ class ComposeDestinationModelGenerator(
             appendLine(" * `entry.ownerId`, which is the owner the router closes the entry by. Pass the router the stack host")
             appendLine(" * gives with the entry, or `router.host(entry)`: a presented entry reports to the router made for it.")
             appendLine(" *")
+            appendLine(" * When [host] is a `BasekitNavigationRouter`, the navigator reports to its `navigationObserver` and")
+            appendLine(" * the view model's actions to its `actionObserver`.")
+            appendLine(" *")
             appendLine(" * A responding destination's entry must carry a responder. `BasekitNavigationRouter` attaches one to")
             appendLine(" * every entry it presents; an entry built by hand without one fails here.")
             appendLine(" */")
@@ -57,8 +68,14 @@ class ComposeDestinationModelGenerator(
             appendLine("    entry: BasekitNavigationEntry,")
             appendLine("    host: AppleNavigationHost,")
             appendLine("    factories: $factories,")
-            appendLine("): BasekitDestinationModel = when (val route = entry.route) {")
+            appendLine("): BasekitDestinationModel {")
+            appendLine("    // The observers of the router the entry reports to; another kind of host observes nothing.")
+            appendLine("    val router = host as? BasekitNavigationRouter")
+            appendLine("    val navigationObserver = router?.navigationObserver ?: NavigationObserver.NoOp")
+            appendLine("    val actionObserver = router?.actionObserver ?: ViewModelActionObserver.NoOp")
+            appendLine("    return when (val route = entry.route) {")
             sorted.forEach { (factory, route) -> appendLine(routeCase(factory, route)) }
+            appendLine("    }")
             appendLine("}")
             appendLine()
             appendLine("/** A destination's view model bound for Compose: its state observed while composed, and its actions. */")
@@ -79,7 +96,9 @@ class ComposeDestinationModelGenerator(
             appendLine("/**")
             appendLine(" * Builds [entry]'s view model once while this stays in the composition, observes it while shown, and")
             appendLine(" * shows [content] for it. It decides nothing about presentation: put it in a stack, sheet or dialog")
-            appendLine(" * as the host likes. [launchAction] runs the screen's actions.")
+            appendLine(" * as the host likes. [launchAction] runs the screen's actions. As it appears it tells a")
+            appendLine(" * `BasekitNavigationRouter` host it shows [entry] (`didShow`), which reports an entry no navigator")
+            appendLine(" * opened, such as the root.")
             appendLine(" */")
             appendLine("@Composable")
             appendLine("public fun BasekitDestinationView(")
@@ -90,6 +109,7 @@ class ComposeDestinationModelGenerator(
             appendLine("    content: @Composable (BasekitDestinationBinding) -> Unit,")
             appendLine(") {")
             appendLine("    val model = remember(entry.id) { basekitViewModel(entry, host, factories) }")
+            appendLine("    LaunchedEffect(entry.id) { (host as? BasekitNavigationRouter)?.didShow(entry) }")
             appendLine("    content(bindDestination(model, launchAction))")
             appendLine("}")
         }
@@ -102,13 +122,13 @@ class ComposeDestinationModelGenerator(
         val arguments = route.parameters.joinToString(", ") { parameter ->
             when (parameter) {
                 RouteParameter.ARGS -> "route.args"
-                RouteParameter.NAVIGATOR -> "${route.navigatorType}(entry.ownerId, host)"
+                RouteParameter.NAVIGATOR -> "${route.observingNavigatorType}(${route.navigatorType}(entry.ownerId, host), navigationObserver)"
                 RouteParameter.RESPONDER ->
                     "requireNotNull(route.responder) { \"basekitViewModel: the ${route.caseName} entry has no responder. " +
                         "BasekitNavigationRouter attaches one to every entry it presents; an entry built by hand must carry one.\" }"
             }
         }
-        return "    is BasekitRoute.${route.className} -> BasekitDestinationModel.${route.className}(factories.${factory.name}($arguments))"
+        return "        is BasekitRoute.${route.className} -> BasekitDestinationModel.${route.className}(factories.${factory.name}($arguments).observingActions(actionObserver))"
     }
 
     private val FactoryRoute.className: String get() = caseName.replaceFirstChar { it.uppercase() }

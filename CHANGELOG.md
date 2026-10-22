@@ -4,6 +4,35 @@ All notable changes to basekit are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor versions may break API).
 
+## [0.6.2] — 2026-10-22
+
+- Breaking (navigation metrics): `PostHogMetricsCollector` sends nothing named `basekit`. Events
+  `basekit action invoked`, `basekit navigation closed` and `basekit navigation responded` are now
+  `action_invoked`, `navigation_closed` and `navigation_responded` (`$screen` is unchanged). The
+  properties `basekit_viewmodel`, `basekit_action`, `basekit_screen`, `basekit_navigation_operation`
+  and `basekit_source` are now `view_model`, `action`, `screen`, `navigation_operation` and `source`.
+  Static properties and providers can no longer set exactly those names or `$screen_name`; other
+  names, including `basekit_…` ones, now pass through. Update PostHog insights, actions and cohorts
+  that use the old names, or map them back with `eventName`.
+- Navigation: the generated `BasekitNavigationRouter` takes a `NavigationObserver` and a
+  `ViewModelActionObserver`, `NoOp` by default. Swift:
+  `BasekitNavigationRouter(policy:navigationObserver:actionObserver:)`, with both new parameters
+  defaulted. Kotlin: a new `BasekitNavigationRouter(policy, navigationObserver, actionObserver)`
+  constructor; `BasekitNavigationRouter()`, `(policy)` and `{ request -> … }` are unchanged. Routers
+  made by `host(for:)` / `host(entry)` and the `parent` initializer use their parent's observers. The
+  `actionObserver` exists when basekit-viewmodel is on the classpath.
+- `basekitViewModel` and `BasekitDestinationView` (Swift and Compose) wrap each destination's
+  `Apple<X>Navigator` in `Observing<X>Navigator` reporting to the router's `navigationObserver`, and its
+  view model in `Observing<Spec>` reporting to the router's `actionObserver`. With `NoOp` observers the
+  view model is the factory's own instance, as before.
+- The router reports the screens no navigator reports: `didShow(entry)` reports a root or other
+  entry without an edge the first time it shows (`BasekitDestinationView`, the stack hosts and
+  `BasekitNavigationControllerHost` call it), `open` reports a deep link before presenting it, and
+  `reconcilePath` (Back, swipes), the sheet and cover bindings, `updateSheet` /
+  `updateFullScreenCover` and `finish` / `dismiss(entryID)` report each entry they remove as `Closed`.
+  A navigator's own `navigateTo…` and `close` are not reported again. The generated
+  `HostNavigationEvents` builds these events from a `NavigationScreen`.
+
 ## Next
 
 - Android: a nullable navigation argument (`String?`, `ByteArray?`, `Int?`, `Boolean?`) set to null
