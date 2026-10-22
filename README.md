@@ -225,10 +225,10 @@ responding-destination suspension; Swift owns the native presentation:
 let router = BasekitNavigationRouter(policy: AppNavigationPolicy())
 let root = router.root(.home(args: HomeViewModelArgs(), edge: nil))
 
-BasekitNavigationStackHost(router: router, rootEntry: root) { entry, namespace in
-    screen(for: entry, namespace: namespace, router: router)
-} destination: { entry, namespace in
-    screen(for: entry, namespace: namespace, router: router)
+BasekitNavigationStackHost(router: router, rootEntry: root) { entry, host, namespace in
+    screen(for: entry, namespace: namespace, host: host)
+} destination: { entry, host, namespace in
+    screen(for: entry, namespace: namespace, host: host)
 }
 ```
 
@@ -248,10 +248,21 @@ builds it once per view identity and observes it while shown, deciding nothing a
 its generated navigator, e.g. `AppleHomeNavigator(ownerId: entry.ownerID, host: router)`;
 `AppleCloseNavigator` closes for any destination that only closes.
 
-`BasekitNavigationRouter(parent:)` creates a router for content `parent` presents, such as a modal
-with its own stack and sheets: closing its root closes the owner's entry in `parent`, resolving its
-responder as a swipe-dismiss there does. It is opt-in per presentation. `onCloseRoot` and the other
-router callbacks are `@MainActor`.
+Each closure gets the entry and `host`, the router the entry's navigator reports to; build the entry's
+model with that `host`. The router makes a router of its own, with the same policy and platform
+presenter, for every entry it presents other than by push (sheet, full-screen cover or custom). A
+presented entry's navigator reports to that router, so what the entry opens is presented from it, over
+the entry. A sheet that opens a sheet therefore stacks it, and pushes from a sheet go on the sheet's own
+path. `BasekitNavigationStackHost` shows each sheet and cover as a stack of its own for that router.
+`router.host(for: entry)` returns it for hosts that present by themselves, such as a UIKit
+`platformPresenter`, and finds it from any router above the entry. Each router has one sheet slot. When
+a presented entry leaves, everything presented over it goes with it, and their responders answer `nil`.
+That includes a lower router presenting a new sheet in its slot. Which presentation an edge gets stays
+with the policy and the screen's handler.
+
+`BasekitNavigationRouter(parent:)` creates such a router: closing its root closes the owner's entry in
+`parent`, resolving its responder as a swipe-dismiss there does. `onCloseRoot` and the other router
+callbacks are `@MainActor`.
 
 Generated wrappers expose `ActionIds` (`ObservableSidebarViewModel.ActionIds.onAccountTapped ==
 "sidebar.onAccountTapped"`), the same strings as Compose's `SidebarViewModelBinding.ActionIds` and

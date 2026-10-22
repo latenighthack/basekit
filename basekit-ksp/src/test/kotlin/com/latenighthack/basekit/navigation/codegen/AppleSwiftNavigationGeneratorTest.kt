@@ -104,6 +104,42 @@ class AppleSwiftNavigationGeneratorTest {
         assertContains(source, "let routed = attach(responder, to: route, entryID: entryID)")
     }
 
+    @Test
+    fun givesEachPresentedEntryARouterThatItsSheetsStackOn() {
+        val output = RecordingSwiftCodeGenerator()
+        val destinations = listOf(
+            destination(
+                simpleName = "HomeViewModel",
+                qualifiedName = "sample.HomeViewModel",
+                navName = "home",
+                edges = listOf(NavEdge("home", "onOpenRoom", "sample.RoomViewModel")),
+            ),
+            destination("RoomViewModel", "sample.RoomViewModel", "room"),
+        )
+
+        AppleSwiftNavigationGenerator(output, Dependencies(false), listOf("SampleKit"))
+            .generate(destinations)
+
+        val source = output.source()
+        // A sheet, cover or custom entry gets a router of its own, with the presenter's policy.
+        assertContains(source, "children[entry.id] = BasekitNavigationRouter(parent: self, policy: policy)")
+        // It uses its parent's platform presenter as that is when it presents, and once its entry has
+        // gone it answers whatever its view model still opens with nil.
+        assertContains(source, "private var presenter: BasekitPlatformPresenter? { platformPresenter ?? parentRouter?.presenter }")
+        assertContains(source, "if closed { responder?.respond(response: nil); return }")
+        assertContains(source, "if let replacement { adopt(replacement) }; slot = replacement")
+        assertContains(source, "if let presenter { adopt(entry); customEntries[entry.id] = entry")
+        assertContains(source, "public func host(for entry: BasekitNavigationEntry) -> BasekitNavigationRouter { router(holding: entry) ?? self }")
+        // An entry that leaves takes everything presented over it, and their responders answer nil.
+        assertContains(source, "if let removedID { responders.removeValue(forKey: removedID)?.respond(response: nil); dropChild(removedID) }")
+        assertContains(source, "private func dropChild(_ entryID: UUID) { children.removeValue(forKey: entryID)?.tearDown() }")
+        // The stack host gives each entry its host, and shows a presented entry's own stack.
+        assertContains(source, "root(rootEntry, router, namespace)")
+        assertContains(source, "transitioned(entry, destination(entry, router, namespace))")
+        assertContains(source, "AnyView(BasekitPresentedStackHost(parent: router, entry: entry, destination: destination))")
+        assertContains(source, "let host = parent.host(for: entry); _router = StateObject(wrappedValue: host)")
+    }
+
     private fun destination(
         simpleName: String,
         qualifiedName: String,

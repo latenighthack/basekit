@@ -18,6 +18,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = ComposeTestApplication::class)
@@ -108,5 +109,35 @@ class GeneratedHostTest {
         compose.onNodeWithText("header:Group(name=new)").assertDoesNotExist()
         compose.onNodeWithText("Selected pinned@0").assertExists()
         compose.onNodeWithText("Row more@1").assertExists()
+    }
+
+    @Test fun theStackHostShowsEachSheetWithTheRouterMadeForIt() {
+        val router = BasekitNavigationRouter { request ->
+            if (request.edge == AppleNavigationEdge.HOME_ON_PICK) BasekitNavigationDecision(BasekitPresentation.Sheet) else BasekitNavigationDecision()
+        }
+        val rootEntry = router.root(BasekitRoute.Home(HomeViewModel.Args(), edge = null))
+        val hosts = mutableMapOf<java.util.UUID, BasekitNavigationRouter>()
+        compose.setContent {
+            BasekitNavigationStackHost(
+                router, rootEntry,
+                root = { entry, host -> hosts[entry.id] = host; BasicText("home") },
+                destination = { entry, host -> hosts[entry.id] = host; BasicText("picker") },
+                // Shown in place, so the test sees every sheet without dialog windows.
+                sheet = { _, _, content -> content() },
+            )
+        }
+        compose.runOnIdle { router.showPicker("home", PickerViewModel.Args(), AppleNavigationEdge.HOME_ON_PICK, null) {} }
+        compose.waitForIdle()
+        val first = router.sheet!!
+        val firstHost = router.host(first)
+        compose.runOnIdle { firstHost.showPicker(first.ownerId, PickerViewModel.Args(), AppleNavigationEdge.HOME_ON_PICK, null) {} }
+        compose.waitForIdle()
+        val second = firstHost.sheet!!
+        assertTrue(hosts[rootEntry.id] === router)
+        assertTrue(hosts[first.id] === firstHost)
+        assertTrue(hosts[second.id] === router.host(second))
+        compose.onAllNodesWithText("picker").assertCountEquals(2)
+        compose.runOnIdle { router.updateSheet(null) }
+        compose.onAllNodesWithText("picker").assertCountEquals(0)
     }
 }

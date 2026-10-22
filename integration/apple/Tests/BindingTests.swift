@@ -64,6 +64,71 @@ final class BindingTests: XCTestCase {
         XCTAssertNil(router.sheet)
     }
 
+    // Stacked sheets: a sheet's view model reports to the router made for it, so what it opens is
+    // presented over it. The policy, not the router, decides that a pick is a sheet.
+    func testASheetsRouterStacksTheSheetItOpensAndClosesItFirst() throws {
+        let router = BasekitNavigationRouter(policy: SheetsForPicks())
+        let first = RecordingResponder(), second = RecordingResponder()
+        router.showPicker(ownerId: "root", args: PickerViewModelArgs(), edge: .homeOnPick, context: nil, responder: first)
+        let firstSheet = try XCTUnwrap(router.sheet)
+        let firstHost = router.host(for: firstSheet)
+        XCTAssertFalse(firstHost === router)
+        XCTAssertTrue(router.host(for: firstSheet) === firstHost)
+        firstHost.showPicker(ownerId: firstSheet.ownerID, args: PickerViewModelArgs(), edge: .homeOnPick, context: nil, responder: second)
+        let secondSheet = try XCTUnwrap(firstHost.sheet)
+        XCTAssertEqual(router.sheet, firstSheet)
+        XCTAssertTrue(router.host(for: secondSheet) === firstHost.host(for: secondSheet))
+
+        firstHost.finish(entryID: secondSheet.id, with: PickResult(selectedId: 2))
+        XCTAssertEqual((second.results.first as? PickResult)?.selectedId, 2)
+        XCTAssertNil(firstHost.sheet)
+        XCTAssertEqual(router.sheet, firstSheet)
+        XCTAssertTrue(first.results.isEmpty)
+    }
+
+    func testClosingASheetClosesTheSheetsOverIt() throws {
+        let router = BasekitNavigationRouter(policy: SheetsForPicks())
+        let first = RecordingResponder(), second = RecordingResponder()
+        router.showPicker(ownerId: "root", args: PickerViewModelArgs(), edge: .homeOnPick, context: nil, responder: first)
+        let firstSheet = try XCTUnwrap(router.sheet)
+        let firstHost = router.host(for: firstSheet)
+        firstHost.showPicker(ownerId: firstSheet.ownerID, args: PickerViewModelArgs(), edge: .homeOnPick, context: nil, responder: second)
+        // The first sheet's navigator closes through its own router, which passes it to the presenter.
+        firstHost.close(ownerId: firstSheet.ownerID, context: nil)
+        XCTAssertNil(router.sheet)
+        XCTAssertNil(firstHost.sheet)
+        XCTAssertEqual(first.results.count, 1)
+        XCTAssertNil(first.results.first ?? nil)
+        XCTAssertEqual(second.results.count, 1)
+        XCTAssertNil(second.results.first ?? nil)
+    }
+
+    func testASheetFromALowerRouterReplacesEverythingAboveIt() throws {
+        let router = BasekitNavigationRouter(policy: SheetsForPicks())
+        let first = RecordingResponder(), second = RecordingResponder(), third = RecordingResponder()
+        router.showPicker(ownerId: "root", args: PickerViewModelArgs(), edge: .homeOnPick, context: nil, responder: first)
+        let firstSheet = try XCTUnwrap(router.sheet)
+        router.host(for: firstSheet).showPicker(ownerId: firstSheet.ownerID, args: PickerViewModelArgs(), edge: .homeOnPick, context: nil, responder: second)
+        router.showPicker(ownerId: "root", args: PickerViewModelArgs(), edge: .homeOnPick, context: nil, responder: third)
+        XCTAssertEqual(first.results.count, 1)
+        XCTAssertEqual(second.results.count, 1)
+        XCTAssertTrue(third.results.isEmpty)
+        XCTAssertNil(router.host(for: try XCTUnwrap(router.sheet)).sheet)
+    }
+
+    func testADismissedSheetsLateNavigationAnswersNilAndShowsNothing() throws {
+        let router = BasekitNavigationRouter(policy: SheetsForPicks())
+        router.showPicker(ownerId: "root", args: PickerViewModelArgs(), edge: .homeOnPick, context: nil, responder: RecordingResponder())
+        let sheet = try XCTUnwrap(router.sheet)
+        let sheetHost = router.host(for: sheet)
+        router.sheetBinding.wrappedValue = nil
+        let late = RecordingResponder()
+        sheetHost.showPicker(ownerId: sheet.ownerID, args: PickerViewModelArgs(), edge: .homeOnPick, context: nil, responder: late)
+        XCTAssertEqual(late.results.count, 1)
+        XCTAssertNil(late.results.first ?? nil)
+        XCTAssertNil(sheetHost.sheet)
+    }
+
     func testKvoUsesConcreteExportedTypes() async throws {
         let model = KvoBindingProbeViewModel(RealBindingProbeViewModel())
         let message: ProbeMessage = model.message
@@ -215,6 +280,13 @@ final class BindingTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(10))
         }
         XCTFail("State observation did not converge")
+    }
+}
+
+@available(iOS 18.0, macOS 15.0, *)
+private struct SheetsForPicks: BasekitNavigationPolicy {
+    func decision(for request: BasekitNavigationRequest) -> BasekitNavigationDecision {
+        request.edge == .homeOnPick ? .init(presentation: .sheet) : .init()
     }
 }
 

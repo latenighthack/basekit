@@ -6,6 +6,26 @@ All notable changes to basekit are documented here. The format follows
 
 ## Next
 
+- Generated navigation: sheets stack. The generated `BasekitNavigationRouter` (Swift and Compose) now
+  makes a router of its own for every entry it presents other than by push: a sheet, a full-screen
+  cover or a custom presentation. `router.host(for: entry)` (Compose: `router.host(entry)`) returns the
+  router an entry's navigator reports to. For a presented entry that is the router made for it, so a
+  sheet that opens another sheet presents it over itself instead of replacing itself. That router
+  uses the presenter's policy, and the presenter's platform presenter and dismisser as they are when
+  it uses them, so which presentation to use is still the app's choice. A router made with
+  `BasekitNavigationRouter(parent:)` that has no platform presenter or dismisser of its own also uses
+  its parent's. A presented entry that leaves takes everything presented over it, and the responders
+  of those entries answer `null`; this includes a lower router presenting a new sheet in its one
+  sheet slot. Once a presented entry has gone, its router presents nothing more: whatever the
+  entry's view model still opens is dropped, and a responding destination answers `null`.
+  `host(for:)` searches the routers below it, so a platform presenter that holds the root router can
+  find the router for a custom entry presented deep in the stack.
+- Breaking: `BasekitNavigationStackHost`'s `root` and `destination` closures also get the router the
+  entry reports to: `{ entry, host, namespace in … }` on Apple and `{ entry, host -> … }` in Compose.
+  Build the entry's view model with that `host`. The stack host shows each sheet and cover as a stack
+  of its own, for the router made for it, so the sheets it opens stack. In Compose, a presented stack
+  takes the size of its entries' content, so the default dialog keeps the size of what it shows.
+
 - A throw from a view model's `state` or one of its `@ViewModelList` flows no longer crashes the
   app. On iOS it aborted the process inside SKIE's collector, before any Swift code ran; on Android
   and Compose it crashed the Activity or the composition. Every generated binding (Observable and Kvo

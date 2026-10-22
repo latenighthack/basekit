@@ -67,10 +67,11 @@ private func fixtureScreen(
 private func fixtureStack() -> some View {
     let router = BasekitNavigationRouter(policy: FixturePolicy())
     let root = router.root(.home(args: HomeViewModelArgs(), edge: nil))
-    return BasekitNavigationStackHost(router: router, rootEntry: root) { entry, _ in
-        FixtureRoot(router: router, entry: entry)
-    } destination: { entry, namespace in
-        fixtureScreen(entry: entry, namespace: namespace, router: router)
+    // Each entry comes with the router its navigator reports to: a sheet's own router, inside a sheet.
+    return BasekitNavigationStackHost(router: router, rootEntry: root) { entry, host, _ in
+        FixtureRoot(router: host, entry: entry)
+    } destination: { entry, host, namespace in
+        fixtureScreen(entry: entry, namespace: namespace, router: host)
     }
 }
 
@@ -157,6 +158,14 @@ private func fixtureChildRouter(parent: BasekitNavigationRouter, entry: BasekitN
     child.onCloseRoot = { ownerID, context in parent.close(ownerId: ownerID, context: context) }
     AppleCloseNavigator(ownerId: entry.ownerID, host: child).close(context: nil)
     return child
+}
+
+// A presented entry reports to the router its presenter made for it. A host that presents by itself, as a
+// UIKit platform presenter does, looks that router up from any router above the entry.
+@available(iOS 18.0, macOS 15.0, *)
+@MainActor
+private func fixturePresentedModel(root: BasekitNavigationRouter, entry: BasekitNavigationEntry, factories: GeneratedViewModelFactories) -> BasekitDestinationModel {
+    basekitViewModel(for: entry, host: root.host(for: entry), factories: factories)
 }
 
 #if canImport(UIKit)

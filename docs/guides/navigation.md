@@ -340,6 +340,15 @@ transport alone does not establish restoration of the whole application graph.
 | Android | Back dispatch, screen/sheet policy, Activity recreation, argument codec and explicit state restoration |
 | Web | Address/query projection, push versus replace, back/forward guards, scroll restoration, modified-click behavior and remount lifetime |
 
+The generated routers (Apple and Compose) give every entry they present other than
+by push (sheet, cover or custom) a router of its own, and that entry's navigator
+reports to it: `router.host(for: entry)`, which the stack host passes to its
+closures. A sheet's own pushes and sheets therefore stay over the sheet, and
+sheets stack. Each router has one sheet slot; an entry that leaves takes
+everything presented over it, answering their responders with null. The router
+only records where each entry went. The policy and the screen's navigation
+handler still choose the presentation.
+
 A wide inline detail and compact sheet can share semantic selected-route state.
 Resizing must not create duplicate viewmodels, discard a draft or issue another
 mutation. Local disclosure, scrolling to a section, tooltip and animation state
