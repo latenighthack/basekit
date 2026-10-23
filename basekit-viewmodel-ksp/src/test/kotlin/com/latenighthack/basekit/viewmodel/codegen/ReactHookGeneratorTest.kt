@@ -60,7 +60,7 @@ class ReactHookGeneratorTest {
         assertContains(source, "val binding = ProbeViewModelReactBinding.of(viewModel)")
         assertContains(source, "private val bindings = ReactBindingCache<sample.ProbeViewModel, ProbeViewModelReactBinding> { ProbeViewModelReactBinding(it) }")
         assertContains(source, "val state = React.useSyncExternalStore(binding.core.state.subscribe, binding.core.state.getSnapshot).unsafeCast<sample.ProbeViewModel.State>()")
-        assertContains(source, "val rows: ReactDeltaListStore = ReactDeltaListStore(viewModel.boundList(\"sample.ProbeViewModel\", \"rows\", viewModel.rows), ::bindProbeViewModelRowsReactElement)")
+        assertContains(source, "val rows: ReactDeltaListStore = ReactDeltaListStore(viewModel.boundList(\"sample.ProbeViewModel\", \"rows\", viewModel.rows), { raw -> bindProbeViewModelRowsReactElement(raw, basekitObservedRows) })")
         assertContains(source, "val rowsRevision = React.useSyncExternalStore(binding.rows.subscribe, binding.rows.getSnapshot)")
         assertFalse("useState" in source)
         assertFalse("useEffect" in source)

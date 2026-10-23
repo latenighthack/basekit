@@ -249,7 +249,9 @@ class ViewModelProcessor(
         val marker = codeGenerator.generatedFile.firstOrNull() ?: return
         val pass = marker.pass()
 
-        if (viewModels.isNotEmpty() && (pass == Pass.METADATA || pass == Pass.OTHER)) {
+        // Every pass: a spec declared in a platform source set (a JS-only view model, say) gets its
+        // decorator there, since that platform's bindings install it with `observing`.
+        if (viewModels.isNotEmpty()) {
             ObservingViewModelGenerator(codeGenerator, Dependencies(aggregating = true, *sourceFiles.toTypedArray()))
                 .generate(if (pass == Pass.METADATA) viewModels else viewModels.filterNot { it.qualifiedName in existingActionDecorators })
         }

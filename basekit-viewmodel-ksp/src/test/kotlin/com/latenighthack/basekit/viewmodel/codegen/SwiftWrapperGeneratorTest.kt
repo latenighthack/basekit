@@ -108,7 +108,7 @@ class SwiftWrapperGeneratorTest {
     fun compose_single_row_list_skips_type_dispatch() {
         val source = compose(VmList("rows", "RowViewModel", "sample.RowViewModel", null, null, listOf(row("RowViewModel", "rowId"))))
         assertContains(source, "identity = { raw -> \"sample.RowViewModel:\" + raw.rowId })")
-        assertContains(source, "{ raw -> row(sample.bindRowViewModel(raw, launchAction)) }")
+        assertContains(source, "{ raw -> row(sample.bindRowViewModel(remember(raw, basekitRowObserver) { raw.observing(basekitRowObserver) }, launchAction)) }")
         assertFalse("when (raw)" in source)
         assertFalse("else -> error" in source)
     }
@@ -121,7 +121,7 @@ class SwiftWrapperGeneratorTest {
         assertContains(source, "@Composable public fun RowsForEach(")
         assertContains(source, "DeltaForEach(source = remember(model) { model.boundList(\"sample.HostViewModel\", \"rows\", model.rows) }, placeholder = placeholder")
         assertContains(source, "val state by remember(model) { model.boundState(\"sample.HostViewModel\") }.collectAsStateWithLifecycle(model.initialState)")
-        assertContains(source, "is sample.TextRowViewModel -> textRow(sample.bindTextRowViewModel(raw, launchAction))")
+        assertContains(source, "is sample.TextRowViewModel -> textRow(sample.bindTextRowViewModel(remember(raw, basekitRowObserver) { raw.observing(basekitRowObserver) }, launchAction))")
         assertContains(source, "else -> error(\"Undeclared HostViewModel.rows child\")")
     }
 
@@ -156,7 +156,7 @@ class SwiftWrapperGeneratorTest {
         assertContains(kvo, "public enum KvoHostViewModelRowsHeader: Hashable {\n    case Personal\n    case Custom(HostViewModelSectionCustom)\n}")
         assertContains(kvo, "if raw is HostViewModelSectionPersonal { return .Personal }")
         assertContains(kvo, "if let typed = raw as? HostViewModelSectionCustom { return .Custom(typed) }")
-        assertContains(kvo, "if let typed = raw as? TextRowViewModel { return .textRow(KvoTextRowViewModel(typed)) }")
+        assertContains(kvo, "if let typed = raw as? TextRowViewModel { return .textRow(KvoTextRowViewModel(typed, observer: rowObserver)) }")
         assertContains(kvo, "#if canImport(UIKit) && !os(watchOS)")
         assertContains(kvo, "-> SectionedDeltaCollectionDataSource<AnyObject, RowMarker> {")
         assertContains(kvo, "dataSource.bind(to: viewModel.boundRows())")
@@ -171,7 +171,7 @@ class SwiftWrapperGeneratorTest {
         val observable = out.text("ObservableHostViewModel.swift")
         assertContains(observable, "public enum ObservableHostViewModelRowsElement {\n    case textRow(ObservableTextRowViewModel)")
         assertContains(observable, "public enum ObservableHostViewModelRowsHeader: Hashable {\n    case Personal\n    case Custom(HostViewModelSectionCustom)\n}")
-        assertContains(observable, "if let typed = raw as? TextRowViewModel { return .textRow(ObservableTextRowViewModel(typed)) }")
+        assertContains(observable, "if let typed = raw as? TextRowViewModel { return .textRow(ObservableTextRowViewModel(typed, observer: rowObserver)) }")
         assertContains(observable, "#if canImport(UIKit) && !os(watchOS)\nimport UIKit\n#endif")
         assertContains(observable, "cellProvider: @escaping (UICollectionView, IndexPath, ObservableHostViewModelRowsElement) -> UICollectionViewCell,")
         assertContains(observable, "headerProvider: ((UICollectionView, IndexPath, ObservableHostViewModelRowsHeader) -> UICollectionReusableView)? = nil")
@@ -216,7 +216,7 @@ class SwiftWrapperGeneratorTest {
     @Test
     fun observing_decorator_forwards_the_failure_handler() {
         val source = ObservingViewModelGenerator(RecordingCodeGenerator(), Dependencies(false)).render(vm("HostViewModel"))
-        assertContains(source, ") : sample.HostViewModel by delegate, ViewModelFailureHandler<sample.HostViewModel.State> {")
+        assertContains(source, ") : sample.HostViewModel by delegate, ViewModelFailureHandler<sample.HostViewModel.State>, ObservedViewModel<sample.HostViewModel.State> {")
         assertContains(source, "(delegate as? ViewModelFailureHandler<sample.HostViewModel.State>)?.onStateFailed(failure, lastState)\n            ?: super.onStateFailed(failure, lastState)")
         assertContains(source, "(delegate as? ViewModelFailureHandler<*>)?.onListFailed(failure) ?: super.onListFailed(failure)")
     }
@@ -228,14 +228,14 @@ class SwiftWrapperGeneratorTest {
         val kvo = out.text("KvoHostViewModel.swift")
         assertContains(kvo, "case TOP\n    case BOTTOM")
         assertContains(kvo, "switch (raw as? __Shelf)?.name {\n        case \"TOP\": return .TOP")
-        assertContains(kvo, "return KvoRowViewModel(raw)")
+        assertContains(kvo, "return KvoRowViewModel(raw, observer: rowObserver)")
     }
 
     @Test
     fun compose_sectioned_list_has_a_typed_header_slot() {
         val source = compose(sectioned(sealedHeader, row("RowViewModel", "rowId"), element = "RowViewModel"))
         assertContains(source, "header: @Composable (header: sample.HostViewModel.Section, sectionIndex: Int) -> Unit,")
-        assertContains(source, "DeltaSections(source = remember(model) { model.boundList(\"sample.HostViewModel\", \"rows\", model.rows) }, header = header, modifier = modifier, placeholder = placeholder, identity = { raw -> \"sample.RowViewModel:\" + raw.rowId }) { raw -> row(sample.bindRowViewModel(raw, launchAction)) }")
+        assertContains(source, "DeltaSections(source = remember(model) { model.boundList(\"sample.HostViewModel\", \"rows\", model.rows) }, header = header, modifier = modifier, placeholder = placeholder, identity = { raw -> \"sample.RowViewModel:\" + raw.rowId }) { raw -> row(sample.bindRowViewModel(remember(raw, basekitRowObserver) { raw.observing(basekitRowObserver) }, launchAction)) }")
     }
 
     @Test
@@ -245,7 +245,7 @@ class SwiftWrapperGeneratorTest {
         val out = RecordingCodeGenerator()
         ReactHookGenerator(out, Dependencies(false)).generate(listOf(host, shelves))
         val hook = out.text("HostViewModelReactHook.kt")
-        assertContains(hook, "val rows: ReactSectionedDeltaListStore = ReactSectionedDeltaListStore(viewModel.boundList(\"sample.HostViewModel\", \"rows\", viewModel.rows), ::bindHostViewModelRowsReactHeader, ::bindHostViewModelRowsReactElement)")
+        assertContains(hook, "val rows: ReactSectionedDeltaListStore = ReactSectionedDeltaListStore(viewModel.boundList(\"sample.HostViewModel\", \"rows\", viewModel.rows), ::bindHostViewModelRowsReactHeader, { raw -> bindHostViewModelRowsReactElement(raw, basekitObservedRows) })")
         assertContains(hook, "ReactViewModelBinding(viewModel, \"sample.HostViewModel\")")
         assertContains(hook, "result.rows = rows.handle")
         assertContains(hook, "is sample.HostViewModel.Section.Custom -> {\n        val header: dynamic = js(\"({})\")\n        header.kind = \"Custom\"")
@@ -279,10 +279,10 @@ class SwiftWrapperGeneratorTest {
         DestinationModelGenerator(out, Dependencies(false), emptyList()).generate(listOf(agent to agent.route!!, confirm to confirm.route!!))
         val swift = out.text("BasekitDestinationModels.swift")
         assertContains(swift, ") -> BasekitDestinationModel {\n    // The observers of the router the entry reports to")
-        assertContains(swift, "    let observesActions = actionObserver !== ViewModelActionObserverCompanion.shared.NoOp\n    switch entry.route {")
+        assertContains(swift, "    let viewModelObserver = ViewModelObservers.shared.combined(observer: router?.viewModelObserver, actions: actionObserver)\n    switch entry.route {")
         // The router's observers wrap the navigator and, unless it is NoOp, the view model.
-        assertContains(swift, "    let router = host as? BasekitNavigationRouter\n    let navigationObserver = router?.navigationObserver ?? NavigationObserverCompanion.shared.NoOp\n    let actionObserver = router?.actionObserver ?? ViewModelActionObserverCompanion.shared.NoOp\n    let observesActions = actionObserver !== ViewModelActionObserverCompanion.shared.NoOp\n")
-        assertContains(swift, "case .agent(let args, _):\n        let model: AgentViewModel = factories.agentFactory(args, ObservingAgentNavigator(delegate: AppleAgentNavigator(ownerId: entry.ownerID, host: host), observer: navigationObserver))\n        return .agent(ObservableAgentViewModel(observesActions ? ObservingAgentViewModel(delegate: model, actionObserver: actionObserver) : model))")
+        assertContains(swift, "    let router = host as? BasekitNavigationRouter\n    let navigationObserver = router?.navigationObserver ?? NavigationObserverCompanion.shared.NoOp\n    let actionObserver = router?.actionObserver ?? ViewModelActionObserverCompanion.shared.NoOp\n    let viewModelObserver = ViewModelObservers.shared.combined(observer: router?.viewModelObserver, actions: actionObserver)\n")
+        assertContains(swift, "case .agent(let args, _):\n        let model: AgentViewModel = factories.agentFactory(args, ObservingAgentNavigator(delegate: AppleAgentNavigator(ownerId: entry.ownerID, host: host), observer: navigationObserver))\n        return .agent(ObservableAgentViewModel(model, observer: viewModelObserver))")
         // A leaf destination's close-only navigator gets its decorator too.
         assertContains(swift, "let model: ConfirmViewModel = factories.confirmFactory(ObservingConfirmNavigator(delegate: AppleConfirmNavigator(ownerId: entry.ownerID, host: host), observer: navigationObserver), responder)")
         assertContains(swift, "case .confirm(_, let responder):\n        guard let responder else {\n            preconditionFailure(\"basekitViewModel: the confirm entry has no responder.")
@@ -307,10 +307,10 @@ class SwiftWrapperGeneratorTest {
         ComposeDestinationModelGenerator(out, Dependencies(false), "sample.nav", "sample").generate(listOf(agent to agent.route!!, confirm to confirm.route!!))
         val kotlin = out.text("BasekitDestinationModels.kt")
         // One import of the decorator extension per spec package.
-        assertContains(kotlin, "import other.observingActions\nimport sample.observingActions\n")
-        assertContains(kotlin, "    val router = host as? BasekitNavigationRouter\n    val navigationObserver = router?.navigationObserver ?: NavigationObserver.NoOp\n    val actionObserver = router?.actionObserver ?: ViewModelActionObserver.NoOp\n    return when (val route = entry.route) {")
-        assertContains(kotlin, "is BasekitRoute.Agent -> BasekitDestinationModel.Agent(factories.agentFactory(route.args, ObservingAgentNavigator(AppleAgentNavigator(entry.ownerId, host), navigationObserver)).observingActions(actionObserver))")
-        assertContains(kotlin, "is BasekitRoute.Confirm -> BasekitDestinationModel.Confirm(factories.confirmFactory(ObservingConfirmNavigator(AppleConfirmNavigator(entry.ownerId, host), navigationObserver)).observingActions(actionObserver))")
+        assertContains(kotlin, "import other.observing\nimport sample.observing\n")
+        assertContains(kotlin, "    val router = host as? BasekitNavigationRouter\n    val navigationObserver = router?.navigationObserver ?: NavigationObserver.NoOp\n    val actionObserver = router?.actionObserver ?: ViewModelActionObserver.NoOp\n    val viewModelObserver = ViewModelObservers.combined(router?.viewModelObserver, actionObserver)\n    return when (val route = entry.route) {")
+        assertContains(kotlin, "is BasekitRoute.Agent -> BasekitDestinationModel.Agent(factories.agentFactory(route.args, ObservingAgentNavigator(AppleAgentNavigator(entry.ownerId, host), navigationObserver)).observing(viewModelObserver))")
+        assertContains(kotlin, "is BasekitRoute.Confirm -> BasekitDestinationModel.Confirm(factories.confirmFactory(ObservingConfirmNavigator(AppleConfirmNavigator(entry.ownerId, host), navigationObserver)).observing(viewModelObserver))")
         assertContains(kotlin, "    val model = remember(entry.id) { basekitViewModel(entry, host, factories) }\n    LaunchedEffect(entry.id) { (host as? BasekitNavigationRouter)?.didShow(entry) }")
     }
 

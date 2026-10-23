@@ -89,7 +89,7 @@ class AppleListDescriptorsTest {
 
         assertEquals("", appleListElementDeclaration(viewModel, list, AppleWrapperStyle.KVO))
         assertEquals("KvoAttachmentViewModel", appleListElementType(viewModel, list, AppleWrapperStyle.KVO))
-        assertContains(appleListBinder(list), "KvoAttachmentViewModel(item)")
+        assertContains(appleListBinder(list), "KvoAttachmentViewModel(item, observer: rowObserver)")
         assertContains(
             appleListDescriptorProperty(viewModel, list, AppleWrapperStyle.KVO),
             "@MainActor @nonobjc public lazy var attachments"

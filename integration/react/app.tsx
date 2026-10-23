@@ -1,6 +1,6 @@
 import React, { StrictMode, Suspense, startTransition, use, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserBindingProbe, BrowserProbeMessage as ProbeMessage, BrowserRenderProbe } from 'basekit-demo-core';
+import { BrowserBindingProbe, BrowserObservationProbe, BrowserProbeMessage as ProbeMessage, BrowserRenderProbe } from 'basekit-demo-core';
 import { useBindingProbeViewModel, useRenderProbeViewModel, type BindingProbeViewModelRowsElement, type RenderProbeViewModelRef, type RenderProbeViewModelRowsElement, type RenderProbeViewModelBinding } from 'basekit-react';
 import posthog from 'posthog-js';
 import { createPostHogMetrics } from '@latenighthack/basekit-navigation-posthog';
@@ -47,6 +47,17 @@ function Probe() {
     <output id="error">{error}</output>
   </>;
 }
+const observation = new BrowserObservationProbe();
+Object.assign(window, { observation });
+function ObservedProbe() {
+  const model = useBindingProbeViewModel(observation.reference);
+  return <>
+    <output id="observed-note">{model.note ?? 'null'}</output>
+    <button onClick={() => void model.setNote('observed')}>Observed edit</button>
+    <button onClick={() => observation.populate()}>Observed populate</button>
+    <div id="observed-rows">{model.rows.map(item => <Row key={item.key} item={item} />)}</div>
+  </>;
+}
 const renderProbes = { hot: new BrowserRenderProbe(0), delayed: new BrowserRenderProbe(100), abandoned: new BrowserRenderProbe(0) };
 const renders: Record<string, Array<{ greeting: string; count: number; rows: number }>> = { hot: [], delayed: [] };
 const identity = { renders: 0, sameObject: [] as boolean[], sameIncrement: [] as boolean[], sameRows: [] as boolean[] };
@@ -83,7 +94,9 @@ function Abandoned() {
 function App() {
   const [mounted, setMounted] = useState(true);
   const [abandon, setAbandon] = useState(false);
+  const [observed, setObserved] = useState(false);
   return <>
+    <button onClick={() => setObserved(!observed)}>Observe</button>{observed && <ObservedProbe />}
     <button onClick={() => setMounted(!mounted)}>Mount</button>{mounted && <Probe />}
     <RenderProbe name="hot" reference={renderProbes.hot.reference} />
     <RenderProbe name="delayed" reference={renderProbes.delayed.reference} />

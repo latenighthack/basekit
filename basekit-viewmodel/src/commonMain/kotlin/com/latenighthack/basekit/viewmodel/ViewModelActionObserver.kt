@@ -8,7 +8,11 @@ public data class ViewModelActionEvent(
     val viewModel: Any,
 )
 
-/** Receives zero-argument actions before invocation. Mutators and internal self-calls are not observed. */
+/**
+ * Receives zero-argument actions before invocation. Mutators and internal self-calls are not observed.
+ * A throw from [onAction] is discarded. For mutators, outcomes, bindings and lists, use
+ * [ViewModelObserver].
+ */
 public fun interface ViewModelActionObserver {
     public fun onAction(event: ViewModelActionEvent)
 

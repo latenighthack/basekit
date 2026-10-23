@@ -17,15 +17,21 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                         it.listElementQualifiedName == null
                 }?.let { mutator to it }
             }
+            // Each row type's generated `observing` extension, imported when it is declared in another package.
+            val rowImports = vm.lists.flatMap { it.possibleTypes }.map { it.qualifiedName.substringBeforeLast('.', "") }
+                .filter { it.isNotEmpty() && it != vm.packageName }.distinct().sorted()
+                .joinToString("") { "\nimport $it.observing" }
             generator.createNewFile(dependencies, vm.packageName, "${vm.simpleName}Compose", "kt").use { file ->
+                file.writeln("package ${vm.packageName}$rowImports")
                 file.writeln("""
-                    package ${vm.packageName}
                     import androidx.compose.runtime.*
                     import androidx.compose.ui.Modifier
                     import androidx.lifecycle.ViewModelStoreOwner
                     import androidx.lifecycle.compose.collectAsStateWithLifecycle
                     import com.latenighthack.basekit.viewmodel.boundList
                     import com.latenighthack.basekit.viewmodel.boundState
+                    import com.latenighthack.basekit.viewmodel.ViewModelObserver
+                    import com.latenighthack.basekit.viewmodel.viewModelObserver
                     import com.latenighthack.basekit.viewmodel.compose.*
                     import kotlinx.coroutines.Job
 
@@ -42,6 +48,10 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                     ) {
                         public fun launch(action: suspend ${vm.simpleName}Binding.() -> Unit): Job = launchAction { action() }
                 """.trimIndent())
+                if (vm.lists.isNotEmpty()) {
+                    // Rows report to this view model's observer; see `observing`.
+                    file.writeln("    private val basekitRowObserver: ViewModelObserver? = model.viewModelObserver()")
+                }
                 vm.identityProperty?.let { identity ->
                     // The row's @ViewModelIdentity, as Swift's `basekitIdentity`: a list slot can tell
                     // which domain item a row is, e.g. to map a pager page back to its ID.
@@ -72,7 +82,7 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                         else -> "raw"
                     }
                     fun render(type: VmListElementType) =
-                        "${type.simpleName.toListCaseName()}(${type.qualifiedName.substringBeforeLast('.')}.bind${type.simpleName}(raw, launchAction))"
+                        "${type.simpleName.toListCaseName()}(${type.qualifiedName.substringBeforeLast('.')}.bind${type.simpleName}(remember(raw, basekitRowObserver) { raw.observing(basekitRowObserver) }, launchAction))"
                     val single = list.possibleTypes.singleOrNull()?.takeIf { it.qualifiedName == list.elementQualifiedName }
                     val name = list.propertyName.toUpperCamelCase()
                     // Remembered per model: the row composables restart collection on a new flow instance.
@@ -120,11 +130,14 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                         onActionError: (Throwable) -> Unit,
                         loading: @Composable () -> Unit,
                         failure: @Composable (Throwable, () -> Unit) -> Unit,
+                        observer: ViewModelObserver? = null,
                         content: @Composable (${vm.simpleName}Binding) -> Unit,
                     ) {
                         val errorHandler by rememberUpdatedState(onActionError)
                         PreparedViewModelHost("${vm.qualifiedName}:" + ownerKey, storeOwner, prepare, loading, failure) { model, owner ->
-                            content(bind${vm.simpleName}(model) { action -> owner.launch({ errorHandler(it) }, action) })
+                            // [observer] receives the view model's actions, bindings, children and rows.
+                            val observed = remember(model, observer) { model.observing(observer) }
+                            content(bind${vm.simpleName}(observed) { action -> owner.launch({ errorHandler(it) }, action) })
                         }
                     }
                 """.trimIndent())

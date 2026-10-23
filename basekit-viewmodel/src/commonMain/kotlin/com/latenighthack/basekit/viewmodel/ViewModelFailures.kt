@@ -89,8 +89,15 @@ public object ViewModelFailures {
  * the error goes to [ViewModelFailures.unhandled] and this flow completes. Nothing is reset: the
  * binding keeps the last state it rendered. [viewModelName] identifies the view model in the
  * reported [ViewModelFailure].
+ *
+ * On a view model decorated with an observer (see [ViewModelObserver]) the collection is reported:
+ * attach, each attempt and its outcome, the first emission, each state with the properties that
+ * changed, and detach. Each recovery flow is a new attempt under the same binding.
  */
 public fun <S> ViewModel<S>.boundState(viewModelName: String): Flow<S> {
+    @Suppress("UNCHECKED_CAST")
+    val observed = this as? ObservedViewModel<S>
+    if (observed != null && observed.basekitObserver.observesBindings) return observedBoundState(viewModelName, observed)
     val viewModel = this
     return flow {
         var lastState = viewModel.initialState
@@ -117,22 +124,21 @@ public fun <S> ViewModel<S>.boundState(viewModelName: String): Flow<S> {
  * [ViewModelFailureHandler.onListFailed] if this view model implements it, otherwise to
  * [ViewModelFailures.unhandled], and this flow completes. The binding keeps the rows it has.
  * [listName] is the property's name.
+ *
+ * On a view model decorated with an observer the collection is reported as for [boundState], and
+ * each `Delta` or `SectionedDelta` with its change, size and how long the platform took to apply it.
  */
 public fun <T> ViewModel<*>.boundList(viewModelName: String, listName: String, list: Flow<T>): Flow<T> {
+    val observer = viewModelObserver()
+    if (observer != null) return observedBoundList(viewModelName, listName, list, observer)
     val viewModel = this
     return list.catch { error ->
         if (error is CancellationException) throw error
-        val failure = ViewModelFailure(viewModelName, listName, error)
-        val handler = viewModel as? ViewModelFailureHandler<*>
-        if (handler == null) {
-            ViewModelFailures.report(failure)
-        } else {
-            handlerCall(failure) { handler.onListFailed(failure) }
-        }
+        viewModel.recoverList(ViewModelFailure(viewModelName, listName, error))
     }
 }
 
-private suspend fun <S> ViewModel<S>.recoverState(failure: ViewModelFailure, lastState: S): Flow<S>? {
+internal suspend fun <S> ViewModel<S>.recoverState(failure: ViewModelFailure, lastState: S): Flow<S>? {
     @Suppress("UNCHECKED_CAST")
     val handler = this as? ViewModelFailureHandler<S>
     if (handler == null) {
@@ -143,6 +149,15 @@ private suspend fun <S> ViewModel<S>.recoverState(failure: ViewModelFailure, las
 }
 
 /** Runs a handler; a throw from it, other than cancellation, goes to [ViewModelFailures.unhandled]. */
+internal suspend fun ViewModel<*>.recoverList(failure: ViewModelFailure) {
+    val handler = this as? ViewModelFailureHandler<*>
+    if (handler == null) {
+        ViewModelFailures.report(failure)
+    } else {
+        handlerCall(failure) { handler.onListFailed(failure) }
+    }
+}
+
 private inline fun <R> handlerCall(failure: ViewModelFailure, call: () -> R): R? =
     try {
         call()

@@ -51,7 +51,8 @@ therefore need no `recordScreen` call: keep `recordScreen` for screens outside B
 Navigators the app builds itself, such as a `@HostedComponent`'s, are not wrapped by the router: wrap
 them in their `Observing<X>Navigator` with `router.navigationObserver`, and their view models with
 `observingActions(router.actionObserver)`. Child and row view models a destination builds are not
-covered by the destination's decorator; install decorators at their factories as below.
+covered by an action observer's decorator; install decorators at their factories as below. A
+`ViewModelObserver` (`router.viewModelObserver`) does cover them; see [observation](observation.md).
 
 ## Install at factory boundaries
 

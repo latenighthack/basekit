@@ -62,10 +62,11 @@ internal fun uiKitListBinder(list: VmList): String {
     |        _ collectionView: UICollectionView,
     |        cellProvider: @escaping (UICollectionView, IndexPath, $childKvo) -> UICollectionViewCell
     |    ) -> DeltaCollectionDataSource<${list.elementSimpleName}> {
+    |        let rowObserver = viewModel.viewModelObserver()
     |        let dataSource = DeltaCollectionDataSource<${list.elementSimpleName}>(
     |            collectionView: collectionView
     |        ) { cv, indexPath, item in
-    |            cellProvider(cv, indexPath, $childKvo(item))
+    |            cellProvider(cv, indexPath, $childKvo(item, observer: rowObserver))
     |        }
     |        dataSource.bind(erased: ${appleBoundList(list)})
     |        return dataSource
@@ -91,10 +92,11 @@ internal fun appKitListBinder(list: VmList): String {
     |        _ collectionView: NSCollectionView,
     |        itemProvider: @escaping (NSCollectionView, IndexPath, $childKvo) -> NSCollectionViewItem
     |    ) -> DeltaNSCollectionDataSource<${list.elementSimpleName}> {
+    |        let rowObserver = viewModel.viewModelObserver()
     |        let dataSource = DeltaNSCollectionDataSource<${list.elementSimpleName}>(
     |            collectionView: collectionView
     |        ) { cv, indexPath, item in
-    |            itemProvider(cv, indexPath, $childKvo(item))
+    |            itemProvider(cv, indexPath, $childKvo(item, observer: rowObserver))
     |        }
     |        dataSource.bind(erased: ${appleBoundList(list)})
     |        return dataSource
@@ -182,16 +184,16 @@ internal fun appleSectionedListBinder(vm: VmInfo, list: VmList, style: AppleWrap
     val classifyRow = if (list.possibleTypes.size == 1) {
         val type = list.possibleTypes.single()
         if (type.qualifiedName == list.elementQualifiedName) {
-            "        return $prefix${type.simpleName}(raw)"
+            "        return $prefix${type.simpleName}(raw, observer: rowObserver)"
         } else {
             """
             |        guard let typed = raw as? ${type.simpleName} else { $undeclared row \(Swift.type(of: raw))") }
-            |        return $prefix${type.simpleName}(typed)
+            |        return $prefix${type.simpleName}(typed, observer: rowObserver)
             """.trimMargin()
         }
     } else {
         list.possibleTypes.joinToString("\n", postfix = "\n        $undeclared row \\(Swift.type(of: raw))\")") { type ->
-            "        if let typed = raw as? ${type.simpleName} { return .${type.simpleName.toListCaseName()}($prefix${type.simpleName}(typed)) }"
+            "        if let typed = raw as? ${type.simpleName} { return .${type.simpleName.toListCaseName()}($prefix${type.simpleName}(typed, observer: rowObserver)) }"
         }
     }
     val classifyHeader = if (header.isEnum) {
@@ -211,17 +213,17 @@ internal fun appleSectionedListBinder(vm: VmInfo, list: VmList, style: AppleWrap
     // Kvo wrappers are NSObjects whose Swift-only members must opt out of Objective-C exposure.
     val isolation = if (style == AppleWrapperStyle.KVO) "@MainActor @nonobjc" else "@MainActor"
     val cellProviderCall = when {
-        style == AppleWrapperStyle.KVO -> "cellProvider(cv, indexPath, Self.${list.propertyName}Row(raw))"
+        style == AppleWrapperStyle.KVO -> "cellProvider(cv, indexPath, Self.${list.propertyName}Row(raw, observer: rowObserver))"
         else -> {
             val observe = if (list.possibleTypes.size == 1) "row.observe()" else "row.observeForDeltaList()"
-            "let row = Self.${list.propertyName}Row(raw); let cell = cellProvider(cv, indexPath, row); cell.basekitObserve { await $observe }; return cell"
+            "let row = Self.${list.propertyName}Row(raw, observer: rowObserver); let cell = cellProvider(cv, indexPath, row); cell.basekitObserve { await $observe }; return cell"
         }
     }
     val rowObservationDoc = if (style == AppleWrapperStyle.KVO) "" else
         "\n    |    /// Each row is observed until its cell shows another row or is released."
     return """
     |    #if canImport(UIKit) && !os(watchOS)
-    |    $isolation private static func ${list.propertyName}Row(_ raw: $raw) -> $rowType {
+    |    $isolation private static func ${list.propertyName}Row(_ raw: $raw, observer rowObserver: (any ViewModelObserver)?) -> $rowType {
     |$classifyRow
     |    }
     |
@@ -239,6 +241,7 @@ internal fun appleSectionedListBinder(vm: VmInfo, list: VmList, style: AppleWrap
     |        cellProvider: @escaping (UICollectionView, IndexPath, $rowType) -> UICollectionViewCell,
     |        headerProvider: ((UICollectionView, IndexPath, $headerType) -> UICollectionReusableView)? = nil
     |    ) -> SectionedDeltaCollectionDataSource<AnyObject, $raw> {
+    |        let rowObserver = viewModel.viewModelObserver()
     |        let dataSource = SectionedDeltaCollectionDataSource<AnyObject, $raw>(
     |            collectionView: collectionView,
     |            cellProvider: { cv, indexPath, raw in $cellProviderCall },

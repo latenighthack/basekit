@@ -49,18 +49,18 @@ internal fun appleListDescriptorProperty(vm: VmInfo, list: VmList, style: AppleW
     val classify = if (list.possibleTypes.size == 1) {
         val type = list.possibleTypes.single()
         if (type.qualifiedName == list.elementQualifiedName) {
-            "            return ${style.prefix}${type.simpleName}(raw)"
+            "            return ${style.prefix}${type.simpleName}(raw, observer: rowObserver)"
         } else {
             """
             |            guard let typed = raw as? ${type.simpleName} else {
             |                preconditionFailure("${vm.simpleName}.${list.propertyName} emitted undeclared type \(Swift.type(of: raw))")
             |            }
-            |            return ${style.prefix}${type.simpleName}(typed)
+            |            return ${style.prefix}${type.simpleName}(typed, observer: rowObserver)
             """.trimMargin()
         }
     } else {
         val branches = list.possibleTypes.joinToString("\n") { type ->
-            "            if let typed = raw as? ${type.simpleName} { return .${type.simpleName.toListCaseName()}(${style.prefix}${type.simpleName}(typed)) }"
+            "            if let typed = raw as? ${type.simpleName} { return .${type.simpleName.toListCaseName()}(${style.prefix}${type.simpleName}(typed, observer: rowObserver)) }"
         }
         """
         |$branches
@@ -79,7 +79,9 @@ internal fun appleListDescriptorProperty(vm: VmInfo, list: VmList, style: AppleW
     |    /// Rows are keyed by the stream's stable ids, which follow each item through its changes.
     |    @available(iOS 15.0, macOS 12.0, *)
     |    ${isolation}public lazy var ${list.propertyName}: ViewModelListBinding<${list.elementSimpleName}, $outputType> = {
-    |        ViewModelListBinding(
+    |        // Rows report to this view model's observer, as Kotlin's `observing` installs it.
+    |        let rowObserver = viewModel.viewModelObserver()
+    |        return ViewModelListBinding(
     |            source: ${appleBoundList(list)},
     |            classify: { raw in
     |$classify
@@ -88,3 +90,20 @@ internal fun appleListDescriptorProperty(vm: VmInfo, list: VmList, style: AppleW
     |    }()
     """.trimMargin()
 }
+
+/**
+ * The `init(_:observer:)` of a generated Apple wrapper: the view model decorated by its Kotlin
+ * `Observing{Spec}`, as `observing(observer)` does, so it, its children and its rows report to
+ * [observer]. List binders build rows with it, and a host passes its observer to it explicitly.
+ */
+internal fun appleObserverInit(vm: VmInfo): String = """
+    |    /// [viewModel] reporting to [observer] with its children and rows, as Kotlin's `observing(observer)`
+    |    /// installs it; [viewModel] as it is when [observer] is nil or already installed.
+    |    public convenience init(_ viewModel: ${vm.simpleName}, observer: (any ViewModelObserver)?) {
+    |        if let observer, viewModel.viewModelObserver() !== observer {
+    |            self.init(Observing${vm.simpleName}(delegate: viewModel, observer: observer))
+    |        } else {
+    |            self.init(viewModel)
+    |        }
+    |    }
+""".trimMargin()

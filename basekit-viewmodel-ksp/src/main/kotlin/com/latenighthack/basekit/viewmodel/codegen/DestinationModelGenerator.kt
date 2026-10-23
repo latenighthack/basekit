@@ -68,7 +68,8 @@ class DestinationModelGenerator(
             appendLine("/// gives with the entry, or `router.host(for: entry)`: a presented entry reports to the router made for it.")
             appendLine("///")
             appendLine("/// When [host] is a `BasekitNavigationRouter`, the navigator reports to its `navigationObserver` and the")
-            appendLine("/// view model's actions to its `actionObserver`.")
+            appendLine("/// view model, with its bindings, children and rows, to its `viewModelObserver` and its actions to its")
+            appendLine("/// `actionObserver`.")
             appendLine("///")
             appendLine("/// A responding destination's entry must carry a responder. `BasekitNavigationRouter` attaches one to")
             appendLine("/// every entry it presents; an entry built by hand without one stops at a `preconditionFailure`.")
@@ -83,7 +84,7 @@ class DestinationModelGenerator(
             appendLine("    let router = host as? BasekitNavigationRouter")
             appendLine("    let navigationObserver = router?.navigationObserver ?? NavigationObserverCompanion.shared.NoOp")
             appendLine("    let actionObserver = router?.actionObserver ?? ViewModelActionObserverCompanion.shared.NoOp")
-            appendLine("    let observesActions = actionObserver !== ViewModelActionObserverCompanion.shared.NoOp")
+            appendLine("    let viewModelObserver = ViewModelObservers.shared.combined(observer: router?.viewModelObserver, actions: actionObserver)")
             appendLine("    switch entry.route {")
             sorted.forEach { (factory, route) -> append(routeCase(factory, route)) }
             appendLine("    }")
@@ -158,7 +159,7 @@ class DestinationModelGenerator(
         }
         val spec = route.specSimpleName
         appendLine("        let model: $spec = factories.${factory.name}($arguments)")
-        appendLine("        return .${route.caseName}(Observable$spec(observesActions ? Observing$spec(delegate: model, actionObserver: actionObserver) : model))")
+        appendLine("        return .${route.caseName}(Observable$spec(model, observer: viewModelObserver))")
     }
 }
 

@@ -172,6 +172,8 @@ class SwiftUIObservableGenerator(
                 }
                 appendLine("    }")
                 appendLine()
+                appendLine(appleObserverInit(vm))
+                appendLine()
                 appendLine("    /// Collects `state` until the surrounding task is cancelled. Drive from")
                 appendLine("    /// `.task { await model.observe() }` so the subscription follows the view's lifetime.")
                 appendLine("    /// A throw from `state` is caught in Kotlin by `boundState` and goes to the view model's")

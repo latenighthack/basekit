@@ -54,3 +54,43 @@ public fun interface NavigationObserver {
         public val NoOp: NavigationObserver = NavigationObserver { }
     }
 }
+
+/** How a generated router shows an entry. */
+public enum class NavigationPresentation { ROOT, PUSH, SHEET, FULL_SCREEN_COVER, CUSTOM }
+
+/**
+ * What a generated router actually shows, as opposed to what was asked for. A [NavigationEvent.NavigatedTo]
+ * is the request; [Presented] follows when the router puts the entry on its stack, sheet, cover or a
+ * custom presentation, or a host shows a root. [NavigationEvent.Closed] is a close request or a host
+ * dismissal; [Dismissed] follows when the entry leaves. [NavigationEvent.Responded] is the responding
+ * navigation's resolution. A navigation a handler claims and never presents has no [Presented].
+ */
+public sealed class NavigationPresentationEvent {
+    public abstract val screen: NavigationScreenId
+
+    /** The router's own id for the entry, the same in the matching [Dismissed]. */
+    public abstract val entryId: String
+
+    /** The entry is shown. [customId] is the platform presentation's id for [NavigationPresentation.CUSTOM]. */
+    public data class Presented(
+        override val screen: NavigationScreenId,
+        override val entryId: String,
+        val presentation: NavigationPresentation,
+        val customId: String?,
+    ) : NavigationPresentationEvent()
+
+    /** The entry is no longer shown. Entries leaving together are reported top first. */
+    public data class Dismissed(
+        override val screen: NavigationScreenId,
+        override val entryId: String,
+        val presentation: NavigationPresentation,
+    ) : NavigationPresentationEvent()
+}
+
+/**
+ * Implement it on the [NavigationObserver] given to a generated router to also receive what the router
+ * presents and dismisses. Routers with any other observer track nothing.
+ */
+public fun interface NavigationPresentationObserver {
+    public fun onPresentation(event: NavigationPresentationEvent)
+}

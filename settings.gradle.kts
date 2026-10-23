@@ -52,9 +52,11 @@ includeBuild("basekit-gradle-plugin")
 //
 // An explicit composite remains available for aligned local toolchains. It is never enabled by
 // default and does not replace immutable release or Fullhouse workspace verification.
+// `-PdeltalistCompositePath=...` selects another checkout, such as a worktree.
 val useDeltalistComposite = providers.gradleProperty("deltalistComposite").orNull == "true"
-if (useDeltalistComposite && file("../deltalist").exists()) {
-    includeBuild("../deltalist")
+val deltalistCompositePath = providers.gradleProperty("deltalistCompositePath").orNull ?: "../deltalist"
+if (useDeltalistComposite && file(deltalistCompositePath).exists()) {
+    includeBuild(deltalistCompositePath)
 }
 
 // Navigation slice — the first codegen slice of the framework.

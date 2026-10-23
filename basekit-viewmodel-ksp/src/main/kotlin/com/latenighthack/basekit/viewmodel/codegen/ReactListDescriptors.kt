@@ -67,7 +67,7 @@ internal fun reactListElementFactory(vm: VmInfo, list: VmList): String {
 
         """
         |        is ${type.qualifiedName} -> {
-        |            val child = raw
+        |            val child = basekitObservedRows.get(raw) { row, observer -> row.observing(observer) }
         |            val result: dynamic = js("({})")
         |            result.kind = "$caseName"
         |$identity
@@ -79,7 +79,7 @@ internal fun reactListElementFactory(vm: VmInfo, list: VmList): String {
 
     return """
     |/** Closed React child handle for `${list.propertyName}`. Raw ViewModel state stays generated. */
-    |private fun ${reactListFactoryName(vm, list)}(raw: Any?): Any = when (raw) {
+    |private fun ${reactListFactoryName(vm, list)}(raw: Any?, basekitObservedRows: ReactObservedRows): Any = when (raw) {
     |$branches
     |        else -> error("${vm.simpleName}.${list.propertyName} emitted an undeclared child type: ${'$'}{raw?.let { it::class.simpleName }}")
     |    }

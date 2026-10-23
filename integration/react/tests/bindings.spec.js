@@ -134,3 +134,33 @@ test('a render abandoned in a transition leaves no collection after the grace pe
   await expect.poll(() => page.evaluate(() => [window.renderProbes.abandoned.activeStateCollectors, window.renderProbes.abandoned.activeRowCollectors])).toEqual([0, 0]);
   await expect(page.locator('#committed')).toHaveText('current');
 });
+
+test('an observer passed to reactReference sees the same binding events as the native bindings', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', {name: 'Observe', exact: true}).click();
+  await expect(page.locator('#observed-note')).toHaveText('null');
+  await page.getByRole('button', {name: 'Observed populate', exact: true}).click();
+  await expect(page.locator('#observed-rows [data-testid=row]')).toHaveText(['Row child']);
+  await page.getByRole('button', {name: 'Observed edit', exact: true}).click();
+  await expect(page.locator('#observed-note')).toHaveText('observed');
+  const lines = await page.evaluate(() => Array.from(window.observation.lines));
+  const state = lines.filter(line => line.endsWith('BindingProbeViewModel.state'));
+  expect(state.slice(0, 5)).toEqual([
+    'Attached STATE_BINDING BindingProbeViewModel.state',
+    'StateChanged STATE_BINDING BindingProbeViewModel.state',
+    'Started ATTEMPT BindingProbeViewModel.state',
+    'FirstEmission ATTEMPT BindingProbeViewModel.state',
+    'StateChanged ATTEMPT BindingProbeViewModel.state',
+  ]);
+  expect(lines.filter(line => line.includes('MUTATOR'))).toEqual([
+    'Started MUTATOR BindingProbeViewModel.setNote', 'Completed MUTATOR BindingProbeViewModel.setNote',
+  ]);
+  expect(lines).toContain('Attached LIST_BINDING BindingProbeViewModel.rows');
+  expect(lines).toContain('ListDelta ATTEMPT BindingProbeViewModel.rows');
+  // The row the list shows reports to the same observer.
+  expect(lines).toContain('Attached STATE_BINDING BindingChildViewModel.state');
+  await page.getByRole('button', {name: 'Observe', exact: true}).click();
+  await expect.poll(() => page.evaluate(() => window.observation.activeStateCollectors), { timeout: 10000 }).toBe(0);
+  const after = await page.evaluate(() => Array.from(window.observation.lines));
+  expect(after.filter(line => line.endsWith('BindingProbeViewModel.state')).at(-1)).toBe('Detached STATE_BINDING BindingProbeViewModel.state');
+});

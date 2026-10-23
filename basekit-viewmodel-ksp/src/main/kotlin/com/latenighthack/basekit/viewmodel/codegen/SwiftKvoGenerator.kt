@@ -159,6 +159,8 @@ class SwiftKvoGenerator(
                     appendLine("        }")
                 }
                 appendLine("    }")
+                appendLine()
+                appendLine(appleObserverInit(vm))
                 if (actionMethods.isNotEmpty()) {
                     appendLine()
                     appendLine(actionMethods)

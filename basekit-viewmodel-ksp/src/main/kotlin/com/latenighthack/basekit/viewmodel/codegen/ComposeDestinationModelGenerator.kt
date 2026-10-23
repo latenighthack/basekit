@@ -37,9 +37,10 @@ class ComposeDestinationModelGenerator(
             appendLine("import androidx.compose.runtime.remember")
             appendLine("import com.latenighthack.basekit.navigation.NavigationObserver")
             appendLine("import com.latenighthack.basekit.viewmodel.ViewModelActionObserver")
-            // `observingActions` is an extension declared beside each spec.
+            appendLine("import com.latenighthack.basekit.viewmodel.ViewModelObservers")
+            // `observing` is an extension declared beside each spec.
             sorted.map { (_, route) -> route.specPackage }.filter { it.isNotEmpty() }.distinct().sorted()
-                .forEach { appendLine("import $it.observingActions") }
+                .forEach { appendLine("import $it.observing") }
             appendLine("import kotlinx.coroutines.Job")
             appendLine()
             appendLine("/** A destination's view model, built by `basekitViewModel(entry, host, factories)`. */")
@@ -59,7 +60,8 @@ class ComposeDestinationModelGenerator(
             appendLine(" * gives with the entry, or `router.host(entry)`: a presented entry reports to the router made for it.")
             appendLine(" *")
             appendLine(" * When [host] is a `BasekitNavigationRouter`, the navigator reports to its `navigationObserver` and")
-            appendLine(" * the view model's actions to its `actionObserver`.")
+            appendLine(" * the view model, with its bindings, children and rows, to its `viewModelObserver` and its actions to")
+            appendLine(" * its `actionObserver`.")
             appendLine(" *")
             appendLine(" * A responding destination's entry must carry a responder. `BasekitNavigationRouter` attaches one to")
             appendLine(" * every entry it presents; an entry built by hand without one fails here.")
@@ -73,6 +75,7 @@ class ComposeDestinationModelGenerator(
             appendLine("    val router = host as? BasekitNavigationRouter")
             appendLine("    val navigationObserver = router?.navigationObserver ?: NavigationObserver.NoOp")
             appendLine("    val actionObserver = router?.actionObserver ?: ViewModelActionObserver.NoOp")
+            appendLine("    val viewModelObserver = ViewModelObservers.combined(router?.viewModelObserver, actionObserver)")
             appendLine("    return when (val route = entry.route) {")
             sorted.forEach { (factory, route) -> appendLine(routeCase(factory, route)) }
             appendLine("    }")
@@ -128,7 +131,7 @@ class ComposeDestinationModelGenerator(
                         "BasekitNavigationRouter attaches one to every entry it presents; an entry built by hand must carry one.\" }"
             }
         }
-        return "        is BasekitRoute.${route.className} -> BasekitDestinationModel.${route.className}(factories.${factory.name}($arguments).observingActions(actionObserver))"
+        return "        is BasekitRoute.${route.className} -> BasekitDestinationModel.${route.className}(factories.${factory.name}($arguments).observing(viewModelObserver))"
     }
 
     private val FactoryRoute.className: String get() = caseName.replaceFirstChar { it.uppercase() }

@@ -33,10 +33,11 @@ class ReactHookGenerator(
 
             val listStores = vm.lists.joinToString("\n") { list ->
                 val source = "viewModel.boundList($name, ${kotlinStringLiteral(list.propertyName)}, viewModel.${list.propertyName.kotlinRef()})"
+                val rows = "{ raw -> ${reactListFactoryName(vm, list)}(raw, basekitObservedRows) }"
                 if (list.sectioned) {
-                    "    val ${list.propertyName.kotlinRef()}: ReactSectionedDeltaListStore = ReactSectionedDeltaListStore($source, ::${reactHeaderFactoryName(vm, list)}, ::${reactListFactoryName(vm, list)})"
+                    "    val ${list.propertyName.kotlinRef()}: ReactSectionedDeltaListStore = ReactSectionedDeltaListStore($source, ::${reactHeaderFactoryName(vm, list)}, $rows)"
                 } else {
-                    "    val ${list.propertyName.kotlinRef()}: ReactDeltaListStore = ReactDeltaListStore($source, ::${reactListFactoryName(vm, list)})"
+                    "    val ${list.propertyName.kotlinRef()}: ReactDeltaListStore = ReactDeltaListStore($source, $rows)"
                 }
             }
 
@@ -96,6 +97,13 @@ class ReactHookGenerator(
                 writeln("import com.latenighthack.basekit.viewmodel.React")
                 writeln("import com.latenighthack.basekit.viewmodel.ReactBindingCache")
                 writeln("import com.latenighthack.basekit.viewmodel.ReactConversion")
+                if (vm.lists.isNotEmpty()) writeln("import com.latenighthack.basekit.viewmodel.ReactObservedRows")
+                writeln("import com.latenighthack.basekit.viewmodel.ViewModelObserver")
+                if (vm.lists.isNotEmpty()) writeln("import com.latenighthack.basekit.viewmodel.viewModelObserver")
+                // Each row type's generated `observing` extension, imported when declared in another package.
+                vm.lists.flatMap { it.possibleTypes }.map { it.qualifiedName.substringBeforeLast('.', "") }
+                    .filter { it.isNotEmpty() && it != vm.packageName }.distinct().sorted()
+                    .forEach { writeln("import $it.observing") }
                 writeln("import com.latenighthack.basekit.viewmodel.ReactViewModelBinding")
                 if (vm.lists.isNotEmpty()) writeln("import com.latenighthack.basekit.viewmodel.boundList")
                 if (vm.lists.any { !it.sectioned }) writeln("import com.latenighthack.deltalist.react.ReactDeltaListStore")
@@ -118,10 +126,15 @@ class ReactHookGenerator(
                     |}
                     |public fun ${vm.qualifiedName}.reactReference(): ${vm.simpleName}ReactRef = ${vm.simpleName}ReactRef(this)
                     |
+                    |/** A reference whose view model, children and rows report to [observer]; see `observing`. */
+                    |public fun ${vm.qualifiedName}.reactReference(observer: ViewModelObserver?): ${vm.simpleName}ReactRef = ${vm.simpleName}ReactRef(observing(observer))
+                    |
                     |/** State, lists and actions of one [${vm.qualifiedName}], shared by every component bound to it. */
                     |internal class $bindingName private constructor(private val viewModel: ${vm.qualifiedName}) {
                     |    val core: ReactViewModelBinding<${vm.stateQualifiedName}> = ReactViewModelBinding(viewModel, $name)
                 """.trimMargin())
+                // Rows report to this view model's observer, one decorator per row.
+                if (vm.lists.isNotEmpty()) writeln("    private val basekitObservedRows = ReactObservedRows(viewModel.viewModelObserver())")
                 if (listStores.isNotEmpty()) writeln(listStores)
                 if (conversions.isNotEmpty()) writeln(conversions)
                 if (actionFunctions.isNotEmpty()) writeln(actionFunctions)

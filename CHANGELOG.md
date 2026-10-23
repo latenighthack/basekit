@@ -4,6 +4,27 @@ All notable changes to basekit are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor versions may break API).
 
+## [Unreleased]
+
+Requires deltalist 0.4.8.
+
+- ViewModel: an optional `ViewModelObserver` receives actions and mutators (started, completed,
+  failed, cancelled, with duration and operation id), state and list collection (attached, attempts,
+  first emission, completion, failure, cancellation, detached), state emissions with the generated
+  property names that changed, flat and sectioned list deltas with apply duration and failure, and
+  paging. Install it with the generated `observing(observer)`, `router.viewModelObserver`,
+  `{Spec}Host(observer = …)`, `Observable{Spec}(_:observer:)` / `Kvo{Spec}(_:observer:)`, or
+  `reactReference(observer)`. Children and rows report to the same observer. Without one, bindings run
+  as before. See `docs/guides/observation.md`.
+- ViewModel: `observedWork(name) { … }` reports a block as an operation under the running action.
+- ViewModel: a throw from a `ViewModelActionObserver` is now discarded instead of failing the action.
+- ViewModel: the processor generates `Observing{Spec}` on every pass, so a spec declared in a platform
+  source set also has one.
+- Navigation: a `NavigationObserver` that also implements `NavigationPresentationObserver` receives
+  `Presented` and `Dismissed` for what the generated routers actually show, apart from the
+  `NavigatedTo` / `Closed` requests.
+- Build: `-PdeltalistCompositePath=…` selects the checkout `-PdeltalistComposite=true` includes.
+
 ## [0.6.2] — 2026-10-22
 
 - Breaking (navigation metrics): `PostHogMetricsCollector` sends nothing named `basekit`. Events
