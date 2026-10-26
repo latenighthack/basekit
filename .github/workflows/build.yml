@@ -65,6 +65,11 @@ jobs:
         # when combined with parallel Gradle builds. Serialize the cold build.
         run: ./gradlew build --stacktrace --no-parallel --max-workers=1
 
+      # The demo again with every view model replaced by its generated fake: the fake tests, the golden
+      # fakes, and the TUI app built on them.
+      - name: Build and test with fakes
+        run: ./gradlew -Pbasekit.fakes=true --stacktrace :demo-core:jvmTest :demo-core:verifyDemoFakes :demo-jvm:compileKotlin
+
       - name: Test native PostHog Swift package
         run: swift test --scratch-path build/posthog-swift
 

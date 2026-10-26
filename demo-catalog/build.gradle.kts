@@ -32,6 +32,8 @@ kotlin {
                 implementation(project(":basekit-viewmodel"))
                 implementation(project(":basekit-annotations"))
                 implementation(project(":basekit-viewmodel-annotations"))
+                // The catalog's fake: keys are written as fake annotations.
+                implementation(project(":basekit-fake-annotations"))
                 implementation(libs.deltalist.core)
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlin.inject.runtime.kmp)

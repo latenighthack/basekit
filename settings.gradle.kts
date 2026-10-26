@@ -81,6 +81,11 @@ include(":basekit-tui-annotations") // @TuiScreen / @TuiNavigatesTo link annotat
 include(":basekit-tui")             // TUI runtime: TuiApp, runner, screen/nav abstractions (JVM)
 include(":basekit-tui-ksp")         // KSP processor generating TamboUI screens + component (JVM)
 
+// Fakes slice: generated fake view models that replace the real ones when fakes are switched on.
+include(":basekit-fake-annotations") // annotations that shape fake data (KMP)
+include(":basekit-fake")             // fake runtime: seeded data, data sets, log, headless stack (KMP)
+include(":basekit-fake-ksp")         // KSP processor writing a fake for every @ViewModelSpec (JVM)
+
 include(":demo-core")           // sample consumer proving the codegen end-to-end
 include(":demo-jvm")            // runnable JVM app proving the TUI slice end-to-end
 include(":demo-catalog")        // round trip: catalog.yaml -> codegen -> compiled specs -> same catalog.yaml

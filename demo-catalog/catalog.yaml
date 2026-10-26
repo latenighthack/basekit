@@ -17,8 +17,12 @@ screens:
       response: null
 
     state:
-      greeting: String
-      badge: Badge?
+      greeting:
+        type: String
+        fake: { text: TITLE }
+      badge:
+        type: Badge?
+        fake: { null_frequency: 0.5, data_sets: { large: { null_frequency: 0.0 } } }
       photoState: PhotoState
 
     actions:
@@ -31,6 +35,7 @@ screens:
         sections: [Recent, Suggested]
         element: HomeListItem
         rows: [EmptyRoomsItem, RoomItem, TitleItem]
+        fake: { min: 1, max: 2, rows: [RoomItem], placeholder: EmptyRoomsItem, data_sets: { large: { size: 30 } } }
 
     children:
       avatar: Avatar

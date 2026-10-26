@@ -3,7 +3,8 @@ import com.vanniktech.maven.publish.JavadocJar
 import java.util.Properties
 import groovy.json.JsonSlurper
 
-// The publishable home of the Basekit consumer convention plugins (navigation / viewmodel / tui).
+// The publishable home of the Basekit consumer convention plugins (navigation / viewmodel / tui /
+// catalog / fakes).
 // It is its own build, included by the root `settings.gradle.kts` (so the in-repo demos apply the
 // plugins by id and dogfood them) and published to Maven Central like every other module. The
 // `basekit.kmp-library` / `basekit.jvm-library` conventions stay in `build-logic` — those are
@@ -74,8 +75,8 @@ kotlin.sourceSets.named("main") {
     kotlin.srcDir(generateVersions)
 }
 
-// The four consumer plugins are precompiled script plugins under src/main/kotlin
-// (com.latenighthack.basekit.{navigation,viewmodel,tui,catalog}.gradle.kts); `kotlin-dsl` registers each as
+// The five consumer plugins are precompiled script plugins under src/main/kotlin
+// (com.latenighthack.basekit.{navigation,viewmodel,tui,catalog,fakes}.gradle.kts); `kotlin-dsl` registers each as
 // a plugin whose id is its file name, so no explicit gradlePlugin { plugins { } } block is needed.
 
 // Publish the plugin jar + one marker artifact per plugin id, signed, to Maven Central — the same

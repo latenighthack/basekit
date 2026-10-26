@@ -10,10 +10,7 @@ import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.FileLocation
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
-import com.google.devtools.ksp.symbol.KSClassifierReference
 import com.google.devtools.ksp.symbol.KSFile
-import com.google.devtools.ksp.symbol.KSType
-import com.google.devtools.ksp.symbol.KSValueParameter
 import com.google.devtools.ksp.symbol.Modifier
 import java.io.File
 
@@ -34,6 +31,8 @@ internal const val VIEWMODEL_INTERFACE = "com.latenighthack.basekit.viewmodel.Vi
 internal const val VIEWMODEL_FAILURE_HANDLER = "com.latenighthack.basekit.viewmodel.ViewModelFailureHandler"
 private const val INJECT_ANNOTATION = "me.tatarka.inject.annotations.Inject"
 private const val ASSISTED_ANNOTATION = "me.tatarka.inject.annotations.Assisted"
+/** basekit-fake's marker on a generated fake; it replaces the implementation of the same spec. */
+internal const val GENERATED_FAKE_ANNOTATION = "com.latenighthack.basekit.fake.GeneratedFake"
 
 /**
  * Discovers `@ViewModelSpec` interfaces and emits native binding wrappers, one platform per KSP pass:
@@ -144,7 +143,7 @@ class ViewModelProcessor(
             return null
         }
 
-        return InjectVmInfo(interfaceQn, implQn)
+        return InjectVmInfo(interfaceQn, implQn, impl.hasAnnotation(GENERATED_FAKE_ANNOTATION))
     }
 
     /**
@@ -162,7 +161,7 @@ class ViewModelProcessor(
         val parameterTypes = ctor?.parameters.orEmpty()
             .filter { it.hasAnnotation(ASSISTED_ANNOTATION) }
             .map { parameter ->
-                factoryParameterType(parameter) ?: run {
+                assistedParameterType(parameter, navigationPackage) ?: run {
                     logger.warn(
                         "GeneratedViewModelFactories: cannot name the type of @Assisted ${parameter.name?.asString()} " +
                             "on $implQn; it has no factory there",
@@ -174,7 +173,7 @@ class ViewModelProcessor(
         val navName = spec.stringArgument(DESTINATION_ANNOTATION, "navName")?.takeIf { it.isNotEmpty() }
             ?: spec.simpleName.asString().toDestinationNavName()
         val name = navName.toUpperCamelCase().replaceFirstChar { it.lowercase() } + "Factory"
-        return ViewModelFactoryInfo(name, implQn, parameterTypes, factoryRoute(spec, navName, parameterTypes))
+        return ViewModelFactoryInfo(name, implQn, parameterTypes, factoryRoute(spec, navName, parameterTypes), impl.hasAnnotation(GENERATED_FAKE_ANNOTATION))
     }
 
     /**
@@ -209,32 +208,6 @@ class ViewModelProcessor(
         )
     }
 
-    /**
-     * A parameter type as Kotlin source. basekit's navigators (`HomeNavigator`, `CloseNavigationTarget`)
-     * are generated in the navigation processor's `finish`, after every round, so they never resolve
-     * here; they are named from the navigation package instead.
-     */
-    private fun factoryParameterType(parameter: KSValueParameter): String? {
-        val resolved = parameter.type.resolve()
-        if (!resolved.isError) return resolved.sourceName()
-        // KSP1 keeps the source reference; KSP2 only names an unresolved type as "<ERROR TYPE: Name>".
-        val name = (parameter.type.element as? KSClassifierReference)?.referencedName()
-            ?: ERROR_TYPE.matchEntire(resolved.toString())?.groupValues?.get(1)
-            ?: return null
-        val simple = name.substringAfterLast('.')
-        if (!simple.endsWith("Navigator") && !simple.endsWith("NavigationTarget")) return null
-        if ('.' in name) return name
-        return listOfNotNull(navigationPackage?.takeIf { it.isNotEmpty() }, name).joinToString(".")
-    }
-
-    private fun KSType.sourceName(): String {
-        val base = declaration.qualifiedName?.asString() ?: declaration.simpleName.asString()
-        val arguments = if (arguments.isEmpty()) "" else arguments.joinToString(", ", "<", ">") {
-            it.type?.resolve()?.sourceName() ?: "*"
-        }
-        return base + arguments + if (isMarkedNullable) "?" else ""
-    }
-
     /** `Basekit_NavigationPackage`, else the navigation processor's fallback: the destinations' common package. */
     private fun resolveNavigationPackage(resolver: Resolver): String {
         options[NAVIGATION_PACKAGE_OPTION]?.takeIf { it.isNotEmpty() }?.let { return it }
@@ -263,7 +236,7 @@ class ViewModelProcessor(
         if (pass == Pass.METADATA) {
             if (injectInfos.isNotEmpty() && injectPackage.isNotEmpty()) {
                 val dependencies = Dependencies(aggregating = true, *injectSourceFiles.toTypedArray())
-                ViewModelModuleGenerator(codeGenerator, dependencies).generate(injectInfos, injectPackage)
+                ViewModelModuleGenerator(codeGenerator, dependencies).generate(uniqueBindings(injectInfos), injectPackage)
             }
             reportMissingDestinationFactories()
             generateFactories()
@@ -335,19 +308,8 @@ class ViewModelProcessor(
         }
     }
 
-    /** One factory per name, in name order; the first implementation by qualified name wins. */
-    private fun uniqueFactories(warn: Boolean): List<ViewModelFactoryInfo> {
-        val sorted = factoryInfos.sortedWith(compareBy({ it.name }, { it.implQualifiedName }))
-        val factories = sorted.distinctBy { it.name }
-        if (warn) (sorted - factories.toSet()).forEach { duplicate ->
-            val kept = factories.first { it.name == duplicate.name }.implQualifiedName
-            logger.warn(
-                "GeneratedViewModelFactories: ${duplicate.implQualifiedName} and $kept both derive " +
-                    "${duplicate.name}; only $kept has a factory",
-            )
-        }
-        return factories
-    }
+    private fun uniqueFactories(warn: Boolean): List<ViewModelFactoryInfo> =
+        uniqueFactories(factoryInfos) { message -> if (warn) logger.warn(message) }
 
     /**
      * Once a factory takes a navigator (the graph uses generated destination models), every destination
@@ -376,7 +338,6 @@ class ViewModelProcessor(
         const val MARKER_PACKAGE = "com.latenighthack.basekit.viewmodel.gen"
         const val SWIFT_FRAMEWORK_IMPORTS_OPTION = "basekit.viewmodel.swiftFrameworkImports"
         const val NAVIGATION_PACKAGE_OPTION = "Basekit_NavigationPackage"
-        val ERROR_TYPE = Regex("<ERROR TYPE: ([A-Za-z0-9_.]+)>")
         const val DESTINATION_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.Destination"
         const val NAVIGATION_DESTINATION = "com.latenighthack.basekit.navigation.NavigationDestination"
         const val RESPONDING_DESTINATION = "com.latenighthack.basekit.navigation.RespondingDestination"

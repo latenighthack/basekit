@@ -25,8 +25,6 @@ class NavigatorInterfaceGenerator(
     private val dependencies: Dependencies,
     private val navPackage: String,
 ) {
-    private data class CallSite(val sourceNavName: String, val methodName: String)
-
     fun generate(destinations: List<DestinationInfo>, hostedComponents: List<DestinationInfo> = emptyList()) {
         // Targets are destinations only; sources also include hosted components.
         val byQualifiedName = destinations.associateBy { it.qualifiedName }
@@ -34,19 +32,9 @@ class NavigatorInterfaceGenerator(
         val sourcesByQualifiedName = sources.associateBy { it.qualifiedName }
 
         // target qualified name -> ordered, unique call sites navigating to it
-        val targetCallSites = LinkedHashMap<String, MutableList<CallSite>>()
+        val targetCallSites = targetCallSites(sources)
         // source qualified name -> ordered, unique target qualified names it navigates to
-        val outboundTargets = LinkedHashMap<String, LinkedHashSet<String>>()
-
-        for (destination in sources) {
-            for (edge in destination.edges) {
-                val sites = targetCallSites.getOrPut(edge.targetQualifiedName) { mutableListOf() }
-                val site = CallSite(edge.sourceNavName, edge.methodName)
-                if (site !in sites) sites.add(site)
-                outboundTargets.getOrPut(destination.qualifiedName) { LinkedHashSet() }
-                    .add(edge.targetQualifiedName)
-            }
-        }
+        val outboundTargets = outboundTargets(sources)
 
         if (targetCallSites.isEmpty()) return
 
@@ -84,7 +72,7 @@ class NavigatorInterfaceGenerator(
 
             val enumBlock = if (hasSource) {
                 val entries = callSites
-                    .map { "${it.sourceNavName.uppercase()}_${it.methodName.toUpperSnakeCase()}" }
+                    .map { it.sourceEntry }
                     .distinct()
                     .joinToString(",\n        ")
                 "\n\n    enum class ${cap}Source {\n        $entries\n    }"

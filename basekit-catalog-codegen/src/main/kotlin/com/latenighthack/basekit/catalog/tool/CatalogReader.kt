@@ -30,7 +30,18 @@ object CatalogReader {
     private val NAVIGATION_KEYS = setOf("args", "route", "route_aliases", "route_args", "response")
     private val ACTION_KEYS = setOf("navigates_to")
     private val MUTATION_KEYS = setOf("param", "binds", "navigates_to")
-    private val LIST_KEYS = setOf("kind", "sections", "element", "rows")
+    private val LIST_KEYS = setOf("kind", "sections", "element", "rows", "fake")
+    private val STATE_FIELD_KEYS = setOf("type", "fake")
+    private val LIST_FAKE_KEYS = setOf("size", "min", "max", "rows")
+    private val FIELD_FAKE_KEYS = setOf("text", "number", "null_frequency", "case", "value")
+    private val TEXT_KEYS = setOf("kind", "min_length", "max_length", "values")
+    private val NUMBER_KEYS = setOf("min", "max")
+    /** basekit-fake-annotations' FakeTextKind entries. */
+    private val TEXT_KINDS = listOf(
+        "AUTO", "WORD", "WORDS", "TITLE", "SENTENCE", "PARAGRAPH", "PERSON_NAME", "FIRST_NAME", "LAST_NAME", "USERNAME",
+        "EMAIL", "PHONE", "URL", "IMAGE_URL", "ID", "UUID", "CITY", "COUNTRY", "ADDRESS", "COMPANY", "COLOR_HEX", "DATE",
+        "TIME", "PRICE",
+    )
     private val TYPE_KEYS = setOf("enum", "fields", "subtypes", "external")
 
     private class Parser {
@@ -100,7 +111,7 @@ object CatalogReader {
                 spec = spec,
                 navigation = navigation,
                 identity = body["identity"] as? String,
-                state = fields(body["state"], "$path.state"),
+                state = stateFields(body["state"], "$path.state"),
                 actions = map(body["actions"], "$path.actions").map { (action, value) ->
                     (value as? Map<*, *>)?.let { known(it, ACTION_KEYS, "$path.actions.$action") }
                     Action(action, targets((value as? Map<*, *>)?.get("navigates_to"), "$path.actions.$action"))
@@ -126,6 +137,7 @@ object CatalogReader {
                         sections = strings(entry["sections"], "$path.lists.$list.sections"),
                         element = entry["element"] as? String ?: throw CatalogException("$path.lists.$list.element: required"),
                         rows = strings(entry["rows"], "$path.lists.$list.rows"),
+                        fake = entry["fake"]?.let { fake(it, "$path.lists.$list.fake", list = true) },
                     )
                 },
                 children = fields(body["children"], "$path.children"),
@@ -153,6 +165,84 @@ object CatalogReader {
 
         private fun fields(value: Any?, path: String): List<Field> = map(value, path).map { (name, type) ->
             Field(name, type as? String ?: throw CatalogException("$path.$name: expected a type"))
+        }
+
+        /** State fields: `name: Type`, or `name: { type: Type, fake: { … } }`. */
+        private fun stateFields(value: Any?, path: String): List<Field> = map(value, path).map { (name, entry) ->
+            when (entry) {
+                is String -> Field(name, entry)
+                is Map<*, *> -> {
+                    known(entry, STATE_FIELD_KEYS, "$path.$name")
+                    Field(
+                        name,
+                        entry["type"] as? String ?: throw CatalogException("$path.$name.type: required"),
+                        entry["fake"]?.let { fake(it, "$path.$name.fake", list = false) },
+                    )
+                }
+                else -> throw CatalogException("$path.$name: expected a type")
+            }
+        }
+
+        private fun fake(value: Any?, path: String, list: Boolean): FakeSettings {
+            val entry = value as? Map<*, *> ?: throw CatalogException("$path: expected a map")
+            val keys = if (list) LIST_FAKE_KEYS + "placeholder" else FIELD_FAKE_KEYS
+            known(entry, keys + "data_sets", path)
+            val dataSets = map(entry["data_sets"], "$path.data_sets").map { (name, values) ->
+                val set = values as? Map<*, *> ?: throw CatalogException("$path.data_sets.$name: expected a map")
+                known(set, if (list) LIST_FAKE_KEYS else FIELD_FAKE_KEYS, "$path.data_sets.$name")
+                name to fakeValues(set, "$path.data_sets.$name")
+            }
+            return FakeSettings(
+                base = fakeValues(entry, path),
+                placeholder = if (list) entry["placeholder"] as? String else null,
+                dataSets = dataSets,
+            )
+        }
+
+        private fun fakeValues(entry: Map<*, *>, path: String): FakeValues = FakeValues(
+            size = int(entry["size"], "$path.size"),
+            min = int(entry["min"], "$path.min"),
+            max = int(entry["max"], "$path.max"),
+            rows = strings(entry["rows"], "$path.rows"),
+            text = entry["text"]?.let { text ->
+                when (text) {
+                    is String -> FakeTextValue(kind = textKind(text, "$path.text"))
+                    is Map<*, *> -> {
+                        known(text, TEXT_KEYS, "$path.text")
+                        FakeTextValue(
+                            kind = (text["kind"] as? String)?.let { textKind(it, "$path.text.kind") },
+                            minLength = int(text["min_length"], "$path.text.min_length"),
+                            maxLength = int(text["max_length"], "$path.text.max_length"),
+                            values = strings(text["values"], "$path.text.values"),
+                        )
+                    }
+                    else -> throw CatalogException("$path.text: expected a kind or a map")
+                }
+            },
+            number = entry["number"]?.let { number ->
+                val range = number as? Map<*, *> ?: throw CatalogException("$path.number: expected { min, max }")
+                known(range, NUMBER_KEYS, "$path.number")
+                (double(range["min"], "$path.number.min") ?: throw CatalogException("$path.number.min: required")) to
+                    (double(range["max"], "$path.number.max") ?: throw CatalogException("$path.number.max: required"))
+            },
+            nullFrequency = double(entry["null_frequency"], "$path.null_frequency"),
+            cases = strings(entry["case"], "$path.case"),
+            value = entry["value"]?.toString(),
+        )
+
+        private fun textKind(kind: String, path: String): String =
+            kind.takeIf { it in TEXT_KINDS } ?: throw CatalogException("$path: \"$kind\" is not a FakeTextKind (${TEXT_KINDS.joinToString()})")
+
+        private fun int(value: Any?, path: String): Int? = when (value) {
+            null -> null
+            is Int -> value
+            else -> throw CatalogException("$path: expected a whole number")
+        }
+
+        private fun double(value: Any?, path: String): Double? = when (value) {
+            null -> null
+            is Number -> value.toDouble()
+            else -> throw CatalogException("$path: expected a number")
         }
 
         private fun strings(value: Any?, path: String): List<String> = when (value) {

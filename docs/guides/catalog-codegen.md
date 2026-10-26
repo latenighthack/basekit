@@ -101,7 +101,8 @@ One file per screen, named after the spec (`IHomeViewModel.kt`). Its `spec` regi
   `RespondingDestination<Args, R>`, and nested:
   - `Args`, with `@Route` (and its `aliases`, from `route_aliases`), a typed constructor and
     `@RouteArg` on the route args;
-  - `State`, a data class of the `state` fields (`class State` when there are none);
+  - `State`, a data class of the `state` fields (`class State` when there are none), with the
+    [fake annotations](#fake-keys) of each field's `fake:` key;
   - one sealed `<List>Header` interface per sectioned list, with a `data object` per section;
 - `@ViewModelIdentity`, lists, `@ChildViewModel` properties, actions and mutations, with
   `@NavigateTo` for each `navigates_to`;
@@ -112,6 +113,51 @@ One file per screen, named after the spec (`IHomeViewModel.kt`). Its `spec` regi
 
 Flat lists are `@ViewModelList(rows…) val items: Flow<Delta<Element>>`. Sectioned lists are
 `val sections: SectionedDeltaList<Spec.SectionsHeader, Element>`.
+
+### Fake keys
+
+A list or a State field can carry a `fake:` key, written as the annotations basekit's
+[fakes](fakes.md) read. They change nothing in a real build. Because they are generated, the spec region
+stays generated: change the key in the catalog, not the annotation in the region.
+
+```yaml
+state:
+  title:
+    type: String
+    fake: { text: TITLE }
+  subtitle:
+    type: String?
+    fake: { null_frequency: 0.5, data_sets: { large: { null_frequency: 0.0 } } }
+lists:
+  credentials:
+    kind: flat
+    element: CredentialRow
+    rows: [CredentialItem, NoCredentialsItem]
+    fake: { min: 2, max: 3, placeholder: NoCredentialsItem, data_sets: { large: { size: 300 } } }
+  banner:
+    kind: flat
+    element: Banner
+    rows: [Banner]
+    fake: { size: 0 }
+```
+
+| Key | Where | Annotation |
+| --- | --- | --- |
+| `size: 0` | list | `@FakeList(size = 0)` |
+| `min: 1`, `max: 3` | list | `@FakeList(min = 1, max = 3)` |
+| `rows: [A]` | list | `@FakeRows([A::class])`: which of the list's rows appear |
+| `placeholder: B` | list | `@FakePlaceholder(B::class)`: the row shown only when the list has no other rows |
+| `text: TITLE` | State field | `@FakeText(FakeTextKind.TITLE)` |
+| `text: { kind: SENTENCE, min_length: 10, max_length: 40, values: ["a", "b"] }` | State field | `@FakeText(FakeTextKind.SENTENCE, minLength = 10, maxLength = 40, values = ["a", "b"])`; each key optional |
+| `number: { min: 1.0, max: 5.0 }` | State field | `@FakeNumber(min = 1.0, max = 5.0)` |
+| `null_frequency: 0.5` | State field | `@FakeNull(0.5)` (not `null:`, which YAML 1.1 reads as a null key) |
+| `case: [A, B]` | State field | `@FakeCase(["A", "B"])` |
+| `value: avatar` | State field | `@FakeValue("avatar")` |
+| `data_sets: { large: { … } }` | both | The same keys (except `placeholder`) for one data set: each annotation with `dataSet = "large"` |
+
+`rows` and `placeholder` name rows of the list. Row weights, `@FakeDefaults`, `@FakeRedirect` and
+`@FakeResponds` have no key; write those in Kotlin. basekit-catalog-ksp writes the keys back from the
+annotations, in the order above, so a catalog round-trips.
 
 A component that several screens embed gets its own file. A component that nothing embeds is a
 root: it gets its own file, with the components it embeds.

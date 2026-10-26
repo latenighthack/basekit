@@ -2,6 +2,7 @@ package com.latenighthack.basekit.viewmodel.tui.codegen
 
 import com.google.devtools.ksp.KspExperimental
 import com.google.devtools.ksp.getAllSuperTypes
+import com.google.devtools.ksp.getConstructors
 import com.google.devtools.ksp.getDeclaredFunctions
 import com.google.devtools.ksp.getDeclaredProperties
 import com.google.devtools.ksp.processing.CodeGenerator
@@ -21,6 +22,8 @@ private const val VIEWMODEL_ANNOTATION = "com.latenighthack.basekit.viewmodel.an
 private const val VIEWMODEL_LIST_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelList"
 private const val CHILD_VIEWMODEL_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ChildViewModel"
 private const val VIEWMODEL_INJECT_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelInject"
+private const val GENERATED_FAKE_ANNOTATION = "com.latenighthack.basekit.fake.GeneratedFake"
+private const val INJECT_ANNOTATION = "me.tatarka.inject.annotations.Inject"
 private const val VIEWMODEL_MODULE_ANNOTATION = "com.latenighthack.basekit.viewmodel.annotations.ViewModelModule"
 private const val VIEWMODEL_INTERFACE = "com.latenighthack.basekit.viewmodel.ViewModel"
 private const val TUISCREEN_ANNOTATION = "com.latenighthack.basekit.viewmodel.tui.annotations.TuiScreen"
@@ -359,7 +362,8 @@ class TuiProcessor(
         // Classified by type so screenForDestination hands over the right value. A screen may take more
         // than one (e.g. navigation args AND its per-screen navigator). A navigator param on a screen with
         // no outbound edges resolves to the shared close target (declared type).
-        val assisted = implDecl.primaryConstructor?.parameters.orEmpty()
+        val constructor = implDecl.getConstructors().firstOrNull { it.hasAnnotation(INJECT_ANNOTATION) } ?: implDecl.primaryConstructor
+        val assisted = constructor?.parameters.orEmpty()
             .filter { p -> p.annotations.any { it.qualifiedName() == ASSISTED_ANNOTATION } }
             .map { p ->
                 val qn = p.type.resolve().declaration.qualifiedName?.asString()
@@ -389,6 +393,11 @@ class TuiProcessor(
     }
 
     private fun resolveImplementation(vm: KSClassDeclaration, vmQn: String, declarations: List<KSClassDeclaration>): KSClassDeclaration? {
+        // A fake basekit-fake-ksp generated in place of an injected implementation replaces it here too.
+        declarations.firstOrNull { candidate ->
+            candidate.hasAnnotation(GENERATED_FAKE_ANNOTATION) && candidate.hasAnnotation(VIEWMODEL_INJECT_ANNOTATION) &&
+                candidate.getAllSuperTypes().any { it.declaration.qualifiedName?.asString() == vmQn }
+        }?.let { return it }
         val override = vm.classArgument(TUISCREEN_ANNOTATION, "implementation")?.declaration as? KSClassDeclaration
         if (override != null && override.qualifiedName?.asString() != "kotlin.Unit") return override
         val candidates = declarations.filter { candidate ->

@@ -4,8 +4,38 @@ All notable changes to basekit are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor versions may break API).
 
-## [Unreleased]
+## [0.8.0] — 2026-10-27
 
+Requires deltalist 0.4.8.
+
+- Fakes: a new slice, `basekit-fake-annotations`, `basekit-fake` and `basekit-fake-ksp`, with the
+  plugin `com.latenighthack.basekit.fakes`. With `-Pbasekit.fakes=true` the processor writes a fake of
+  every `@ViewModelSpec`: generated State, list rows and children, bound mutators, and actions that open
+  the fakes of their `@NavigateTo` targets with fake Args. A fake replaces the spec's
+  `@ViewModelInject` implementation in `GeneratedViewModelFactories`, `GeneratedViewModelModule` and the
+  TUI component, so the generated routers show fakes with no app change. The data is set with
+  annotations (`@FakeText`, `@FakeNumber`, `@FakeList`, `@FakeRows`, `@FakeNull`, `@FakeCase`,
+  `@FakeDefaults`, `@FakeResponds`), `@FakeProvider` functions, property names, named data sets
+  (`empty`, `typical`, `large`) and a seed. `FakeNavigator`, `FakeArgs`, `FakeViewModels` and
+  `walkFakeGraph` run the fakes without a UI. See `docs/guides/fakes.md`.
+- Fakes: the fake of a destination with `@RedirectsTo` redirects to its first target when its `state`
+  is collected, with the target's fake Args and the redirect's `<X>Source`, so a fake build gets past a
+  splash or gate screen. `@FakeRedirect(target, dataSet)` picks another target, or the destination itself
+  to stay. The `@Inject` constructor passes the navigator on for redirect targets, and `FakeNavigator`
+  (and so `walkFakeGraph`) replaces the redirecting screen with its target instead of adding one.
+- Fakes: a list no annotation sizes gets one row (`FakeConfig.listMin` and `listMax` are now 1), so
+  shown-or-hidden sections and nested lists no longer repeat. `large` gives 10 rows and `empty` none.
+  `basekitFakes { listMin; listMax }` (or `-Pbasekit.fakes.listMin` / `listMax`) writes another default
+  into the generated fakes.
+- Fakes: `@FakePlaceholder(type)` on a `@ViewModelList` names the row its implementation inserts with
+  `ifEmpty`. Fakes never choose it among the other rows, and show it alone when the list comes out empty.
+- Catalog: lists and State fields take a `fake:` key, which `basekit-catalog-codegen` writes as fake
+  annotations (`@FakeList`, `@FakeRows`, `@FakePlaceholder`, `@FakeText`, `@FakeNumber`, `@FakeNull`,
+  `@FakeCase`, `@FakeValue`) and `basekit-catalog-ksp` writes back. A State field with one is written
+  as `name: { type: …, fake: { … } }`.
+- ViewModel: an implementation marked `@GeneratedFake` replaces the other implementation of its spec
+  in `GeneratedViewModelFactories` and `GeneratedViewModelModule`, without a collision warning.
+- TUI: the component reads `@Assisted` parameters from the `@Inject` constructor when there is one.
 - Navigation (web): with `basekit.viewmodel.react=true`, the JS pass generates the web router,
   `BasekitReactNavigation.kt`. It is the Compose `BasekitNavigationRouter` in Kotlin/JS, with the same
   routes, policy, handlers, child routers and observers, and it implements `AppleNavigationHost` for

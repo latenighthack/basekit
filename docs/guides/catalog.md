@@ -140,6 +140,10 @@ An action with more than one `@NavigateTo` lists its targets: `{ navigates_to: [
 | `sections` | The header's enum entries, or the subclasses of a sealed header. Sectioned lists only.         |
 | `element`  | The row type the list is declared with, named by the same rule as components: a marker interface `IHomeListItemViewModel` is `HomeListItem`. |
 | `rows`     | For `@ViewModelList`, its `possibleTypes`. Otherwise every `@ViewModelSpec` that is, or extends, the element type. |
+| `fake`     | The list's fake annotations (`@FakeList`, `@FakeRows`, `@FakePlaceholder`). Written only when there are some. See [fake keys](catalog-codegen.md#fake-keys). |
+
+A State field with fake annotations (`@FakeText`, `@FakeNumber`, `@FakeNull`, `@FakeCase`,
+`@FakeValue`) is written as a map instead of a type: `title: { type: String, fake: { text: TITLE } }`.
 
 ### Types
 

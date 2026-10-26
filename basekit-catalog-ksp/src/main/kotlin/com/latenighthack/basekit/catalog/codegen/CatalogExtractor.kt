@@ -262,12 +262,27 @@ class CatalogExtractor(
             spec = vm.qualifiedName,
             navigation = navigation,
             identity = vm.identityProperty,
-            state = vm.stateProperties.map { CatalogField(it.name, typeName(it.type.ref())) },
+            state = vm.stateProperties.map { property ->
+                CatalogField(property.name, typeName(property.type.ref()), stateFake(vm.stateQualifiedName, property.name))
+            },
             actions = actions,
             mutations = mutations,
             lists = lists(spec),
             children = vm.children.map { CatalogField(it.propertyName, nameOf(it.typeQualifiedName, it.typeSimpleName)) },
         )
+    }
+
+    private val fakes = CatalogFakes { declaration ->
+        val qualifiedName = declaration.qualifiedName?.asString() ?: declaration.simpleName.asString()
+        nameOf(qualifiedName, declaration.simpleName.asString())
+    }
+
+    /** The fake annotations on a State constructor parameter and its property. */
+    private fun stateFake(stateQualifiedName: String, field: String): CatalogFake? {
+        val state = classDeclaration(stateQualifiedName) ?: return null
+        val parameter = state.primaryConstructor?.parameters?.firstOrNull { it.name?.asString() == field }
+        val property = state.getAllProperties().firstOrNull { it.simpleName.asString() == field }
+        return fakes.field(parameter, property)
     }
 
     private fun targets(edges: List<NavEdge>): List<String> = edges.map { edge ->
@@ -293,6 +308,7 @@ class CatalogExtractor(
                         sections = list.header?.cases?.map { it.name }.orEmpty(),
                         element = elementName(list.elementQualifiedName, list.elementSimpleName),
                         rows = list.possibleTypes.map { nameOf(it.qualifiedName, it.simpleName) },
+                        fake = fakes.list(property),
                     )
                 }
                 if (property.hasAnnotation(VIEWMODEL_LIST)) return@mapNotNull null
@@ -336,6 +352,7 @@ class CatalogExtractor(
             sections = header?.let(::sectionNames).orEmpty(),
             element = elementName(elementQualifiedName, element.simpleName.asString()),
             rows = rows,
+            fake = fakes.list(property),
         )
     }
 

@@ -109,6 +109,7 @@ object CatalogYamlWriter {
                 }
                 appendLine("        element: ${scalar(list.element)}")
                 appendLine("        rows: ${inlineList(list.rows)}")
+                list.fake?.let { appendLine("        fake: ${fake(it)}") }
             }
         }
         section(vm.children.isNotEmpty()) { map("children", vm.children, indent = 4, inlineLimit = 0) }
@@ -169,8 +170,55 @@ object CatalogYamlWriter {
             return
         }
         appendLine("$pad$key:")
-        fields.forEach { appendLine("$pad  ${scalar(it.name)}: ${scalar(it.type)}") }
+        fields.forEach { field ->
+            val fake = field.fake
+            if (fake == null) {
+                appendLine("$pad  ${scalar(field.name)}: ${scalar(field.type)}")
+            } else {
+                appendLine("$pad  ${scalar(field.name)}:")
+                appendLine("$pad    type: ${scalar(field.type)}")
+                appendLine("$pad    fake: ${fake(fake)}")
+            }
+        }
     }
+
+    /** A `fake:` value as a flow map, keys in a fixed order. */
+    private fun fake(fake: CatalogFake): String {
+        val entries = values(fake.base).toMutableList()
+        fake.placeholder?.let { entries += "placeholder" to scalarFlow(it) }
+        if (fake.dataSets.isNotEmpty()) {
+            entries += "data_sets" to fake.dataSets.joinToString(", ", "{ ", " }") { (name, values) ->
+                "${scalarFlow(name)}: ${flowMap(values(values))}"
+            }
+        }
+        return flowMap(entries)
+    }
+
+    private fun values(values: CatalogFakeValues): List<Pair<String, String>> = buildList {
+        values.size?.let { add("size" to "$it") }
+        values.min?.let { add("min" to "$it") }
+        values.max?.let { add("max" to "$it") }
+        if (values.rows.isNotEmpty()) add("rows" to values.rows.joinToString(", ", "[", "]") { scalarFlow(it) })
+        values.text?.let { text ->
+            val parts = buildList {
+                text.kind?.let { add("kind" to it) }
+                text.minLength?.let { add("min_length" to "$it") }
+                text.maxLength?.let { add("max_length" to "$it") }
+                if (text.values.isNotEmpty()) add("values" to text.values.joinToString(", ", "[", "]") { quoted(it) })
+            }
+            add("text" to if (parts.size == 1 && parts[0].first == "kind") parts[0].second else flowMap(parts))
+        }
+        values.number?.let { (min, max) -> add("number" to "{ min: $min, max: $max }") }
+        values.nullFrequency?.let { add("null_frequency" to "$it") }
+        if (values.cases.isNotEmpty()) add("case" to values.cases.joinToString(", ", "[", "]") { scalarFlow(it) })
+        values.value?.let { add("value" to scalarFlow(it)) }
+    }
+
+    private fun flowMap(entries: List<Pair<String, String>>): String =
+        if (entries.isEmpty()) "{}" else entries.joinToString(", ", "{ ", " }") { (key, value) -> "$key: $value" }
+
+    /** [value] unquoted when it is safe inside `{ }` or `[ ]`, else quoted. */
+    private fun scalarFlow(value: String): String = if (flowSafe(value)) value else quoted(value)
 
     private fun inlineMap(fields: List<CatalogField>): String =
         if (fields.isEmpty()) "{}" else fields.joinToString(", ", "{ ", " }") { "${it.name}: ${it.type}" }

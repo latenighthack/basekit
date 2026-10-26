@@ -3,7 +3,7 @@ package com.latenighthack.basekit.gradle.plugin
 import org.gradle.api.Project
 
 /**
- * The dependency notation for a Basekit KSP processor.
+ * The dependency notation for a Basekit KSP processor, or a Basekit library a plugin adds.
  *
  * For an external consumer this is the Maven coordinate at the plugin's own version. When Basekit
  * builds itself (the in-repo demos), the Gradle property `basekit.useProjectDependencies=true`

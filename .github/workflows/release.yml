@@ -75,6 +75,9 @@ jobs:
           :basekit-viewmodel-ksp:publishAndReleaseToMavenCentral
           :basekit-catalog-ksp:publishAndReleaseToMavenCentral
           :basekit-catalog-codegen:publishAndReleaseToMavenCentral
+          :basekit-fake-annotations:publishAndReleaseToMavenCentral
+          :basekit-fake:publishAndReleaseToMavenCentral
+          :basekit-fake-ksp:publishAndReleaseToMavenCentral
           :basekit-tui-annotations:publishAndReleaseToMavenCentral
           :basekit-tui:publishAndReleaseToMavenCentral
           :basekit-tui-ksp:publishAndReleaseToMavenCentral

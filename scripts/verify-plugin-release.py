@@ -69,6 +69,7 @@ plugins {{
     id("com.latenighthack.basekit.viewmodel") version "{version}" apply false
     id("com.latenighthack.basekit.tui") version "{version}" apply false
     id("com.latenighthack.basekit.catalog") version "{version}" apply false
+    id("com.latenighthack.basekit.fakes") version "{version}" apply false
 }}
 ''')
     (directory / 'gradle.properties').write_text('android.useAndroidX=true\norg.gradle.jvmargs=-Xmx2g\n')
@@ -85,6 +86,13 @@ fun verifyProcessor(configurationName: String, artifact: String) {
         check(configurations.detachedConfiguration(processor.copy()).resolve().isNotEmpty())
     }
 }
+fun verifyLibrary(configurationName: String, artifact: String) {
+    val library = configurations.getByName(configurationName).dependencies.single {
+        it.group == "com.latenighthack.basekit" && it.name == artifact
+    }
+    check(library is org.gradle.api.artifacts.ExternalModuleDependency) { "Expected an external library, got $library" }
+    check(library.version == "VERSION") { "Wrong library version: $library" }
+}
 '''.replace('VERSION', version).replace('RESOLVE', str(resolve).lower())
     bindings = directory / 'bindings'
     bindings.mkdir()
@@ -95,6 +103,12 @@ plugins {
     id("com.latenighthack.basekit.navigation")
     id("com.latenighthack.basekit.viewmodel")
     id("com.latenighthack.basekit.catalog")
+    id("com.latenighthack.basekit.fakes")
+}
+basekitFakes {
+    enabled.set(true)
+    listMin.set(0)
+    listMax.set(2)
 }
 kotlin {
     jvm()
@@ -115,6 +129,13 @@ tasks.register("verifyPublishedPlugin") {
         verifyProcessor("kspCommonMainMetadata", "basekit-viewmodel-ksp")
         verifyProcessor("kspCommonMainMetadata", "basekit-catalog-ksp")
         verifyProcessor("basekitCatalogCodegen", "basekit-catalog-codegen")
+        verifyProcessor("kspCommonMainMetadata", "basekit-fake-ksp")
+        verifyLibrary("commonMainImplementation", "basekit-fake-annotations")
+        verifyLibrary("commonMainApi", "basekit-fake")
+        val fakeArguments = project.extensions.getByType<com.google.devtools.ksp.gradle.KspExtension>().arguments
+        check(fakeArguments["basekit.fakes.listMin"] == "0" && fakeArguments["basekit.fakes.listMax"] == "2") {
+            "basekitFakes list bounds did not reach KSP: $fakeArguments"
+        }
         listOf("Jvm", "Android", "Js", "IosArm64", "IosSimulatorArm64", "MacosArm64").forEach {
             verifyProcessor("ksp$it", "basekit-viewmodel-ksp")
         }
@@ -154,7 +175,7 @@ def verify_poms(repository, version):
     implementation = pom(f'com/latenighthack/basekit/basekit-gradle-plugin/{version}/basekit-gradle-plugin-{version}.pom')
     if coordinates(implementation) != expected:
         raise RuntimeError(f'Wrong plugin publication coordinates: {coordinates(implementation)}')
-    for name in ('navigation', 'viewmodel', 'tui', 'catalog'):
+    for name in ('navigation', 'viewmodel', 'tui', 'catalog', 'fakes'):
         group = f'com.latenighthack.basekit.{name}'
         artifact = group + '.gradle.plugin'
         marker = pom(f'{group.replace(".", "/")}/{artifact}/{version}/{artifact}-{version}.pom')
@@ -183,8 +204,8 @@ def verify_incremental_version(directory, version):
 def wait_for_release(repository, version, seconds):
     paths = [f'com/latenighthack/basekit/{a}/{version}/{a}-{version}.jar' for a in
              ('basekit-gradle-plugin', 'basekit-ksp', 'basekit-viewmodel-ksp', 'basekit-tui-ksp',
-              'basekit-catalog-ksp', 'basekit-catalog-codegen')]
-    for name in ('navigation', 'viewmodel', 'tui', 'catalog'):
+              'basekit-catalog-ksp', 'basekit-catalog-codegen', 'basekit-fake-ksp')]
+    for name in ('navigation', 'viewmodel', 'tui', 'catalog', 'fakes'):
         artifact = f'com.latenighthack.basekit.{name}.gradle.plugin'
         paths.append(f'com/latenighthack/basekit/{name}/{artifact}/{version}/{artifact}-{version}.pom')
     deadline = time.monotonic() + seconds

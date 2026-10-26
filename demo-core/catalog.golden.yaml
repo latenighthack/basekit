@@ -62,6 +62,7 @@ screens:
         kind: flat
         element: FeedItem
         rows: [FeedItem]
+        fake: { min: 3, max: 8, data_sets: { large: { size: 300 } } }
 
   # ─────────────────────────────────────────────
   # Picker
@@ -83,6 +84,7 @@ screens:
         kind: flat
         element: PickerRow
         rows: [PickerOption, PickerEmpty]
+        fake: { placeholder: PickerEmpty }
 
 components:
   # ─────────────────────────────────────────────
@@ -92,7 +94,9 @@ components:
   FeedItem:
     spec: com.latenighthack.basekit.demo.FeedItemViewModel
     state:
-      title: String
+      title:
+        type: String
+        fake: { text: TITLE }
       subtitle: String
       id: String
     actions:

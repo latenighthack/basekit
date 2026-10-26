@@ -94,3 +94,10 @@ expected = '"/teams/new/{section}" on NewTeamSectionViewModel and "/teams/{teamI
 if result.returncode == 0 or expected not in result.stdout or 'CrossingRouteViewModels.kt:' not in result.stdout:
     raise SystemExit(result.stdout)
 print('KSP rejected two routes whose paths cross.')
+# A fake build fails at a State field whose type no fake can be built for, and says how to supply one.
+result = subprocess.run([str(root / 'gradlew'), ':demo-core:kspCommonMainKotlinMetadata', '-Pbasekit.demo.fakeMissingProvider',
+                         '-Pbasekit.fakes=true', '--console=plain'], cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+expected = 'No fake value for com.latenighthack.basekit.demo.Clock (clock): add a @FakeProvider function returning it'
+if result.returncode == 0 or expected not in result.stdout or 'UnfakeableViewModel.kt:' not in result.stdout:
+    raise SystemExit(result.stdout)
+print('KSP rejected a fake State field with no way to build its value.')

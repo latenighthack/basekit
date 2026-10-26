@@ -172,17 +172,7 @@ class NavigationProcessor(
         }
     }
 
-    private fun resolveNavigationPackage(): String {
-        options[NAVIGATION_PACKAGE_OPTION]?.takeIf { it.isNotEmpty() }?.let { return it }
-        // Fallback: the longest common package prefix of all destinations.
-        val packages = destinations.map { it.qualifiedName.substringBeforeLast('.').split('.') }
-        if (packages.isEmpty()) return "navigation"
-        var prefix = packages.first()
-        for (parts in packages.drop(1)) {
-            prefix = prefix.zip(parts).takeWhile { (a, b) -> a == b }.map { it.first }
-        }
-        return prefix.joinToString(".").ifEmpty { "navigation" }
-    }
+    private fun resolveNavigationPackage(): String = navigationPackage(options[NAVIGATION_PACKAGE_OPTION], destinations)
 
     private companion object {
         const val MARKER_PACKAGE = "com.latenighthack.basekit.navigation.gen"

@@ -1,5 +1,7 @@
 package com.latenighthack.basekit.demo
 
+import com.latenighthack.basekit.fake.annotations.FakePlaceholder
+import com.latenighthack.basekit.fake.annotations.FakeResponds
 import com.latenighthack.basekit.navigation.NavigationResponder
 import com.latenighthack.basekit.navigation.NavigatorArgs
 import com.latenighthack.basekit.navigation.RespondingDestination
@@ -38,7 +40,10 @@ interface PickerViewModel :
     // Polymorphic on purpose: option rows plus a placeholder row when there is nothing to pick. This
     // is the demo's coverage for `possibleTypes` binding — the Apple enum, the React `kind` handle, the
     // TUI per-type rows and the Android per-type row specs are all generated from this one declaration.
+    // The empty row is the placeholder the implementation shows when there are no options; fakes show
+    // options only, and the placeholder alone when the list comes out empty.
     @ViewModelList(PickerOptionViewModel::class, PickerEmptyViewModel::class)
+    @FakePlaceholder(PickerEmptyViewModel::class)
     val options: Flow<Delta<PickerRowViewModel>>
 }
 
@@ -56,6 +61,7 @@ interface PickerEmptyViewModel : PickerRowViewModel, ViewModel<PickerEmptyViewMo
 interface PickerOptionViewModel : PickerRowViewModel, ViewModel<PickerOptionViewModel.State> {
     data class State(val label: String, val id: Int)
 
+    @FakeResponds
     suspend fun onSelected()
 }
 

@@ -9,8 +9,43 @@ data class CatalogDocument(
     val warnings: List<String> = emptyList(),
 )
 
-/** A `name: Type` pair; for `children` the type is a component name. */
-data class Field(val name: String, val type: String)
+/** A `name: Type` pair; for `children` the type is a component name. A State field may carry [fake]. */
+data class Field(val name: String, val type: String, val fake: FakeSettings? = null)
+
+/**
+ * The `fake:` key of a list or a State field: what basekit's generated fakes show there, written as
+ * fake annotations. [base] applies to every data set; [dataSets] to one data set (and those based on
+ * it) each.
+ */
+data class FakeSettings(
+    val base: FakeValues = FakeValues(),
+    /** A list's placeholder row (`@FakePlaceholder`): shown only when the list has no other rows. */
+    val placeholder: String? = null,
+    val dataSets: List<Pair<String, FakeValues>> = emptyList(),
+)
+
+/** The fake values one data set gets. Lists use [size], [min], [max] and [rows]; State fields the rest. */
+data class FakeValues(
+    val size: Int? = null,
+    val min: Int? = null,
+    val max: Int? = null,
+    val rows: List<String> = emptyList(),
+    val text: FakeTextValue? = null,
+    val number: Pair<Double, Double>? = null,
+    val nullFrequency: Double? = null,
+    val cases: List<String> = emptyList(),
+    val value: String? = null,
+) {
+    val isEmpty: Boolean get() = this == FakeValues()
+}
+
+/** `text:`: a `FakeTextKind` name, a length limit, or fixed values. */
+data class FakeTextValue(
+    val kind: String? = null,
+    val minLength: Int? = null,
+    val maxLength: Int? = null,
+    val values: List<String> = emptyList(),
+)
 
 data class Navigation(
     val args: List<Field>,
@@ -33,6 +68,7 @@ data class ListDef(
     val sections: List<String>,
     val element: String,
     val rows: List<String>,
+    val fake: FakeSettings? = null,
 )
 
 /** A screen ([navigation] set) or a component (row or child pane). */

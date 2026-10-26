@@ -7,6 +7,7 @@ plugins {
     id("com.latenighthack.basekit.navigation")
     id("com.latenighthack.basekit.viewmodel")
     id("com.latenighthack.basekit.catalog")
+    id("com.latenighthack.basekit.fakes")
     alias(libs.plugins.ksp)
     alias(libs.plugins.skie)
     alias(libs.plugins.compose.compiler)
@@ -91,6 +92,11 @@ kotlin {
 if (providers.gradleProperty("basekit.demo.orphanDestination").isPresent) {
     kotlin.sourceSets.named("commonMain") { kotlin.srcDir("src/orphanDestination/kotlin") }
 }
+// `-Pbasekit.demo.fakeMissingProvider` adds a spec whose State holds a type no fake can be built for,
+// which scripts/verify-binding-diagnostics.py expects basekit-fake-ksp to reject in a fake build.
+if (providers.gradleProperty("basekit.demo.fakeMissingProvider").isPresent) {
+    kotlin.sourceSets.named("commonMain") { kotlin.srcDir("src/fakeMissingProvider/kotlin") }
+}
 // `-Pbasekit.demo.uncapturedRouteArg` adds a route that leaves an Int argument uncaptured, which
 // scripts/verify-binding-diagnostics.py expects the navigation processor to reject.
 if (providers.gradleProperty("basekit.demo.uncapturedRouteArg").isPresent) {
@@ -107,6 +113,32 @@ if (providers.gradleProperty("basekit.demo.indistinctRoute").isPresent) {
 // scripts/verify-binding-diagnostics.py expects the navigation processor to reject.
 if (providers.gradleProperty("basekit.demo.crossingRoutes").isPresent) {
     kotlin.sourceSets.named("commonMain") { kotlin.srcDir("src/crossingRoutes/kotlin") }
+}
+
+// `-Pbasekit.fakes=true` builds the demo with fake view models. The real tests check real data, so
+// jvmTest runs the fake tests in src/fakeJvmTest instead.
+if (providers.gradleProperty("basekit.fakes").orNull == "true") {
+    kotlin.sourceSets.named("jvmTest") { kotlin.setSrcDirs(listOf("src/fakeJvmTest/kotlin")) }
+    // Fixtures for the fake tests: a splash that only redirects, and nested lists with a placeholder row.
+    kotlin.sourceSets.named("commonMain") { kotlin.srcDir("src/fakeFixtures/kotlin") }
+
+    // Some of the generated fakes are checked in under fakes.golden; `check` fails when they differ. After
+    // an intended change, copy the files from build/generated/ksp/metadata/commonMain over them.
+    val verifyDemoFakes = tasks.register("verifyDemoFakes") {
+        val generated = layout.buildDirectory.dir("generated/ksp/metadata/commonMain/kotlin/com/latenighthack/basekit/demo")
+        val golden = layout.projectDirectory.dir("fakes.golden")
+        dependsOn("kspCommonMainKotlinMetadata")
+        inputs.dir(golden)
+        doLast {
+            golden.asFile.listFiles().orEmpty().sortedBy { it.name }.forEach { expected ->
+                val actual = generated.get().file(expected.name).asFile
+                if (!actual.isFile || actual.readText() != expected.readText()) {
+                    throw GradleException("Generated ${expected.name} differs from demo-core/fakes.golden; diff $actual against it")
+                }
+            }
+        }
+    }
+    tasks.named("check") { dependsOn(verifyDemoFakes) }
 }
 
 composeCompiler {

@@ -131,7 +131,8 @@ class SpecGenerator(
     private fun state(vm: CatalogVm, imports: MutableSet<String>): String {
         if (vm.state.isEmpty()) return "class State"
         return vm.state.joinToString(",\n", "data class State(\n", ",\n)") { field ->
-            "    val ${identifier(field.name)}: ${types.render(field.type, imports)}"
+            val annotations = field.fake?.let { FakeAnnotations.field(it, imports) }.orEmpty()
+            "    " + (annotations + "val ${identifier(field.name)}: ${types.render(field.type, imports)}").joinToString(" ")
         }
     }
 
@@ -142,6 +143,18 @@ class SpecGenerator(
     }
 
     private fun list(vm: CatalogVm, list: ListDef, imports: MutableSet<String>): String {
+        val fake = list.fake?.let { settings ->
+            val rows = (settings.base.rows + settings.dataSets.flatMap { it.second.rows } + listOfNotNull(settings.placeholder))
+            rows.filter { it !in list.rows }.forEach {
+                throw CatalogException("${vm.name}.lists.${list.name}.fake: \"$it\" is not one of the list's rows")
+            }
+            FakeAnnotations.list(settings, { specReference(it, imports) }, imports)
+        }.orEmpty()
+        val declaration = listDeclaration(vm, list, imports)
+        return if (fake.isEmpty()) declaration else (fake + declaration).joinToString("\n")
+    }
+
+    private fun listDeclaration(vm: CatalogVm, list: ListDef, imports: MutableSet<String>): String {
         val element = elementReference(list.element, imports)
         return when (list.kind) {
             ListKind.FLAT -> {

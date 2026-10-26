@@ -1,5 +1,8 @@
 package com.latenighthack.basekit.demo
 
+import com.latenighthack.basekit.fake.annotations.FakeList
+import com.latenighthack.basekit.fake.annotations.FakeText
+import com.latenighthack.basekit.fake.annotations.FakeTextKind
 import com.latenighthack.basekit.navigation.NavigationDestination
 import com.latenighthack.basekit.navigation.NavigatorArgs
 import com.latenighthack.basekit.navigation.annotations.Destination
@@ -39,8 +42,11 @@ interface HomeViewModel :
 
     data class State(val title: String, val subtitle: String?)
 
+    // Fakes: 3-8 rows, none in the `empty` data set, and exactly 300 in `large`.
     @ViewModelList(FeedItemViewModel::class)
     @TuiList(label = "Feed items")
+    @FakeList(min = 3, max = 8)
+    @FakeList(size = 300, dataSet = "large")
     val items: Flow<Delta<FeedItemViewModel>>
 
     /** Append a new store-seeded row. */
@@ -65,7 +71,7 @@ interface HomeViewModel :
  */
 @ViewModelSpec
 interface FeedItemViewModel : ViewModel<FeedItemViewModel.State> {
-    data class State(val title: String, val subtitle: String, val id: String)
+    data class State(@FakeText(FakeTextKind.TITLE) val title: String, val subtitle: String, val id: String)
 
     @NavigateTo(DetailViewModel::class)
     suspend fun onSelected()

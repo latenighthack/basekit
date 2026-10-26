@@ -177,6 +177,8 @@ ksp {
 Implement the generated registry by delegating to production factories. Adding a
 destination should require a registry factory at compile time. Do not maintain
 an independent route switch or return mocked viewmodels for full journeys.
+Generated [fake view models](fakes.md) are for running and previewing an app
+without its data sources, not for these journeys.
 
 `awaitViewModel<T>()` matches the latest recorded destination and constructs an
 instance through the registry. It is not a screen-instance cache and does not

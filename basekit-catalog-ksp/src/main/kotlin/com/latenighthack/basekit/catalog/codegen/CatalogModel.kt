@@ -30,8 +30,37 @@ data class CatalogViewModel(
     val hosted: Boolean = false,
 )
 
-/** A `name: Type` pair. For `children`, the type is a component name. */
-data class CatalogField(val name: String, val type: String)
+/** A `name: Type` pair. For `children`, the type is a component name. A State field may carry [fake]. */
+data class CatalogField(val name: String, val type: String, val fake: CatalogFake? = null)
+
+/**
+ * A list's or State field's fake annotations, as the `fake:` key: [base] for every data set,
+ * [dataSets] per data set, and a list's `@FakePlaceholder` row.
+ */
+data class CatalogFake(
+    val base: CatalogFakeValues = CatalogFakeValues(),
+    val placeholder: String? = null,
+    val dataSets: List<Pair<String, CatalogFakeValues>> = emptyList(),
+)
+
+data class CatalogFakeValues(
+    val size: Int? = null,
+    val min: Int? = null,
+    val max: Int? = null,
+    val rows: List<String> = emptyList(),
+    val text: CatalogFakeText? = null,
+    val number: Pair<Double, Double>? = null,
+    val nullFrequency: Double? = null,
+    val cases: List<String> = emptyList(),
+    val value: String? = null,
+)
+
+data class CatalogFakeText(
+    val kind: String? = null,
+    val minLength: Int? = null,
+    val maxLength: Int? = null,
+    val values: List<String> = emptyList(),
+)
 
 data class CatalogNavigation(
     val args: List<CatalogField>,
@@ -64,6 +93,7 @@ data class CatalogList(
     val sections: List<String>,
     val element: String,
     val rows: List<String>,
+    val fake: CatalogFake? = null,
 )
 
 /**
