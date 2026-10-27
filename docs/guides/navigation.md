@@ -194,12 +194,26 @@ class Args() : NavigatorArgs() {
 `/requests?request=r1` opens it with `requestId = "r1"`. The value is decoded as
 a form value (`+` is a space, `%XX` an escaped byte). The template matches only
 when every key it captures has a non-empty value. Query parameters it does not
-name are ignored, and a repeated key gives its first value. When several
-templates match one URL, the one capturing more query parameters wins, whatever
-the registration order. So a plain `/requests`, `/requests?request={requestId}`
-and `/requests?task={taskId}` can open three destinations. Equally specific
-templates keep registration order. A query part that is not `key={name}`, a name
-captured twice, or a `@RouteArg` its route does not capture is a build error.
+name are ignored, and a repeated key gives its first value.
+
+When several templates match one URL, the most specific one opens, whatever order
+they were registered in. At the first path segment where two templates differ, a
+literal wins over a parameter: `/agents/add` opens the add screen and
+`/agents/{agentId}` every other agent. With the same literals and parameters in the
+same places, the one capturing more query parameters wins, so a plain `/requests`,
+`/requests?request={requestId}` and `/requests?task={taskId}` can open three
+destinations.
+
+The build fails on templates that can match one address with neither more
+specific: two of the same shape, such as `/agents/{agentId}` and `/agents/{id}`,
+and two whose paths cross, each literal where the other has a parameter, such as
+`/teams/new/{section}` and `/teams/{teamId}/settings` (both match
+`/teams/new/settings`). Make one literal wherever the other is. Templates on the
+same path that capture different query keys are allowed: a URL carrying both,
+such as `/requests?request=r1&task=t1`, opens the one the generated
+`GeneratedRoutes` registers first, which is by destination name. A query part that is not
+`key={name}`, a name captured twice, or a `@RouteArg` its route does not capture
+is a build error.
 
 A route sets every argument of its `Args`, so a destination opened from its address
 never reads an unset one. An argument it does not capture gets a default: `false`

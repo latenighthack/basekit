@@ -22,8 +22,20 @@ public class Route private constructor(
 
     private data class QueryCapture(val key: String, val name: String)
 
-    /** How many query parameters this template captures. [RouteTable] prefers the template with the most. */
-    internal val queryCaptureCount: Int get() = query.size
+    /**
+     * Whether this template is more specific than [other], which matches the same address: at the
+     * first path segment where one has a literal and the other a parameter, the literal one is; with
+     * the same literal and parameter positions, the one capturing more query parameters is. Neither is
+     * when they are as specific as each other. [RouteTable] keeps the most specific match, so
+     * `/agents/add` wins over `/agents/{agentId}` whatever order they were registered in.
+     */
+    internal fun isMoreSpecificThan(other: Route): Boolean {
+        for ((mine, theirs) in segments.zip(other.segments)) {
+            if (mine is Segment.Literal && theirs is Segment.Param) return true
+            if (mine is Segment.Param && theirs is Segment.Literal) return false
+        }
+        return query.size > other.query.size
+    }
 
     /**
      * Returns the captured path and query params if [path] (a path, optionally with a query and a
@@ -133,16 +145,19 @@ public class RouteTable {
     }
 
     /**
-     * Resolves [path] (a path, optionally with a query) to the args of the first registered template
-     * that matches it, except that a template capturing more query parameters wins over one capturing
-     * fewer. So `/requests?request={id}` opens for `/requests?request=7` even when a plain `/requests`
-     * was registered first, which still opens for `/requests` and for any query it does not capture.
+     * Resolves [path] (a path, optionally with a query) to the args of the most specific registered
+     * template that matches it, whatever the registration order. At the first path segment where two
+     * matching templates differ, a literal wins over a parameter, so `/agents/add` opens for
+     * `/agents/add` and `/agents/{agentId}` for any other id. With the same literal and parameter
+     * positions, the template capturing more query parameters wins: `/requests?request={id}` opens for
+     * `/requests?request=7`, and a plain `/requests` for `/requests` and any query it does not
+     * capture. Templates as specific as each other keep registration order.
      */
     public fun match(path: String): RouteMatch? {
         var best: Entry? = null
         var bestParams: Map<String, String>? = null
         for (entry in entries) {
-            if (best != null && entry.route.queryCaptureCount <= best.route.queryCaptureCount) continue
+            if (best != null && !entry.route.isMoreSpecificThan(best.route)) continue
             val params = entry.route.match(path) ?: continue
             best = entry
             bestParams = params

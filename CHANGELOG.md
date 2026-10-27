@@ -19,6 +19,23 @@ All notable changes to basekit are documented here. The format follows
   `ref` to the destination's `{Spec}Ref`, and `BasekitNavigationStackProps`.
 - Build: the navigation plugin adds its processor to the `js` target. It generates nothing new there
   unless `basekit.viewmodel.react` is set.
+- Breaking (navigation): `RouteTable.match` opens the most specific matching template, whatever the
+  registration order. At the first path segment where two templates differ, a literal wins over a
+  parameter, so `/agents/add` opens its own destination rather than `/agents/{agentId}` with the id
+  `add`; with the same path shape, more query captures win as before. Previously a literal won only
+  when registered first, and `GeneratedRoutes` registered in the order KSP read the source files,
+  the file system's directory order, so which screen opened depended on the machine that built the
+  app. An app that sorted `GeneratedRoutes.kt` to work around this can drop that step.
+- Navigation: `@Route` templates that can match one address with neither more specific are a build
+  error: two of the same shape (`/agents/{agentId}` and `/agents/{id}`), and two whose paths cross,
+  each literal where the other has a parameter (`/teams/new/{section}` and
+  `/teams/{teamId}/settings`). Templates on one path capturing different query keys stay allowed; a
+  URL with both keys opens the destination first by name.
+- Navigation, ViewModel: the processors read destinations, hosted components, view models and
+  `@ViewModelInject` implementations sorted by qualified name instead of in file order, so every
+  machine generates the same code. The order of entries in generated enums and registrations may
+  change once; the `GeneratedViewModelModule` package no longer depends on which implementation KSP
+  read first.
 - Internal: the Compose and web routers render from one body, `KotlinRouterRenderer.kt`; the Compose
   output is unchanged.
 

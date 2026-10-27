@@ -80,3 +80,17 @@ expected = 'UncapturedRouteArgViewModel.Args.count is not captured by "/uncaptur
 if result.returncode == 0 or expected not in result.stdout or 'UncapturedRouteArgViewModel.kt:' not in result.stdout:
     raise SystemExit(result.stdout)
 print('KSP rejected a route that leaves an argument without a default.')
+# Two routes of the same shape: neither is more specific, so only registration order would choose.
+result = subprocess.run([str(root / 'gradlew'), ':demo-core:kspCommonMainKotlinMetadata', '-Pbasekit.demo.indistinctRoute',
+                         '--console=plain'], cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+expected = '"/detail/{key}" on IndistinctRouteViewModel match the same addresses and neither is more specific'
+if result.returncode == 0 or expected not in result.stdout or 'IndistinctRouteViewModel.kt:' not in result.stdout:
+    raise SystemExit(result.stdout)
+print('KSP rejected two routes of the same shape.')
+# Two routes whose paths cross: each is literal where the other has a parameter.
+result = subprocess.run([str(root / 'gradlew'), ':demo-core:kspCommonMainKotlinMetadata', '-Pbasekit.demo.crossingRoutes',
+                         '--console=plain'], cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+expected = '"/teams/new/{section}" on NewTeamSectionViewModel and "/teams/{teamId}/settings" on TeamSettingsViewModel cross'
+if result.returncode == 0 or expected not in result.stdout or 'CrossingRouteViewModels.kt:' not in result.stdout:
+    raise SystemExit(result.stdout)
+print('KSP rejected two routes whose paths cross.')

@@ -34,8 +34,12 @@ data class NavigationGraph(
 class NavigationExtractor(private val logger: KSPLogger) {
 
     fun extract(resolver: Resolver): NavigationGraph {
+        // KSP gives symbols in the order it reads their files, which is the file system's directory
+        // order and so differs between machines. Every generated file follows the order here, so sort
+        // by name: two builds of the same sources write the same code.
         val symbols = resolver.getSymbolsWithAnnotation(DESTINATION_ANNOTATION)
             .filterIsInstance<KSClassDeclaration>()
+            .sortedBy { it.qualifiedName?.asString() }
             .toList()
 
         // A list row's (or child's) @NavigateTo edges live on the row spec, which often extends a
@@ -58,7 +62,9 @@ class NavigationExtractor(private val logger: KSPLogger) {
                 }
                 !isDestination
             }
+            .sortedBy { it.qualifiedName?.asString() }
             .toList()
+        reportIndistinctRoutes(symbols.zip(destinations))
         val hostedComponents = hostedSymbols.map { buildHostedComponent(it, subtypesBySupertype, reached) }
         warnUnreachableEdges(resolver, reached)
         resolver.getSymbolsWithAnnotation(REDIRECTS_TO_ANNOTATION)
@@ -78,6 +84,50 @@ class NavigationExtractor(private val logger: KSPLogger) {
         )
     }
 
+    /**
+     * Reports `@Route` templates that can match one address with neither more specific, which
+     * `RouteTable` could only choose between arbitrarily:
+     * - two of the same shape (see [routeShape]), such as `/agents/{agentId}` and `/agents/{id}`;
+     * - two whose paths cross (see [routesCross]), such as `/teams/new/{section}` and
+     *   `/teams/{teamId}/settings`.
+     *
+     * A route that is literal wherever the other is, and in more places, is fine: `/agents/add` opens
+     * over `/agents/{agentId}`. So are routes on the same path capturing different query keys; a URL
+     * carrying both opens the one `GeneratedRoutes` registers first, by destination name.
+     */
+    private fun reportIndistinctRoutes(destinations: List<Pair<KSClassDeclaration, DestinationInfo>>) {
+        val templates = destinations.flatMap { (declaration, info) ->
+            (listOfNotNull(info.routePath) + info.routeAliases).map { it to declaration }
+        }
+        templates.forEachIndexed { index, (first, firstDeclaration) ->
+            templates.drop(index + 1).filter { (second, _) -> routesCross(first, second) }.forEach { (second, secondDeclaration) ->
+                val pair = "\"$first\" on ${firstDeclaration.simpleName.asString()} and \"$second\" on ${secondDeclaration.simpleName.asString()}"
+                listOf(firstDeclaration, secondDeclaration).distinct().forEach { declaration ->
+                    logger.error(
+                        "@Route templates $pair cross: an address can match both and each has a literal where the " +
+                            "other has a parameter; make one literal wherever the other is",
+                        declaration,
+                    )
+                }
+            }
+        }
+        templates
+            .map { (template, declaration) -> Triple(routeShape(template), template, declaration) }
+            .groupBy { it.first }
+            .values
+            .filter { it.size > 1 }
+            .forEach { group ->
+                val templates = group.joinToString { (_, template, declaration) -> "\"$template\" on ${declaration.simpleName.asString()}" }
+                group.forEach { (_, _, declaration) ->
+                    logger.error(
+                        "@Route templates $templates match the same addresses and neither is more specific; " +
+                            "give one a literal segment or query key the other lacks",
+                        declaration,
+                    )
+                }
+            }
+    }
+
     /** supertype qualified name -> viewmodel interfaces and classes in this compilation that extend it. */
     private fun buildSubtypeIndex(resolver: Resolver): Map<String, List<KSClassDeclaration>> {
         val index = LinkedHashMap<String, MutableList<KSClassDeclaration>>()
@@ -93,6 +143,8 @@ class NavigationExtractor(private val logger: KSPLogger) {
                 if (VIEWMODEL_INTERFACE !in superTypes) return@forEach
                 superTypes.forEach { index.getOrPut(it) { mutableListOf() }.add(type) }
             }
+        // By name, not file order, as for the destinations themselves.
+        index.values.forEach { types -> types.sortBy { it.qualifiedName?.asString() } }
         return index
     }
 

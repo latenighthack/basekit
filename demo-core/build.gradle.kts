@@ -97,6 +97,18 @@ if (providers.gradleProperty("basekit.demo.uncapturedRouteArg").isPresent) {
     kotlin.sourceSets.named("commonMain") { kotlin.srcDir("src/uncapturedRouteArg/kotlin") }
 }
 
+// `-Pbasekit.demo.indistinctRoute` adds a route of the same shape as detail's, which
+// scripts/verify-binding-diagnostics.py expects the navigation processor to reject.
+if (providers.gradleProperty("basekit.demo.indistinctRoute").isPresent) {
+    kotlin.sourceSets.named("commonMain") { kotlin.srcDir("src/indistinctRoute/kotlin") }
+}
+
+// `-Pbasekit.demo.crossingRoutes` adds two routes whose paths cross, which
+// scripts/verify-binding-diagnostics.py expects the navigation processor to reject.
+if (providers.gradleProperty("basekit.demo.crossingRoutes").isPresent) {
+    kotlin.sourceSets.named("commonMain") { kotlin.srcDir("src/crossingRoutes/kotlin") }
+}
+
 composeCompiler {
     targetKotlinPlatforms.set(setOf(org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType.androidJvm))
 }

@@ -87,9 +87,11 @@ class ViewModelProcessor(
     override fun process(resolver: Resolver): List<KSAnnotated> {
         if (!platformCollected) {
             platformCollected = true
+            // By name, not the file system's order KSP reads files in, so every machine writes the same code.
             val symbols = resolver.getSymbolsWithAnnotation(VIEWMODEL_ANNOTATION)
                 .filterIsInstance<KSClassDeclaration>()
                 .filterNot { it.hasAnnotation(CODEGEN_IGNORE_ANNOTATION) }
+                .sortedBy { it.qualifiedName?.asString() }
                 .toList()
 
             sourceFiles = symbols.mapNotNull { it.containingFile }
@@ -110,7 +112,7 @@ class ViewModelProcessor(
             val location = (destination.location as? FileLocation)?.let { "${it.filePath}:${it.lineNumber}" }
             destinationSites[qualifiedName] = DestinationSite(navName.toUpperCamelCase().replaceFirstChar { it.lowercase() }, qualifiedName, location)
         }
-        for (impl in resolver.getSymbolsWithAnnotation(VIEWMODEL_INJECT_ANNOTATION).filterIsInstance<KSClassDeclaration>().filterNot { it.hasAnnotation(CODEGEN_IGNORE_ANNOTATION) }) {
+        for (impl in resolver.getSymbolsWithAnnotation(VIEWMODEL_INJECT_ANNOTATION).filterIsInstance<KSClassDeclaration>().filterNot { it.hasAnnotation(CODEGEN_IGNORE_ANNOTATION) }.sortedBy { it.qualifiedName?.asString() }) {
             buildFactoryInfo(impl)?.let { info ->
                 factoryInfos.add(info)
                 impl.containingFile?.let(factorySourceFiles::add)
