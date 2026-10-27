@@ -35,9 +35,9 @@ class AppleSwiftNavigationGeneratorTest {
         val source = output.source()
         assertContains(
             source,
-            "BasekitNavigationRouter: NSObject, ObservableObject, @MainActor NavigationHost",
+            "BasekitNavigationRouter: NSObject, ObservableObject, @MainActor BasekitNavigationHost",
         )
-        assertFalse("@preconcurrency NavigationHost" in source)
+        assertFalse("@preconcurrency BasekitNavigationHost" in source)
         assertContains(
             source,
             "private static func replacingResponder(in route: BasekitRoute, with responder: NavigationResponder)",

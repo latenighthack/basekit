@@ -296,7 +296,7 @@ or restorable. Deep links can still use `RouteTable.match` followed by `router.o
 
 With `arg("basekit.viewmodel.react", "true")`, the JS pass generates the web router: the same
 `BasekitNavigationRouter` as on Android, in Kotlin/JS, with the same policy, handlers, child routers
-and observers. It implements `NavigationHost`, so the generated `Host{Destination}Navigator`s
+and observers. It implements `BasekitNavigationHost`, so the generated `Host{Destination}Navigator`s
 report to it. Build it in the app's Kotlin/JS client, with the destinations from
 `GeneratedViewModelFactories`, and export what the React app needs:
 

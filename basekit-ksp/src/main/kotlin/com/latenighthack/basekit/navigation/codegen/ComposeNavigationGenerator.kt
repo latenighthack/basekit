@@ -7,7 +7,7 @@ import com.google.devtools.ksp.processing.Dependencies
  * Emits the app-specific Kotlin route model, router, interception API and Compose stack host for
  * Android: the counterpart of [AppleSwiftNavigationGenerator]'s `BasekitAppleNavigation.swift`, with
  * the same types and the same router behaviour. Its router implements the generated
- * `NavigationHost`, so the generated `Host<X>Navigator`s report to it as they do on Apple
+ * `BasekitNavigationHost`, so the generated `Host<X>Navigator`s report to it as they do on Apple
  * platforms, and its edges are that host's `NavigationEdge`.
  *
  * As on Apple platforms the router carries a `NavigationObserver` and, when [actionObservers] is set, a
@@ -22,7 +22,7 @@ class ComposeNavigationGenerator(
     fun generate(destinations: List<DestinationInfo>, hostedComponents: List<DestinationInfo> = emptyList()) {
         val byName = destinations.associateBy { it.qualifiedName }
         // Hosted components contribute call sites; only destinations are routes. Each target with a call
-        // site gets a `show` method on `NavigationHost`, as in [HostedNavigatorGenerator].
+        // site gets a `show` method on `BasekitNavigationHost`, as in [HostedNavigatorGenerator].
         val targets = (destinations + hostedComponents)
             .flatMap { source -> source.edges.mapNotNull { edge -> byName[edge.targetQualifiedName] } }
             .distinctBy { it.qualifiedName }

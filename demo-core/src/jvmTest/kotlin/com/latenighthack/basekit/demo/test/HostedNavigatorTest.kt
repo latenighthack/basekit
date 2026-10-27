@@ -2,7 +2,7 @@ package com.latenighthack.basekit.demo.test
 
 import com.latenighthack.basekit.demo.HostHomeNavigator
 import com.latenighthack.basekit.demo.NavigationEdge
-import com.latenighthack.basekit.demo.NavigationHost
+import com.latenighthack.basekit.demo.BasekitNavigationHost
 import com.latenighthack.basekit.demo.DetailNavigationTarget
 import com.latenighthack.basekit.demo.DetailViewModel
 import com.latenighthack.basekit.demo.PickResult
@@ -35,7 +35,7 @@ class HostedNavigatorTest {
         Dispatchers.resetMain()
     }
 
-    private class Host : NavigationHost {
+    private class Host : BasekitNavigationHost {
         val detailEdges = mutableListOf<NavigationEdge>()
         var closedOwner: String? = null
         var pickerResponder: NavigationResponder<PickResult>? = null

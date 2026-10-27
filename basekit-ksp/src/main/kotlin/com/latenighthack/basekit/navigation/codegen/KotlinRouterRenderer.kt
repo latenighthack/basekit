@@ -29,7 +29,7 @@ internal val ComposeRouterFlavor = KotlinRouterFlavor(
 
 /**
  * Renders the route model, decision, entry, request, policy and transaction types and the
- * `BasekitNavigationRouter` that implements `NavigationHost`, as the Swift router behaves.
+ * `BasekitNavigationRouter` that implements `BasekitNavigationHost`, as the Swift router behaves.
  */
 internal fun StringBuilder.appendKotlinRouter(
     flavor: KotlinRouterFlavor,
@@ -165,7 +165,7 @@ internal fun StringBuilder.appendKotlinRouter(
     appendLine("    public val navigationObserver: NavigationObserver,")
     if (actionObservers) appendLine("    public val actionObserver: ViewModelActionObserver,")
     appendLine("    private val parent: BasekitNavigationRouter?,")
-    appendLine(") : NavigationHost {")
+    appendLine(") : BasekitNavigationHost {")
     val noOpAction = if (actionObservers) " ViewModelActionObserver.NoOp," else ""
     appendLine("    public constructor(policy: BasekitNavigationPolicy = BasekitDefaultNavigationPolicy) : this(policy, NavigationObserver.NoOp,$noOpAction null)")
     appendLine()

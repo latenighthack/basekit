@@ -2,7 +2,7 @@ package com.latenighthack.basekit.demo.test
 
 import com.latenighthack.basekit.demo.HostHomeNavigator
 import com.latenighthack.basekit.demo.NavigationEdge
-import com.latenighthack.basekit.demo.NavigationHost
+import com.latenighthack.basekit.demo.BasekitNavigationHost
 import com.latenighthack.basekit.demo.DetailNavigationTarget
 import com.latenighthack.basekit.demo.DetailViewModel
 import com.latenighthack.basekit.demo.NavigationScreen
@@ -37,7 +37,7 @@ class ObservingNavigatorTest {
         Dispatchers.resetMain()
     }
 
-    private class Host : NavigationHost {
+    private class Host : BasekitNavigationHost {
         var pickerResponder: com.latenighthack.basekit.navigation.NavigationResponder<PickResult>? = null
 
         override fun close(ownerId: String, context: Any?) {}

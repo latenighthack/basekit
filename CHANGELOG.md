@@ -23,12 +23,14 @@ All notable changes to basekit are documented here. The format follows
 
   | 0.8.0 | Now |
   |---|---|
-  | `AppleNavigationHost` | `NavigationHost` |
+  | `AppleNavigationHost` | `BasekitNavigationHost` |
   | `AppleNavigationEdge` | `NavigationEdge` |
   | `AppleCloseNavigator` | `HostCloseNavigator` |
   | `Apple<X>Navigator` | `Host<X>Navigator` |
 
-  Code that names them, in Kotlin or Swift, must use the new names. No aliases are generated. Names
+  The host keeps a `Basekit` prefix because the generated Swift is compiled into the app's module, where
+  an app type of the same name, such as a `NavigationHost` view, would hide it. Code that names these
+  types, in Kotlin or Swift, must use the new names. No aliases are generated. Names
   that are only for Apple keep the prefix: `BasekitAppleNavigation.swift` and the
   `collectBasekitAppleSwift` tasks.
 

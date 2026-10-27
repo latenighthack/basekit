@@ -90,7 +90,7 @@ class HostedComponentTest {
         HostedNavigatorGenerator(output, Dependencies(false), "sample").generate(destinations, hosted)
         assertContains(
             output.source(),
-            "public class HostCloseNavigator(\n    public val ownerId: String,\n    private val host: NavigationHost,\n) : CloseNavigationTarget {\n" +
+            "public class HostCloseNavigator(\n    public val ownerId: String,\n    private val host: BasekitNavigationHost,\n) : CloseNavigationTarget {\n" +
                 "    override fun close(context: Any?) = runOnMainThread { host.close(ownerId, context) }",
         )
     }

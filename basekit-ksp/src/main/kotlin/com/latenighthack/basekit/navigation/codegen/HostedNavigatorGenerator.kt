@@ -57,11 +57,11 @@ class HostedNavigatorGenerator(
         }
     }
 
-    private fun generateHost(sitesByTarget: Map<String, List<CallSite>>) = write("NavigationHost") {
+    private fun generateHost(sitesByTarget: Map<String, List<CallSite>>) = write("BasekitNavigationHost") {
         buildString {
             appendLine("import com.latenighthack.basekit.navigation.NavigationResponder")
             appendLine()
-            appendLine("public interface NavigationHost {")
+            appendLine("public interface BasekitNavigationHost {")
             appendLine("    public fun close(ownerId: String, context: Any?)")
             for (sites in sitesByTarget.values) {
                 val target = sites.first().target
@@ -90,7 +90,7 @@ class HostedNavigatorGenerator(
             appendLine("/** Closes the entry [ownerId] owns in [host]; the call hops to the main thread like every host navigator. */")
             appendLine("public class HostCloseNavigator(")
             appendLine("    public val ownerId: String,")
-            appendLine("    private val host: NavigationHost,")
+            appendLine("    private val host: BasekitNavigationHost,")
             appendLine(") : CloseNavigationTarget {")
             appendLine("    override fun close(context: Any?) = runOnMainThread { host.close(ownerId, context) }")
             appendLine("}")
@@ -117,7 +117,7 @@ class HostedNavigatorGenerator(
                 appendLine("// ViewModel action driving navigation may run on any dispatcher, so every call hops to main.")
                 appendLine("public class Host${cap}Navigator(")
                 appendLine("    public val ownerId: String,")
-                appendLine("    private val host: NavigationHost,")
+                appendLine("    private val host: BasekitNavigationHost,")
                 appendLine(") : $navigatorType {")
                 // A hosted component is not a screen, so its navigator has no close().
                 if (!destination.hosted) {

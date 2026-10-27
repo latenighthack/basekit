@@ -3,6 +3,14 @@ import Foundation
 import SwiftUI
 
 // Compile-only consumer fixture. CI type-checks this with the generated Apple sources on iOS and macOS.
+
+// An app view named like a host type, as apps write. The generated Swift is compiled into the app's
+// module, where this declaration hides any framework type of the same name, so the generated code must
+// not name a framework type `NavigationHost`. The router below is still passed to the generated
+// navigators and `basekitViewModel` without casts.
+struct NavigationHost: View {
+    var body: some View { EmptyView() }
+}
 @available(iOS 18.0, macOS 15.0, *)
 @MainActor
 private struct FixturePolicy: BasekitNavigationPolicy {

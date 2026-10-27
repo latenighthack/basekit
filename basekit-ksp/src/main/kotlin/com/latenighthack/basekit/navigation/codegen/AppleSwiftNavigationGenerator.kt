@@ -207,7 +207,7 @@ class AppleSwiftNavigationGenerator(
         appendLine("@available(iOS 18.0, macOS 15.0, *)")
         // Kotlin/Native protocols are imported as nonisolated. Keep the generated host's
         // conformance on the main actor instead of suppressing the Swift 6 diagnostic.
-        appendLine("@MainActor public final class BasekitNavigationRouter: NSObject, ObservableObject, @MainActor NavigationHost {")
+        appendLine("@MainActor public final class BasekitNavigationRouter: NSObject, ObservableObject, @MainActor BasekitNavigationHost {")
         // Each change to what this router presents is compared with what it last reported presented.
         appendLine("    @Published public private(set) var path: [BasekitNavigationEntry] = [] { didSet { syncPresentation() } }")
         appendLine("    @Published public private(set) var sheet: BasekitNavigationEntry? { didSet { syncPresentation() } }")
