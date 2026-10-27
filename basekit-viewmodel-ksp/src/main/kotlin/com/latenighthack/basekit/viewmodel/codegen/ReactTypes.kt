@@ -50,11 +50,13 @@ internal fun reactFromJs(type: VmType, expression: String, adapter: ReactAdapter
 
 /** Emits the public facade and its runtime separately; no rewriting of Kotlin compiler declarations. */
 internal class ReactTypesGenerator(private val generator: CodeGenerator, private val dependencies: Dependencies) {
-    fun generate(models: List<VmInfo>, runtimeModule: String, packageVersion: String = "0.0.0") {
+    /** [destinations] are the routes of the generated web destination models, if there are any. */
+    fun generate(models: List<VmInfo>, runtimeModule: String, packageVersion: String = "0.0.0", destinations: List<FactoryRoute> = emptyList()) {
         require(runtimeModule.matches(Regex("[@a-zA-Z0-9_./-]+"))) { "Invalid basekit.viewmodel.reactModule" }
         require(packageVersion.matches(Regex("[a-zA-Z0-9.+-]+"))) { "Invalid React package version" }
         val types = buildString {
             appendLine("import type * as Runtime from '$runtimeModule';")
+            if (destinations.isNotEmpty()) appendLine("import type { ReactNode } from 'react';")
             appendLine("/** Sparse, delegated list. Rendering loaded rows does not request every page. */")
             appendLine("export interface ViewModelList<T> extends Iterable<T> {")
             appendLine("  readonly length: number; readonly size: number; readonly totalSize: number; readonly loadedCount: number; readonly revision: number;")
@@ -101,8 +103,29 @@ internal class ReactTypesGenerator(private val generator: CodeGenerator, private
                 }
             }
         }
-        generator.createNewFile(dependencies, "", "basekit-react", "d.ts").use { it.write(types.encodeToByteArray()) }
+        val navigation = if (destinations.isEmpty()) "" else buildString {
+            val sorted = destinations.sortedBy { it.caseName }
+            appendLine("/** A destination's reference for its generated hook, by its `BasekitRoute` case. */")
+            appendLine("export type BasekitDestination =")
+            appendLine(sorted.joinToString(" |\n") { "  { readonly kind: '${it.caseName}'; readonly ref: ${it.specSimpleName}Ref }" } + ";")
+            appendLine("/** Presents a sheet or cover entry; `content` is its own stack. */")
+            appendLine("export type BasekitPresenter = (entry: Runtime.BasekitWebEntry, dismiss: () => void, content: ReactNode) => ReactNode;")
+            appendLine("export interface BasekitNavigationStackProps {")
+            appendLine("  readonly router: Runtime.BasekitWebRouter;")
+            appendLine("  readonly root: Runtime.BasekitWebEntry;")
+            appendLine("  readonly destinations: Runtime.BasekitWebDestinations;")
+            appendLine("  render(destination: BasekitDestination, entry: Runtime.BasekitWebEntry): ReactNode;")
+            appendLine("  readonly sheet?: BasekitPresenter;")
+            appendLine("  readonly fullScreenCover?: BasekitPresenter;")
+            appendLine("}")
+            appendLine("/** A router's root and path, with its sheet and cover each in a stack of its own. */")
+            appendLine("export declare function BasekitNavigationStack(props: BasekitNavigationStackProps): ReactNode;")
+            appendLine("/** A router's path, sheet and cover, rendering again when they change. */")
+            appendLine("export declare function useBasekitNavigation(router: Runtime.BasekitWebRouter): Runtime.BasekitWebStack;")
+        }
+        generator.createNewFile(dependencies, "", "basekit-react", "d.ts").use { it.write((types + navigation).encodeToByteArray()) }
         generator.createNewFile(dependencies, "", "basekit-react", "js").use { out ->
+            if (destinations.isNotEmpty()) out.writeln("export { BasekitNavigationStack, useBasekitNavigation } from '$runtimeModule';")
             models.forEach { vm ->
                 out.writeln("export function use${vm.simpleName}(viewModel) { return viewModel.use(); }")
                 val identified = vm.actionIdentifierMembers()

@@ -124,6 +124,24 @@ class RouterObserversTest {
     }
 
     @Test
+    fun webRouterIsTheComposeRouterWithItsOwnState() {
+        val source = web()
+        assertContains(source, "public constructor(parent: BasekitNavigationRouter, policy: BasekitNavigationPolicy = BasekitDefaultNavigationPolicy) : this(policy, parent.navigationObserver, parent.actionObserver, parent) {")
+        assertContains(kotlinBody(source, "public fun open(route: BasekitRoute"), "if (!closed) reportShown(route)")
+        assertContains(source, "if (closed || entry.edge != null || !topRouter.reportedEntryIds.add(entry.id)) return")
+        for (signature in listOf("override fun close(ownerId: String", "private fun receive(", "override fun showRoom(", "private fun completeFromDestination(", "internal fun resolve(", "private fun replaceSheet(")) {
+            assertFalse("report" in kotlinBody(source, signature), "$signature must not report")
+        }
+        // No java.util or Compose state on Kotlin/JS: string ids, plain lists, and a change hook that runs
+        // with every presentation sync.
+        assertFalse("UUID" in source || "AtomicBoolean" in source || "mutableState" in source)
+        assertContains(source, "    private val pathEntries = mutableListOf<BasekitNavigationEntry>()\n")
+        assertContains(source, "    public var sheet: BasekitNavigationEntry? = null\n")
+        assertContains(kotlinBody(source, "private fun syncPresentation()"), "        changed()\n        val observer = presentationObserver ?: return")
+        assertContains(source, "private fun changed() { revision++; changeListeners.toList().forEach { it() } }")
+    }
+
+    @Test
     fun hostEventsNameEachScreensDestination() {
         val source = NavigationScreenGenerator(Recording(), Dependencies(false), "sample.nav").render(destinations)
         assertContains(source, "public enum class NavigationScreen : com.latenighthack.basekit.navigation.NavigationScreenId {\n    HOME,\n    ROOM,\n}")
@@ -141,6 +159,12 @@ class RouterObserversTest {
     private fun compose(): String {
         val output = Recording()
         ComposeNavigationGenerator(output, Dependencies(false), "sample.nav").generate(destinations)
+        return output.source()
+    }
+
+    private fun web(): String {
+        val output = Recording()
+        ReactNavigationGenerator(output, Dependencies(false), "sample.nav").generate(destinations)
         return output.source()
     }
 

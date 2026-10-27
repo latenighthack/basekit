@@ -4,6 +4,24 @@ All notable changes to basekit are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor versions may break API).
 
+## [Unreleased]
+
+- Navigation (web): with `basekit.viewmodel.react=true`, the JS pass generates the web router,
+  `BasekitReactNavigation.kt`. It is the Compose `BasekitNavigationRouter` in Kotlin/JS, with the same
+  routes, policy, handlers, child routers and observers, and it implements `AppleNavigationHost` for
+  the generated navigators. `BasekitWebRouter` (`router.web`) exports it to JavaScript with
+  `subscribe`/`getSnapshot` for `useSyncExternalStore`, `open(url)`, `root(url)`, `back`, `dismiss`
+  and `register`. `BasekitBrowserHistory` mirrors the path in `window.history`, at each entry's
+  `@Route` address. `createBasekitNavigationRouter(policy)` builds a router from JavaScript.
+- ViewModel (web): with the same option, `BasekitDestinationModels.kt` gives `basekitViewModel(entry,
+  host, factories)`, `basekitWebDestinations(factories)` and the React `BasekitNavigationStack` and
+  `useBasekitNavigation`. The typed React package adds `BasekitDestination`, whose `kind` narrows
+  `ref` to the destination's `{Spec}Ref`, and `BasekitNavigationStackProps`.
+- Build: the navigation plugin adds its processor to the `js` target. It generates nothing new there
+  unless `basekit.viewmodel.react` is set.
+- Internal: the Compose and web routers render from one body, `KotlinRouterRenderer.kt`; the Compose
+  output is unchanged.
+
 ## [0.7.0] — 2026-10-23
 
 Requires deltalist 0.4.8.

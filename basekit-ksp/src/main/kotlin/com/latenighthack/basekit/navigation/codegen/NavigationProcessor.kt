@@ -132,6 +132,13 @@ class NavigationProcessor(
             ComposeNavigationGenerator(codeGenerator, dependencies, resolveNavigationPackage(), actionObservers).generate(destinations, hostedComponents)
             return
         }
+        if (!marker.isMetadataPass() && marker.isJsPass()) {
+            // The web counterpart of the Compose router, for apps that host React bindings.
+            if (destinations.isEmpty() || options[REACT_OPTION] != "true") return
+            val dependencies = Dependencies(aggregating = true, *sourceFiles.toTypedArray())
+            ReactNavigationGenerator(codeGenerator, dependencies, resolveNavigationPackage(), actionObservers).generate(destinations, hostedComponents)
+            return
+        }
         if (!marker.isMetadataPass()) return
         if (destinations.isEmpty()) return
 
@@ -192,6 +199,14 @@ class NavigationProcessor(
             val parts = invariantSeparatorsPath.split('/')
             val kspIndex = parts.indexOf("ksp")
             return kspIndex >= 0 && parts.getOrNull(kspIndex + 1) == "android"
+        }
+
+        const val REACT_OPTION = "basekit.viewmodel.react"
+
+        /** The same test as the viewmodel processor's JS pass. */
+        fun File.isJsPass(): Boolean {
+            val afterKsp = invariantSeparatorsPath.lowercase().substringAfter("/ksp/", "")
+            return afterKsp.startsWith("js/") || afterKsp.contains("/js") || afterKsp.contains("jsmain")
         }
 
         fun File.isApplePass(): Boolean {

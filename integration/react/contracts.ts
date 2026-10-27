@@ -1,8 +1,8 @@
 import { createBindingProbe, createBindingChild, BrowserProbeMessage as ProbeMessage } from 'basekit-demo-core';
-import { useBindingProbeViewModel, type BindingProbeViewModelBinding, type BindingProbeViewModelShelvesHeader, type PickerViewModelOptionsElement } from 'basekit-react';
+import { BasekitNavigationStack, useBasekitNavigation, useDetailViewModel, useBindingProbeViewModel, type BasekitDestination, type BasekitNavigationStackProps, type BindingProbeViewModelBinding, type BindingProbeViewModelShelvesHeader, type PickerViewModelOptionsElement } from 'basekit-react';
 import posthog from 'posthog-js';
 import { createPostHogMetrics } from '@latenighthack/basekit-navigation-posthog';
-import { BrowserBindingProbe } from 'basekit-demo-core';
+import { BrowserBindingProbe, BrowserNavigationProbe, BasekitBrowserHistory, createBasekitNavigationRouter } from 'basekit-demo-core';
 
 const metrics = createPostHogMetrics(posthog, { propertyProviders: [event => ({ kind: event.kind })] });
 new BrowserBindingProbe(metrics);
@@ -49,3 +49,30 @@ const kotlinShelf: BindingProbeViewModelShelvesHeader = 'TOP';
 type IsAny<T> = 0 extends (1 & T) ? true : false;
 const noAny: IsAny<ReturnType<typeof useBindingProbeViewModel>> = false;
 const noStateAny: IsAny<BindingProbeViewModelBinding['message']> = false;
+
+// The generated web router: `kind` narrows a destination's reference to its own hook's.
+function destinationContracts(destination: BasekitDestination) {
+  switch (destination.kind) {
+    case 'detail': useDetailViewModel(destination.ref).count; return;
+    case 'home': case 'picker': return;
+    default: { const never: never = destination; return never; }
+  }
+}
+function wrongDestination(destination: BasekitDestination) {
+  // @ts-expect-error a home reference is not a detail reference
+  if (destination.kind === 'home') useDetailViewModel(destination.ref);
+}
+const navigationProbe = new BrowserNavigationProbe();
+const stack = useBasekitNavigation(navigationProbe.web);
+const top: string | undefined = stack.path[stack.path.length - 1]?.screen;
+const unsubscribe: () => void = navigationProbe.web.subscribe(() => {});
+const opened: boolean = navigationProbe.web.open('/detail/7');
+new BasekitBrowserHistory(navigationProbe.web, navigationProbe.root).attach();
+createBasekitNavigationRouter(request => request.screen === 'picker' ? 'sheet' : 'push');
+const stackProps: BasekitNavigationStackProps = {
+  router: navigationProbe.web, root: navigationProbe.root, destinations: navigationProbe.destinations,
+  render: destination => destination.kind,
+};
+BasekitNavigationStack(stackProps);
+// @ts-expect-error the stack needs its destinations
+const missing: BasekitNavigationStackProps = { router: navigationProbe.web, root: navigationProbe.root, render: () => null };

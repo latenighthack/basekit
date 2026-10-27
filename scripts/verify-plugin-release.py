@@ -118,7 +118,7 @@ tasks.register("verifyPublishedPlugin") {
         listOf("Jvm", "Android", "Js", "IosArm64", "IosSimulatorArm64", "MacosArm64").forEach {
             verifyProcessor("ksp$it", "basekit-viewmodel-ksp")
         }
-        listOf("IosArm64", "IosSimulatorArm64", "MacosArm64").forEach {
+        listOf("Js", "IosArm64", "IosSimulatorArm64", "MacosArm64").forEach {
             verifyProcessor("ksp$it", "basekit-ksp")
         }
         check(tasks.findByName("collectBasekitAppleSwift") != null)

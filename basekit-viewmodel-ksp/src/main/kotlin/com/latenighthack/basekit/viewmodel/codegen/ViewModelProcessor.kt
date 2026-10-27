@@ -311,8 +311,20 @@ class ViewModelProcessor(
                         vm.mutators.forEach { reactType(it.type, it.reactAdapter); reactFromJs(it.type, it.paramName, it.reactAdapter) }
                     }
                     ReactHookGenerator(codeGenerator, dependencies).generate(viewModels)
+                    // The web counterpart of the Compose destination models, beside the navigation
+                    // processor's web router.
+                    var destinationRoutes = emptyList<FactoryRoute>()
+                    if (options["basekit.viewmodel.react"] == "true") {
+                        val routes = uniqueFactories(warn = false).mapNotNull { factory -> factory.route?.let { factory to it } }
+                        if (routes.any { (_, route) -> RouteParameter.NAVIGATOR in route.parameters } && !reportMissingDestinationFactories()) {
+                            val factoryDependencies = Dependencies(aggregating = true, *(sourceFiles + factorySourceFiles).toTypedArray())
+                            val factoriesPackage = commonPackage(uniqueFactories(warn = false).map { it.implQualifiedName.substringBeforeLast('.', "") })
+                            ReactDestinationModelGenerator(codeGenerator, factoryDependencies, navigationPackage.orEmpty(), factoriesPackage).generate(routes)
+                            destinationRoutes = routes.map { it.second }
+                        }
+                    }
                     options["basekit.viewmodel.reactModule"]?.let {
-                        ReactTypesGenerator(codeGenerator, dependencies).generate(viewModels, it, options["basekit.viewmodel.reactPackageVersion"] ?: "0.0.0")
+                        ReactTypesGenerator(codeGenerator, dependencies).generate(viewModels, it, options["basekit.viewmodel.reactPackageVersion"] ?: "0.0.0", destinationRoutes)
                     }
                 } catch (error: IllegalArgumentException) { logger.error(error.message.orEmpty()) }
                   catch (error: IllegalStateException) { logger.error(error.message.orEmpty()) }

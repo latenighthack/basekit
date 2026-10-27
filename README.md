@@ -291,6 +291,57 @@ full-screen cover, or platform-custom presentation and automatic, zoom, or custo
 `NavigatorArgs` remain in-memory on Apple platforms, so a native path is intentionally not `Codable`
 or restorable. Deep links can still use `RouteTable.match` followed by `router.open(match:)`.
 
+### Web navigation
+
+With `arg("basekit.viewmodel.react", "true")`, the JS pass generates the web router: the same
+`BasekitNavigationRouter` as on Android, in Kotlin/JS, with the same policy, handlers, child routers
+and observers. It implements `AppleNavigationHost`, so the generated `Apple{Destination}Navigator`s
+report to it. Build it in the app's Kotlin/JS client, with the destinations from
+`GeneratedViewModelFactories`, and export what the React app needs:
+
+```kotlin
+@JsExport
+class WebClient(factories: GeneratedViewModelFactories) {
+    private val router = BasekitNavigationRouter(policy, navigationObserver, actionObserver)
+    val web: BasekitWebRouter = router.web
+    val destinations: BasekitWebDestinations = basekitWebDestinations(factories)
+    val root: BasekitWebEntry = web.entry(router.root(BasekitRoute.Home(HomeViewModel.Args(), edge = null)))
+}
+```
+
+```tsx
+import { BasekitBrowserHistory } from 'my-app-core';
+import { BasekitNavigationStack, useDetailViewModel, type BasekitDestination } from 'my-app-core-bindings';
+
+new BasekitBrowserHistory(client.web, client.root).attach();
+
+<BasekitNavigationStack router={client.web} root={client.root} destinations={client.destinations}
+  render={destination => <Screen destination={destination} />} />
+```
+
+`render` gets a `BasekitDestination`, whose `kind` (the `BasekitRoute` case, such as `'detail'`)
+narrows `ref` to that destination's `{Spec}Ref` for its generated hook. `destinations.reference(entry)`
+builds the entry's view model once, with the navigator reporting to `entry.host`, and keeps it while the
+entry stays in its router. The stack keeps every entry mounted and hides all but the top one, so a
+screen and its view model outlive the screens pushed over it. A sheet or cover is a stack of its own
+for the router made for its entry, presented in a modal `<dialog>` that Escape dismisses unless
+`sheet`/`fullScreenCover` render it another way.
+
+`BasekitWebRouter` is the router's view for JavaScript: `subscribe` and `getSnapshot` for
+`useSyncExternalStore` (or `useBasekitNavigation(router)`), `open(url)` and `root(url)` through
+`GeneratedRoutes`, `back`, `dismiss`, `reconcilePath`, `register` for a screen's navigation handler,
+and the platform presenter for custom presentations. `createBasekitNavigationRouter(policy)` builds a
+router from JavaScript, where the policy returns `'push'`, `'sheet'`, `'fullScreenCover'` or
+`{ custom: id }`.
+
+`BasekitBrowserHistory` mirrors the router's path in `window.history`. `attach()` opens the page's
+address as a deep link unless it is the root's, over the root. Each pushed entry adds a history entry
+at its `@Route` address, with `@RouteArg` values encoded (the current address when it has no route).
+Browser back closes the entries over the one it returns to, answering their responders with null, and
+entries the router closes are popped from history. Sheets and covers add no history entry. Forward is
+undone, since the entries it would return to have closed. Leave guards, scroll restoration and
+modified clicks stay with the host.
+
 ## Wiring KSP manually
 
 The `com.latenighthack.basekit.*` convention plugins above do exactly the wiring below — reach for
@@ -358,6 +409,7 @@ the convention plugins under [`basekit-gradle-plugin/`](basekit-gradle-plugin/sr
 | `Basekit_TuiAppComponent` | tui | FQN of an app DI root the generated component takes as a parent |
 | `basekit.viewmodel.swiftFrameworkImports` | viewmodel | Comma-separated frameworks the generated Swift should `import` |
 | `basekit.navigation.swiftFrameworkImports` | navigation | Comma-separated frameworks the generated Apple navigation Swift should `import` |
+| `basekit.viewmodel.react` | navigation, viewmodel | `"true"` also generates the web router, destination models and React stack host |
 
 ## Optional PostHog metrics
 

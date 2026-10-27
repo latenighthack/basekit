@@ -375,7 +375,7 @@ transport alone does not establish restoration of the whole application graph.
 | Android | Back dispatch, screen/sheet policy, Activity recreation, argument codec and explicit state restoration |
 | Web | Address/query projection, push versus replace, back/forward guards, scroll restoration, modified-click behavior and remount lifetime |
 
-The generated routers (Apple and Compose) give every entry they present other than
+The generated routers (Apple, Compose and web) give every entry they present other than
 by push (sheet, cover or custom) a router of its own, and that entry's navigator
 reports to it: `router.host(for: entry)`, which the stack host passes to its
 closures. A sheet's own pushes and sheets therefore stay over the sheet, and
@@ -396,6 +396,17 @@ entry. Preserve browser behavior for modified clicks and new tabs. A blocked
 back/forward transition must restore a coherent current address/entry while awaiting
 a decision, then continue the approved transition exactly once. Avoid two independent
 owners fighting over browser history and shared selected-route state.
+
+The generated web router (`basekit.viewmodel.react`) leaves one owner of history:
+`BasekitBrowserHistory` mirrors the top router's path. Each pushed entry adds a
+history entry at its `@Route` address; browser back closes the entries over the
+one it returns to, answering their responders with null; and entries the router
+closes are popped from history. Sheets and covers add no history entry, and
+forward is undone because the entries it would return to have closed. A path
+`@RouteArg` cannot contain `/`: the browser address decodes it into another
+segment. Query-only selection, replace, leave guards, scroll restoration and
+modified clicks are still the host's. See the
+[README](../../README.md#web-navigation).
 
 ## Test the graph and the actual hosts
 

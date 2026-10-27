@@ -7,7 +7,8 @@ import java.util.Locale
 
 // Wires the Basekit navigation codegen into a KMP module. Navigator/route interfaces are generated
 // in common metadata; Apple passes additionally emit the universal native navigation source, and the
-// Android pass, with `arg("basekit.viewmodel.compose", "true")`, its Compose counterpart.
+// Android pass, with `arg("basekit.viewmodel.compose", "true")`, its Compose counterpart, and the JS
+// pass, with `arg("basekit.viewmodel.react", "true")`, the web router for React.
 // Choose the output package with
 // `ksp { arg("Basekit_NavigationPackage", "<pkg>") }`; to also generate the test harness add
 // `arg("Basekit_GenerateTestNavigator", "true")` and depend on basekit-navigation-test.
@@ -26,7 +27,7 @@ extensions.configure<KotlinMultiplatformExtension> {
 
     targets.configureEach {
         val native = name.startsWith("ios") || name.startsWith("macos") || name.startsWith("tvos") || name.startsWith("watchos")
-        if (name == "metadata" || !(native || name.startsWith("android"))) return@configureEach
+        if (name == "metadata" || !(native || name.startsWith("android") || name == "js")) return@configureEach
         val configuration = "ksp" + name.replaceFirstChar { it.titlecase(Locale.US) }
         project.dependencies.add(configuration, basekitProcessor(":basekit-ksp", "basekit-ksp"))
     }

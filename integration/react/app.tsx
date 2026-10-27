@@ -1,7 +1,7 @@
 import React, { StrictMode, Suspense, startTransition, use, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserBindingProbe, BrowserObservationProbe, BrowserProbeMessage as ProbeMessage, BrowserRenderProbe } from 'basekit-demo-core';
-import { useBindingProbeViewModel, useRenderProbeViewModel, type BindingProbeViewModelRowsElement, type RenderProbeViewModelRef, type RenderProbeViewModelRowsElement, type RenderProbeViewModelBinding } from 'basekit-react';
+import { BasekitBrowserHistory, BrowserBindingProbe, BrowserNavigationProbe, BrowserObservationProbe, BrowserProbeMessage as ProbeMessage, BrowserRenderProbe } from 'basekit-demo-core';
+import { BasekitNavigationStack, useBindingProbeViewModel, useDetailViewModel, useHomeViewModel, usePickerViewModel, useRenderProbeViewModel, type BasekitDestination, type BindingProbeViewModelRowsElement, type DetailViewModelRef, type HomeViewModelRef, type PickerViewModelOptionsElement, type PickerViewModelRef, type RenderProbeViewModelRef, type RenderProbeViewModelRowsElement, type RenderProbeViewModelBinding } from 'basekit-react';
 import posthog from 'posthog-js';
 import { createPostHogMetrics } from '@latenighthack/basekit-navigation-posthog';
 const metricsEvents: Array<{ event: string; properties: Record<string, unknown> }> = [];
@@ -91,11 +91,57 @@ function Abandoned() {
   useRenderProbeViewModel(renderProbes.abandoned.reference);
   return use(never);
 }
+
+// The generated web router over the demo graph. History attaches once, outside React, so StrictMode's
+// second effect run does not open the page's address twice.
+const navigation = new BrowserNavigationProbe();
+const browserHistory = new BasekitBrowserHistory(navigation.web, navigation.root);
+browserHistory.attach();
+Object.assign(window, { navigation });
+function HomeScreen({ model }: { model: HomeViewModelRef }) {
+  const home = useHomeViewModel(model);
+  return <>
+    <output id="home-feed">{home.items.length}</output>
+    <button onClick={() => void home.onOpenDetail()}>Open detail</button>
+    <button onClick={() => void home.onPick()}>Pick</button>
+  </>;
+}
+function DetailScreen({ model }: { model: DetailViewModelRef }) {
+  const detail = useDetailViewModel(model);
+  return <>
+    <output className="detail-id">{detail.id}</output>
+    <output className="detail-count">{detail.count}</output>
+    <button onClick={() => void detail.onIncrement()}>Add one</button>
+  </>;
+}
+function PickerOption({ item }: { item: PickerViewModelOptionsElement }) {
+  if (item.kind === 'pickerEmpty') return <>{item.use().message}</>;
+  const option = item.use();
+  return <button onClick={() => void option.onSelected()}>{option.label}</button>;
+}
+function PickerScreen({ model }: { model: PickerViewModelRef }) {
+  const picker = usePickerViewModel(model);
+  return <>{picker.options.map(item => <PickerOption key={item.key} item={item} />)}</>;
+}
+function Destination({ destination }: { destination: BasekitDestination }) {
+  switch (destination.kind) {
+    case 'home': return <HomeScreen model={destination.ref} />;
+    case 'detail': return <DetailScreen model={destination.ref} />;
+    case 'picker': return <PickerScreen model={destination.ref} />;
+  }
+}
+function Navigation() {
+  return <section id="navigation">
+    <BasekitNavigationStack router={navigation.web} root={navigation.root} destinations={navigation.destinations}
+      render={destination => <Destination destination={destination} />} />
+  </section>;
+}
 function App() {
   const [mounted, setMounted] = useState(true);
   const [abandon, setAbandon] = useState(false);
   const [observed, setObserved] = useState(false);
   return <>
+    <Navigation />
     <button onClick={() => setObserved(!observed)}>Observe</button>{observed && <ObservedProbe />}
     <button onClick={() => setMounted(!mounted)}>Mount</button>{mounted && <Probe />}
     <RenderProbe name="hot" reference={renderProbes.hot.reference} />

@@ -7,7 +7,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.promise
 import kotlin.js.Promise
 
-/** Minimal React interop used by the generated `use{ViewModel}` hooks. */
+/** Minimal React interop used by the generated `use{ViewModel}` hooks and navigation stack. */
 @JsModule("react")
 @JsNonModule
 public external object React {
@@ -15,6 +15,8 @@ public external object React {
     public fun useState(initial: dynamic): Array<dynamic>
     public fun useEffect(effect: () -> dynamic, deps: Array<dynamic>)
     public fun useSyncExternalStore(subscribe: dynamic, getSnapshot: dynamic): dynamic
+    public fun createElement(type: dynamic, props: dynamic, vararg children: dynamic): dynamic
+    public val Fragment: dynamic
 }
 
 /**

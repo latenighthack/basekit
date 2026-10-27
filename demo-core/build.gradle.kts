@@ -15,6 +15,7 @@ plugins {
 ksp {
     // Package the generated navigator/route interfaces land in (co-located with the destinations).
     arg("basekit.viewmodel.compose", "true")
+    arg("basekit.viewmodel.react", "true")
     arg("basekit.viewmodel.reactPackageVersion", project.version.toString())
     arg("basekit.viewmodel.reactModule", "basekit-demo-core")
     arg("basekit.viewmodel.reactEnumNames", "lowerCamel")
