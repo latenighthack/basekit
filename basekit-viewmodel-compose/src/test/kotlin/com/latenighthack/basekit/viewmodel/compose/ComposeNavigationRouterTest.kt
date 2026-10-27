@@ -1,7 +1,7 @@
 package com.latenighthack.basekit.viewmodel.compose
 
 import android.os.Looper
-import com.latenighthack.basekit.demo.AppleNavigationEdge
+import com.latenighthack.basekit.demo.NavigationEdge
 import com.latenighthack.basekit.demo.BasekitNavigationDecision
 import com.latenighthack.basekit.demo.BasekitNavigationEntry
 import com.latenighthack.basekit.demo.BasekitNavigationRouter
@@ -27,8 +27,8 @@ class ComposeNavigationRouterTest {
 
     @Test fun pushesAndClosesFromTheOwner() {
         val router = BasekitNavigationRouter()
-        router.showDetail("home", detail(), AppleNavigationEdge.HOME_ON_OPEN_DETAIL, null)
-        router.showDetail("home", detail(), AppleNavigationEdge.HOME_ON_OPEN_DETAIL, null)
+        router.showDetail("home", detail(), NavigationEdge.HOME_ON_OPEN_DETAIL, null)
+        router.showDetail("home", detail(), NavigationEdge.HOME_ON_OPEN_DETAIL, null)
         assertEquals(2, router.path.size)
         // An entry closes everything pushed over it.
         router.close(router.path[0].ownerId, null)
@@ -37,7 +37,7 @@ class ComposeNavigationRouterTest {
 
     @Test fun closingAnOwnerItDoesNotPresentClosesItInTheParent() {
         val parent = BasekitNavigationRouter()
-        parent.showDetail("home", detail(), AppleNavigationEdge.HOME_ON_OPEN_DETAIL, null)
+        parent.showDetail("home", detail(), NavigationEdge.HOME_ON_OPEN_DETAIL, null)
         val child = BasekitNavigationRouter(parent)
         child.close(parent.path.single().ownerId, null)
         assertTrue(parent.path.isEmpty())
@@ -46,7 +46,7 @@ class ComposeNavigationRouterTest {
     @Test fun aRespondingDestinationAnswersOnceAndCloses() {
         val router = BasekitNavigationRouter { BasekitNavigationDecision(BasekitPresentation.Sheet) }
         val answers = mutableListOf<PickResult?>()
-        router.showPicker("home", PickerViewModel.Args(), AppleNavigationEdge.HOME_ON_PICK, null) { answers += it }
+        router.showPicker("home", PickerViewModel.Args(), NavigationEdge.HOME_ON_PICK, null) { answers += it }
         val route = router.sheet!!.route as BasekitRoute.Picker
         route.responder!!.respond(PickResult(3))
         route.responder!!.respond(PickResult(4))
@@ -58,7 +58,7 @@ class ComposeNavigationRouterTest {
     @Test fun dismissingASheetAnswersNull() {
         val router = BasekitNavigationRouter { BasekitNavigationDecision(BasekitPresentation.Sheet) }
         val answers = mutableListOf<PickResult?>()
-        router.showPicker("home", PickerViewModel.Args(), AppleNavigationEdge.HOME_ON_PICK, null) { answers += it }
+        router.showPicker("home", PickerViewModel.Args(), NavigationEdge.HOME_ON_PICK, null) { answers += it }
         router.updateSheet(null)
         assertEquals(listOf<PickResult?>(null), answers)
     }
@@ -69,11 +69,11 @@ class ComposeNavigationRouterTest {
             transaction.present(BasekitNavigationDecision(BasekitPresentation.FullScreenCover))
             true
         }
-        router.showDetail("home", detail(), AppleNavigationEdge.HOME_ON_OPEN_DETAIL, null)
+        router.showDetail("home", detail(), NavigationEdge.HOME_ON_OPEN_DETAIL, null)
         assertTrue(router.path.isEmpty())
         assertTrue(router.fullScreenCover?.route is BasekitRoute.Detail)
         router.unregister("home", token)
-        router.showDetail("home", detail(), AppleNavigationEdge.HOME_ON_OPEN_DETAIL, null)
+        router.showDetail("home", detail(), NavigationEdge.HOME_ON_OPEN_DETAIL, null)
         assertEquals(1, router.path.size)
     }
 
@@ -86,7 +86,7 @@ class ComposeNavigationRouterTest {
             presented += entry
         }
         router.platformDismisser = { dismissed += it }
-        router.showDetail("home", detail(), AppleNavigationEdge.HOME_ON_OPEN_DETAIL, null)
+        router.showDetail("home", detail(), NavigationEdge.HOME_ON_OPEN_DETAIL, null)
         router.close(presented.single().ownerId, null)
         assertEquals(listOf(presented.single().id), dismissed)
     }
@@ -94,14 +94,14 @@ class ComposeNavigationRouterTest {
     @Test fun poppingThePathAnswersNull() {
         val router = BasekitNavigationRouter()
         val answers = mutableListOf<PickResult?>()
-        router.showPicker("home", PickerViewModel.Args(), AppleNavigationEdge.HOME_ON_PICK, null) { answers += it }
+        router.showPicker("home", PickerViewModel.Args(), NavigationEdge.HOME_ON_PICK, null) { answers += it }
         router.reconcilePath(emptyList())
         assertEquals(listOf<PickResult?>(null), answers)
     }
 
     @Test fun aDeepLinkWithoutAnEdgeReplacesThePath() {
         val router = BasekitNavigationRouter()
-        router.showDetail("home", detail(), AppleNavigationEdge.HOME_ON_OPEN_DETAIL, null)
+        router.showDetail("home", detail(), NavigationEdge.HOME_ON_OPEN_DETAIL, null)
         assertTrue(router.open(PickerViewModel.Args()))
         val route = router.path.single().route as BasekitRoute.Picker
         // Nobody waits for a deep link's answer, so it has a responder that discards it.
@@ -113,11 +113,11 @@ class ComposeNavigationRouterTest {
     // Stacked sheets: a sheet's view model reports to the router made for it, so what it opens is
     // presented over it. The policy, not the router, decides that a pick is a sheet.
     private fun sheetsForPicks() = BasekitNavigationRouter { request ->
-        if (request.edge == AppleNavigationEdge.HOME_ON_PICK) BasekitNavigationDecision(BasekitPresentation.Sheet) else BasekitNavigationDecision()
+        if (request.edge == NavigationEdge.HOME_ON_PICK) BasekitNavigationDecision(BasekitPresentation.Sheet) else BasekitNavigationDecision()
     }
 
     private fun BasekitNavigationRouter.pick(owner: String, answers: MutableList<PickResult?>) =
-        showPicker(owner, PickerViewModel.Args(), AppleNavigationEdge.HOME_ON_PICK, null) { answers += it }
+        showPicker(owner, PickerViewModel.Args(), NavigationEdge.HOME_ON_PICK, null) { answers += it }
 
     @Test fun aSheetsRouterStacksTheSheetItOpens() {
         val router = sheetsForPicks()
@@ -175,7 +175,7 @@ class ComposeNavigationRouterTest {
 
     @Test fun hostIsTheRouterAnEntrysNavigatorReportsTo() {
         val router = sheetsForPicks()
-        router.showDetail("home", detail(), AppleNavigationEdge.HOME_ON_OPEN_DETAIL, null)
+        router.showDetail("home", detail(), NavigationEdge.HOME_ON_OPEN_DETAIL, null)
         assertTrue(router.host(router.path.single()) === router)
         router.pick("home", mutableListOf())
         val sheet = router.sheet!!
@@ -183,7 +183,7 @@ class ComposeNavigationRouterTest {
         assertTrue(sheetHost !== router)
         assertTrue(router.host(sheet) === sheetHost)
         // The sheet's router uses the app's policy: a detail opened from the sheet is pushed in it.
-        sheetHost.showDetail(sheet.ownerId, detail(), AppleNavigationEdge.HOME_ON_OPEN_DETAIL, null)
+        sheetHost.showDetail(sheet.ownerId, detail(), NavigationEdge.HOME_ON_OPEN_DETAIL, null)
         val pushed = sheetHost.path.single()
         assertTrue(router.host(pushed) === sheetHost)
         sheetHost.pick(sheet.ownerId, mutableListOf())
@@ -195,7 +195,7 @@ class ComposeNavigationRouterTest {
     @Test fun aSheetsRouterPresentsCustomEntriesThroughThePresenterItWasGiven() {
         val router = BasekitNavigationRouter { request ->
             when (request.edge) {
-                AppleNavigationEdge.HOME_ON_PICK -> BasekitNavigationDecision(BasekitPresentation.Sheet)
+                NavigationEdge.HOME_ON_PICK -> BasekitNavigationDecision(BasekitPresentation.Sheet)
                 else -> BasekitNavigationDecision(BasekitPresentation.PlatformCustom("toast"))
             }
         }
@@ -205,7 +205,7 @@ class ComposeNavigationRouterTest {
         router.platformDismisser = { dismissed += it }
         router.pick("home", mutableListOf())
         val sheet = router.sheet!!
-        router.host(sheet).showDetail(sheet.ownerId, detail(), AppleNavigationEdge.HOME_ON_OPEN_DETAIL, null)
+        router.host(sheet).showDetail(sheet.ownerId, detail(), NavigationEdge.HOME_ON_OPEN_DETAIL, null)
         val toast = presented.single()
         assertTrue(router.host(toast) !== router.host(sheet))
         router.updateSheet(null)
@@ -215,7 +215,7 @@ class ComposeNavigationRouterTest {
     @Test fun aSheetsRouterUsesThePresenterSetAfterItWasMade() {
         val router = BasekitNavigationRouter { request ->
             when (request.edge) {
-                AppleNavigationEdge.HOME_ON_PICK -> BasekitNavigationDecision(BasekitPresentation.Sheet)
+                NavigationEdge.HOME_ON_PICK -> BasekitNavigationDecision(BasekitPresentation.Sheet)
                 else -> BasekitNavigationDecision(BasekitPresentation.PlatformCustom("toast"))
             }
         }
@@ -223,7 +223,7 @@ class ComposeNavigationRouterTest {
         val sheet = router.sheet!!
         val presented = mutableListOf<BasekitNavigationEntry>()
         router.platformPresenter = { entry, _ -> presented += entry }
-        router.host(sheet).showDetail(sheet.ownerId, detail(), AppleNavigationEdge.HOME_ON_OPEN_DETAIL, null)
+        router.host(sheet).showDetail(sheet.ownerId, detail(), NavigationEdge.HOME_ON_OPEN_DETAIL, null)
         assertEquals(1, presented.size)
     }
 
@@ -235,7 +235,7 @@ class ComposeNavigationRouterTest {
         router.updateSheet(null)
         val late = mutableListOf<PickResult?>()
         sheetHost.pick(sheet.ownerId, late)
-        sheetHost.showDetail(sheet.ownerId, detail(), AppleNavigationEdge.HOME_ON_OPEN_DETAIL, null)
+        sheetHost.showDetail(sheet.ownerId, detail(), NavigationEdge.HOME_ON_OPEN_DETAIL, null)
         assertEquals(listOf<PickResult?>(null), late)
         assertNull(sheetHost.sheet)
         assertTrue(sheetHost.path.isEmpty())

@@ -51,17 +51,17 @@ class HostedComponentTest {
         val output = RecordingCodeGenerator()
         val idle = info("BannerViewModel", "banner", hosted = true)
         ObservingNavigatorGenerator(output, Dependencies(false), "sample").generate(destinations, listOf(idle))
-        AppleHostedNavigatorGenerator(output, Dependencies(false), "sample").generate(destinations, listOf(idle))
+        HostedNavigatorGenerator(output, Dependencies(false), "sample").generate(destinations, listOf(idle))
         assertFalse("Banner" in output.source())
     }
 
     @Test
     fun appleNavigatorOmitsCloseAndSharesTheEdgeEnum() {
         val output = RecordingCodeGenerator()
-        AppleHostedNavigatorGenerator(output, Dependencies(false), "sample").generate(destinations, hosted)
+        HostedNavigatorGenerator(output, Dependencies(false), "sample").generate(destinations, hosted)
         val source = output.source()
         assertContains(source, "    SIDEBAR_ON_ACTIVITY_TAPPED,")
-        val shellSource = source.substringAfter("public class AppleShellNavigator(").substringBefore("\npackage ")
+        val shellSource = source.substringAfter("public class HostShellNavigator(").substringBefore("\npackage ")
         assertContains(shellSource, ") : ShellNavigator {\n\n    override fun navigateToActivity(context: Any?)")
         assertFalse("close(" in shellSource)
     }
@@ -87,10 +87,10 @@ class HostedComponentTest {
     @Test
     fun appleCloseNavigatorClosesOnTheMainThread() {
         val output = RecordingCodeGenerator()
-        AppleHostedNavigatorGenerator(output, Dependencies(false), "sample").generate(destinations, hosted)
+        HostedNavigatorGenerator(output, Dependencies(false), "sample").generate(destinations, hosted)
         assertContains(
             output.source(),
-            "public class AppleCloseNavigator(\n    public val ownerId: String,\n    private val host: AppleNavigationHost,\n) : CloseNavigationTarget {\n" +
+            "public class HostCloseNavigator(\n    public val ownerId: String,\n    private val host: NavigationHost,\n) : CloseNavigationTarget {\n" +
                 "    override fun close(context: Any?) = runOnMainThread { host.close(ownerId, context) }",
         )
     }

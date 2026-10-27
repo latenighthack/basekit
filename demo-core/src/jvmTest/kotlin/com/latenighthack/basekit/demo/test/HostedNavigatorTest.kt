@@ -1,8 +1,8 @@
 package com.latenighthack.basekit.demo.test
 
-import com.latenighthack.basekit.demo.AppleHomeNavigator
-import com.latenighthack.basekit.demo.AppleNavigationEdge
-import com.latenighthack.basekit.demo.AppleNavigationHost
+import com.latenighthack.basekit.demo.HostHomeNavigator
+import com.latenighthack.basekit.demo.NavigationEdge
+import com.latenighthack.basekit.demo.NavigationHost
 import com.latenighthack.basekit.demo.DetailNavigationTarget
 import com.latenighthack.basekit.demo.DetailViewModel
 import com.latenighthack.basekit.demo.PickResult
@@ -23,8 +23,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class AppleHostedNavigatorTest {
-    // Generated Apple navigators dispatch host calls to Main. JVM tests have no UI dispatcher.
+class HostedNavigatorTest {
+    // Generated host navigators dispatch host calls to Main. JVM tests have no UI dispatcher.
     @BeforeTest
     fun installMainDispatcher() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -35,8 +35,8 @@ class AppleHostedNavigatorTest {
         Dispatchers.resetMain()
     }
 
-    private class Host : AppleNavigationHost {
-        val detailEdges = mutableListOf<AppleNavigationEdge>()
+    private class Host : NavigationHost {
+        val detailEdges = mutableListOf<NavigationEdge>()
         var closedOwner: String? = null
         var pickerResponder: NavigationResponder<PickResult>? = null
 
@@ -47,7 +47,7 @@ class AppleHostedNavigatorTest {
         override fun showDetail(
             ownerId: String,
             args: DetailViewModel.Args,
-            edge: AppleNavigationEdge,
+            edge: NavigationEdge,
             context: Any?,
         ) {
             detailEdges += edge
@@ -56,11 +56,11 @@ class AppleHostedNavigatorTest {
         override fun showPicker(
             ownerId: String,
             args: PickerViewModel.Args,
-            edge: AppleNavigationEdge,
+            edge: NavigationEdge,
             context: Any?,
             responder: NavigationResponder<PickResult>,
         ) {
-            assertEquals(AppleNavigationEdge.HOME_ON_PICK, edge)
+            assertEquals(NavigationEdge.HOME_ON_PICK, edge)
             pickerResponder = responder
         }
     }
@@ -68,7 +68,7 @@ class AppleHostedNavigatorTest {
     @Test
     fun preserves_every_call_site_and_owner_identity() {
         val host = Host()
-        val navigator = AppleHomeNavigator("home-instance", host)
+        val navigator = HostHomeNavigator("home-instance", host)
         val args = DetailViewModel.Args().apply { id = "42" }
 
         navigator.navigateToDetail(args, DetailNavigationTarget.DetailSource.HOME_ON_OPEN_DETAIL)
@@ -76,7 +76,7 @@ class AppleHostedNavigatorTest {
         navigator.close()
 
         assertEquals(
-            listOf(AppleNavigationEdge.HOME_ON_OPEN_DETAIL, AppleNavigationEdge.HOME_ON_OPEN_DETAIL_FROM_BANNER),
+            listOf(NavigationEdge.HOME_ON_OPEN_DETAIL, NavigationEdge.HOME_ON_OPEN_DETAIL_FROM_BANNER),
             host.detailEdges,
         )
         assertEquals("home-instance", host.closedOwner)
@@ -85,7 +85,7 @@ class AppleHostedNavigatorTest {
     @Test
     fun responding_navigation_is_resolved_by_the_host_channel() = runTest {
         val host = Host()
-        val navigator = AppleHomeNavigator("home-instance", host)
+        val navigator = HostHomeNavigator("home-instance", host)
         val result = async { navigator.navigateToPicker(PickerViewModel.Args()) }
 
         testScheduler.runCurrent()
@@ -97,7 +97,7 @@ class AppleHostedNavigatorTest {
     @Test
     fun responding_navigation_can_be_dismissed() = runTest {
         val host = Host()
-        val navigator = AppleHomeNavigator("home-instance", host)
+        val navigator = HostHomeNavigator("home-instance", host)
         val result = async { navigator.navigateToPicker(PickerViewModel.Args()) }
 
         testScheduler.runCurrent()

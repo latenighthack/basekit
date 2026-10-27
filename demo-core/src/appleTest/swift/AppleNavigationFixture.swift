@@ -51,13 +51,13 @@ private func fixtureScreen(
 ) -> some View {
     switch entry.route {
     case .home(let args, _):
-        let _ = AppleHomeNavigator(ownerId: entry.ownerID, host: router)
+        let _ = HostHomeNavigator(ownerId: entry.ownerID, host: router)
         Text("Home \(String(describing: args))")
     case .detail(let args, _):
-        let _ = AppleDetailNavigator(ownerId: entry.ownerID, host: router)
+        let _ = HostDetailNavigator(ownerId: entry.ownerID, host: router)
         Text("Detail \(args.id)")
     case .picker(let args, _, _):
-        let _ = ApplePickerNavigator(ownerId: entry.ownerID, host: router)
+        let _ = HostPickerNavigator(ownerId: entry.ownerID, host: router)
         Text("Picker \(String(describing: args))")
     }
 }
@@ -156,7 +156,7 @@ private func fixtureChildRouter(parent: BasekitNavigationRouter, entry: BasekitN
     let child = BasekitNavigationRouter(parent: parent)
     // The callback is main-actor isolated, so a host can forward `context` without assumeIsolated.
     child.onCloseRoot = { ownerID, context in parent.close(ownerId: ownerID, context: context) }
-    AppleCloseNavigator(ownerId: entry.ownerID, host: child).close(context: nil)
+    HostCloseNavigator(ownerId: entry.ownerID, host: child).close(context: nil)
     return child
 }
 

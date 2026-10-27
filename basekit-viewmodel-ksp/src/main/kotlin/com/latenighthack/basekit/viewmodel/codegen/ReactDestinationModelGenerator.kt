@@ -75,7 +75,7 @@ class ReactDestinationModelGenerator(
             appendLine(" */")
             appendLine("public fun basekitViewModel(")
             appendLine("    entry: BasekitNavigationEntry,")
-            appendLine("    host: AppleNavigationHost,")
+            appendLine("    host: NavigationHost,")
             appendLine("    factories: $factories,")
             appendLine("): BasekitDestinationModel {")
             appendLine("    // The observers of the router the entry reports to; another kind of host observes nothing.")

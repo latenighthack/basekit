@@ -30,7 +30,7 @@ Routers made for presented entries (`host(for:)` / `host(entry)`) and routers ma
 initializer report to their parent's observers.
 
 `basekitViewModel` and `BasekitDestinationView` build each destination's navigator as
-`Observing<X>Navigator(Apple<X>Navigator(…), router.navigationObserver)` and wrap its view model in
+`Observing<X>Navigator(Host<X>Navigator(…), router.navigationObserver)` and wrap its view model in
 `Observing<Spec>` reporting to `router.actionObserver`. With `NoOp` observers the view model is not
 wrapped and nothing is reported.
 

@@ -177,7 +177,7 @@ class ViewModelProcessor(
     }
 
     /**
-     * How a navigation entry supplies [spec]'s factory: its args, its Apple navigator and its responder.
+     * How a navigation entry supplies [spec]'s factory: its args, its host navigator and its responder.
      * Null when [spec] is not a `@Destination`, or when a parameter is none of those.
      */
     private fun factoryRoute(spec: KSClassDeclaration, navName: String, parameterTypes: List<String>): FactoryRoute? {
@@ -200,7 +200,7 @@ class ViewModelProcessor(
         return FactoryRoute(
             caseName = cap.replaceFirstChar { it.lowercase() },
             specSimpleName = spec.simpleName.asString(),
-            navigatorType = "Apple${cap}Navigator",
+            navigatorType = "Host${cap}Navigator",
             hasArgs = args != null,
             responding = responding,
             parameters = parameters,
@@ -270,7 +270,7 @@ class ViewModelProcessor(
                     SwiftKvoGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
                     SwiftUIObservableGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
                     // A factory taking a navigator means the graph has edges, so the navigation processor
-                    // generated BasekitRoute and the Apple navigators this file refers to.
+                    // generated BasekitRoute and the host navigators this file refers to.
                     val routes = uniqueFactories(warn = false).mapNotNull { factory -> factory.route?.let { factory to it } }
                     if (routes.any { (_, route) -> RouteParameter.NAVIGATOR in route.parameters } && !reportMissingDestinationFactories()) {
                         val factoryDependencies = Dependencies(aggregating = true, *(sourceFiles + factorySourceFiles).toTypedArray())

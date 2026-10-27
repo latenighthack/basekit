@@ -1,8 +1,8 @@
 package com.latenighthack.basekit.demo.test
 
-import com.latenighthack.basekit.demo.AppleHomeNavigator
-import com.latenighthack.basekit.demo.AppleNavigationEdge
-import com.latenighthack.basekit.demo.AppleNavigationHost
+import com.latenighthack.basekit.demo.HostHomeNavigator
+import com.latenighthack.basekit.demo.NavigationEdge
+import com.latenighthack.basekit.demo.NavigationHost
 import com.latenighthack.basekit.demo.DetailNavigationTarget
 import com.latenighthack.basekit.demo.DetailViewModel
 import com.latenighthack.basekit.demo.NavigationScreen
@@ -26,7 +26,7 @@ import kotlinx.coroutines.test.setMain
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ObservingNavigatorTest {
-    // Generated Apple navigators dispatch host calls to Main. JVM tests have no UI dispatcher.
+    // Generated host navigators dispatch host calls to Main. JVM tests have no UI dispatcher.
     @BeforeTest
     fun installMainDispatcher() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -37,7 +37,7 @@ class ObservingNavigatorTest {
         Dispatchers.resetMain()
     }
 
-    private class Host : AppleNavigationHost {
+    private class Host : NavigationHost {
         var pickerResponder: com.latenighthack.basekit.navigation.NavigationResponder<PickResult>? = null
 
         override fun close(ownerId: String, context: Any?) {}
@@ -45,14 +45,14 @@ class ObservingNavigatorTest {
         override fun showDetail(
             ownerId: String,
             args: DetailViewModel.Args,
-            edge: AppleNavigationEdge,
+            edge: NavigationEdge,
             context: Any?,
         ) {}
 
         override fun showPicker(
             ownerId: String,
             args: PickerViewModel.Args,
-            edge: AppleNavigationEdge,
+            edge: NavigationEdge,
             context: Any?,
             responder: com.latenighthack.basekit.navigation.NavigationResponder<PickResult>,
         ) {
@@ -83,7 +83,7 @@ class ObservingNavigatorTest {
     @Test
     fun observes_every_navigation_and_close_before_delegating() {
         val recorder = Recorder()
-        val navigator = ObservingHomeNavigator(AppleHomeNavigator("home-instance", Host()), recorder)
+        val navigator = ObservingHomeNavigator(HostHomeNavigator("home-instance", Host()), recorder)
         val args = DetailViewModel.Args().apply { id = "42" }
 
         navigator.navigateToDetail(args, DetailNavigationTarget.DetailSource.HOME_ON_OPEN_DETAIL)
@@ -105,7 +105,7 @@ class ObservingNavigatorTest {
     fun observes_a_responding_navigation_and_its_result() = runTest {
         val recorder = Recorder()
         val host = Host()
-        val navigator = ObservingHomeNavigator(AppleHomeNavigator("home-instance", host), recorder)
+        val navigator = ObservingHomeNavigator(HostHomeNavigator("home-instance", host), recorder)
 
         val result = async { navigator.navigateToPicker(PickerViewModel.Args()) }
         testScheduler.runCurrent()

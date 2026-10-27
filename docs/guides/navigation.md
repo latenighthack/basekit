@@ -137,7 +137,7 @@ The `@NavigateTo` edges of the component, and of the rows and children it embeds
 get their own navigator, `ShellNavigator`, which extends the `<X>NavigationTarget`
 of every screen they open. It has no `close()`: the component is not a screen.
 Inject it like a destination's navigator; the generated `ObservingShellNavigator`,
-`AppleShellNavigator` and test navigator implement it. The app's platform host
+`HostShellNavigator` and test navigator implement it. The app's platform host
 decides which screen stack a call from the shell opens on, usually the one on top.
 
 The edges keep their call sites: a sidebar row's tap is `SIDEBAR_ON_ACTIVITY_TAPPED`

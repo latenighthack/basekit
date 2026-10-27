@@ -11,10 +11,10 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 
-class AppleHostedNavigatorGeneratorTest {
+class HostedNavigatorGeneratorTest {
     // A single action carrying two @NavigateTo (fan-out) must keep BOTH targets: previously the edge
     // name was derived from source+method only, so distinctBy collapsed the two call sites and one
-    // target's navigate method silently vanished (leaving the Apple navigator non-conforming).
+    // target's navigate method silently vanished (leaving the host navigator non-conforming).
     @Test
     fun fanOutActionKeepsEveryTargetWithDisambiguatedEdges() {
         val output = RecordingCodeGenerator()
@@ -38,7 +38,7 @@ class AppleHostedNavigatorGeneratorTest {
             destination("RoomViewModel", "sample.RoomViewModel", "room"),
         )
 
-        AppleHostedNavigatorGenerator(output, Dependencies(false), "sample")
+        HostedNavigatorGenerator(output, Dependencies(false), "sample")
             .generate(destinations)
 
         val source = output.source()
@@ -52,7 +52,7 @@ class AppleHostedNavigatorGeneratorTest {
         assertContains(source, "HOME_ON_OPEN_SCAN")
     }
 
-    // A row spec embedded by two destinations is one call site: its AppleNavigationEdge entry is emitted
+    // A row spec embedded by two destinations is one call site: its NavigationEdge entry is emitted
     // once, and both hosts' navigators map its source entry to that edge.
     @Test
     fun rowEdgeSharedByTwoHostsIsOneCallSite() {
@@ -69,17 +69,17 @@ class AppleHostedNavigatorGeneratorTest {
             destination("RoomViewModel", "sample.RoomViewModel", "room"),
         )
 
-        AppleHostedNavigatorGenerator(output, Dependencies(false), "sample")
+        HostedNavigatorGenerator(output, Dependencies(false), "sample")
             .generate(destinations)
 
         val source = output.source()
         assertEquals(1, Regex("^    ROOM_ITEM_ON_ITEM_TAPPED,$", RegexOption.MULTILINE).findAll(source).count())
         assertContains(source, "    CONTACT_ITEM_ON_ITEM_TAPPED,")
-        assertContains(source, "public class AppleHomeNavigator(")
-        assertContains(source, "public class AppleContactsNavigator(")
+        assertContains(source, "public class HostHomeNavigator(")
+        assertContains(source, "public class HostContactsNavigator(")
         assertContains(
             source,
-            "RoomNavigationTarget.RoomSource.ROOM_ITEM_ON_ITEM_TAPPED -> AppleNavigationEdge.ROOM_ITEM_ON_ITEM_TAPPED",
+            "RoomNavigationTarget.RoomSource.ROOM_ITEM_ON_ITEM_TAPPED -> NavigationEdge.ROOM_ITEM_ON_ITEM_TAPPED",
         )
     }
 

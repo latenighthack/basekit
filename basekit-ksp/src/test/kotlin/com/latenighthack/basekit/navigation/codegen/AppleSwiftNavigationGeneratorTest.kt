@@ -35,9 +35,9 @@ class AppleSwiftNavigationGeneratorTest {
         val source = output.source()
         assertContains(
             source,
-            "BasekitNavigationRouter: NSObject, ObservableObject, @MainActor AppleNavigationHost",
+            "BasekitNavigationRouter: NSObject, ObservableObject, @MainActor NavigationHost",
         )
-        assertFalse("@preconcurrency AppleNavigationHost" in source)
+        assertFalse("@preconcurrency NavigationHost" in source)
         assertContains(
             source,
             "private static func replacingResponder(in route: BasekitRoute, with responder: NavigationResponder)",
@@ -68,7 +68,7 @@ class AppleSwiftNavigationGeneratorTest {
         // both fan-out targets keep a distinct BasekitNavigationEdge case...
         assertContains(source, "case contactsOnSearchChangedToScan")
         assertContains(source, "case contactsOnSearchChangedToRoom")
-        // ...and the AppleNavigationEdge(_:) bridge maps both (matching the Kotlin enum's disambiguation)
+        // ...and the NavigationEdge(_:) bridge maps both (matching the Kotlin enum's disambiguation)
         assertContains(source, "self = .contactsOnSearchChangedToScan")
         assertContains(source, "self = .contactsOnSearchChangedToRoom")
     }

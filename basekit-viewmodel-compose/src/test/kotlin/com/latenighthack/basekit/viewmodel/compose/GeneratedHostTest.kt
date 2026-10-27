@@ -146,7 +146,7 @@ class GeneratedHostTest {
 
     @Test fun theStackHostShowsEachSheetWithTheRouterMadeForIt() {
         val router = BasekitNavigationRouter { request ->
-            if (request.edge == AppleNavigationEdge.HOME_ON_PICK) BasekitNavigationDecision(BasekitPresentation.Sheet) else BasekitNavigationDecision()
+            if (request.edge == NavigationEdge.HOME_ON_PICK) BasekitNavigationDecision(BasekitPresentation.Sheet) else BasekitNavigationDecision()
         }
         val rootEntry = router.root(BasekitRoute.Home(HomeViewModel.Args(), edge = null))
         val hosts = mutableMapOf<java.util.UUID, BasekitNavigationRouter>()
@@ -159,11 +159,11 @@ class GeneratedHostTest {
                 sheet = { _, _, content -> content() },
             )
         }
-        compose.runOnIdle { router.showPicker("home", PickerViewModel.Args(), AppleNavigationEdge.HOME_ON_PICK, null) {} }
+        compose.runOnIdle { router.showPicker("home", PickerViewModel.Args(), NavigationEdge.HOME_ON_PICK, null) {} }
         compose.waitForIdle()
         val first = router.sheet!!
         val firstHost = router.host(first)
-        compose.runOnIdle { firstHost.showPicker(first.ownerId, PickerViewModel.Args(), AppleNavigationEdge.HOME_ON_PICK, null) {} }
+        compose.runOnIdle { firstHost.showPicker(first.ownerId, PickerViewModel.Args(), NavigationEdge.HOME_ON_PICK, null) {} }
         compose.waitForIdle()
         val second = firstHost.sheet!!
         assertTrue(hosts[rootEntry.id] === router)

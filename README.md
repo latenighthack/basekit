@@ -218,7 +218,7 @@ The viewmodel processor emits, per `@ViewModelSpec`:
 
 ### Apple navigation
 
-The navigation processor also generates scoped `Apple{Destination}Navigator` implementations and a
+The navigation processor also generates scoped `Host{Destination}Navigator` implementations and a
 universal `BasekitAppleNavigation.swift`. Kotlin still owns the legal graph, typed arguments, and
 responding-destination suspension; Swift owns the native presentation:
 
@@ -250,8 +250,8 @@ when that is `NoOp`); see [navigation metrics](docs/guides/navigation-metrics.md
 builds it once per view identity and observes it while shown, deciding nothing about presentation. As
 it appears it calls `router.didShow(entry)`, which reports a root or other entry no navigator opened.
 `BasekitModelView(model) { model in Screen(model: model) }` does the same for one concrete model. Without factories, construct each ViewModel with the entry's `ownerID` and
-its generated navigator, e.g. `AppleHomeNavigator(ownerId: entry.ownerID, host: router)`;
-`AppleCloseNavigator` closes for any destination that only closes.
+its generated navigator, e.g. `HostHomeNavigator(ownerId: entry.ownerID, host: router)`;
+`HostCloseNavigator` closes for any destination that only closes.
 
 Each closure gets the entry and `host`, the router the entry's navigator reports to; build the entry's
 model with that `host`. The router makes a router of its own, with the same policy and platform
@@ -296,7 +296,7 @@ or restorable. Deep links can still use `RouteTable.match` followed by `router.o
 
 With `arg("basekit.viewmodel.react", "true")`, the JS pass generates the web router: the same
 `BasekitNavigationRouter` as on Android, in Kotlin/JS, with the same policy, handlers, child routers
-and observers. It implements `AppleNavigationHost`, so the generated `Apple{Destination}Navigator`s
+and observers. It implements `NavigationHost`, so the generated `Host{Destination}Navigator`s
 report to it. Build it in the app's Kotlin/JS client, with the destinations from
 `GeneratedViewModelFactories`, and export what the React app needs:
 

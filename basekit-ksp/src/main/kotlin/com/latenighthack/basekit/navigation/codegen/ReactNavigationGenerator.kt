@@ -179,7 +179,7 @@ class ReactNavigationGenerator(
         appendLine("public class BasekitWebRequest internal constructor(@JsExport.Ignore public val request: BasekitNavigationRequest) {")
         appendLine("    public val ownerId: String get() = request.ownerId")
         appendLine("    public val screen: String get() = basekitScreen(request.route)")
-        appendLine("    /** The call site, an `AppleNavigationEdge` name such as `HOME_ON_OPEN_DETAIL`. */")
+        appendLine("    /** The call site, an `NavigationEdge` name such as `HOME_ON_OPEN_DETAIL`. */")
         appendLine("    public val edge: String get() = request.edge.name")
         appendLine("    public val url: String? get() = basekitUrl(request.route)")
         appendLine("    public val context: Any? get() = request.context")

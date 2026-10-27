@@ -19,7 +19,7 @@ class AppleSwiftNavigationGenerator(
     private data class Site(
         val edge: NavEdge,
         val target: DestinationInfo,
-        // kotlinName must match AppleHostedNavigatorGenerator's AppleNavigationEdge entry so the
+        // kotlinName must match HostedNavigatorGenerator's NavigationEdge entry so the
         // BasekitNavigationEdge(_:) switch stays exhaustive. Both are target-disambiguated on fan-out.
         val kotlinName: String,
         val swiftName: String,
@@ -33,7 +33,7 @@ class AppleSwiftNavigationGenerator(
         }.distinctBy { (edge, _) -> edge }
         if (rawSites.isEmpty()) return
 
-        // Kept in lockstep with AppleHostedNavigatorGenerator: a fan-out action (multiple @NavigateTo)
+        // Kept in lockstep with HostedNavigatorGenerator: a fan-out action (multiple @NavigateTo)
         // produces call sites sharing a source+method base name, so disambiguate by target.
         val colliding = rawSites.groupingBy { (edge, _) -> edge.sourceEntry }
             .eachCount().filterValues { it > 1 }.keys
@@ -71,7 +71,7 @@ class AppleSwiftNavigationGenerator(
         appendLine("public enum BasekitNavigationEdge: Hashable {")
         sites.forEach { appendLine("    case ${it.swiftName}") }
         appendLine()
-        appendLine("    init(_ edge: AppleNavigationEdge) {")
+        appendLine("    init(_ edge: NavigationEdge) {")
         appendLine("        switch edge {")
         sites.forEach { appendLine("        case .${it.kotlinName.toSwiftEnumCase()}: self = .${it.swiftName}") }
         appendLine("        }")
@@ -207,7 +207,7 @@ class AppleSwiftNavigationGenerator(
         appendLine("@available(iOS 18.0, macOS 15.0, *)")
         // Kotlin/Native protocols are imported as nonisolated. Keep the generated host's
         // conformance on the main actor instead of suppressing the Swift 6 diagnostic.
-        appendLine("@MainActor public final class BasekitNavigationRouter: NSObject, ObservableObject, @MainActor AppleNavigationHost {")
+        appendLine("@MainActor public final class BasekitNavigationRouter: NSObject, ObservableObject, @MainActor NavigationHost {")
         // Each change to what this router presents is compared with what it last reported presented.
         appendLine("    @Published public private(set) var path: [BasekitNavigationEntry] = [] { didSet { syncPresentation() } }")
         appendLine("    @Published public private(set) var sheet: BasekitNavigationEntry? { didSet { syncPresentation() } }")
@@ -359,7 +359,7 @@ class AppleSwiftNavigationGenerator(
             val params = buildList {
                 add("ownerId: String")
                 target.argsSwiftName?.let { add("args: $it") }
-                add("edge: AppleNavigationEdge")
+                add("edge: NavigationEdge")
                 add("context: Any?")
                 if (target.responseQualifiedName != null) add("responder: NavigationResponder")
             }.joinToString(", ")

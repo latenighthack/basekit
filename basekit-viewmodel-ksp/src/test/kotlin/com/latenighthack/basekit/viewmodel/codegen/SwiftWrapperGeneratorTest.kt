@@ -273,18 +273,18 @@ class SwiftWrapperGeneratorTest {
     fun destination_models_use_the_entry_owner_and_stop_on_missing_responders() {
         val out = RecordingCodeGenerator()
         val agent = ViewModelFactoryInfo("agentFactory", "sample.AgentViewModelImpl", listOf("sample.AgentViewModel.Args", "sample.nav.AgentNavigator"),
-            FactoryRoute("agent", "AgentViewModel", "AppleAgentNavigator", hasArgs = true, responding = false, listOf(RouteParameter.ARGS, RouteParameter.NAVIGATOR)))
+            FactoryRoute("agent", "AgentViewModel", "HostAgentNavigator", hasArgs = true, responding = false, listOf(RouteParameter.ARGS, RouteParameter.NAVIGATOR)))
         val confirm = ViewModelFactoryInfo("confirmFactory", "sample.ConfirmViewModelImpl", listOf("sample.nav.CloseNavigationTarget", "com.latenighthack.basekit.navigation.NavigationResponder<kotlin.Boolean>"),
-            FactoryRoute("confirm", "ConfirmViewModel", "AppleConfirmNavigator", hasArgs = false, responding = true, listOf(RouteParameter.NAVIGATOR, RouteParameter.RESPONDER)))
+            FactoryRoute("confirm", "ConfirmViewModel", "HostConfirmNavigator", hasArgs = false, responding = true, listOf(RouteParameter.NAVIGATOR, RouteParameter.RESPONDER)))
         DestinationModelGenerator(out, Dependencies(false), emptyList()).generate(listOf(agent to agent.route!!, confirm to confirm.route!!))
         val swift = out.text("BasekitDestinationModels.swift")
         assertContains(swift, ") -> BasekitDestinationModel {\n    // The observers of the router the entry reports to")
         assertContains(swift, "    let viewModelObserver = ViewModelObservers.shared.combined(observer: router?.viewModelObserver, actions: actionObserver)\n    switch entry.route {")
         // The router's observers wrap the navigator and, unless it is NoOp, the view model.
         assertContains(swift, "    let router = host as? BasekitNavigationRouter\n    let navigationObserver = router?.navigationObserver ?? NavigationObserverCompanion.shared.NoOp\n    let actionObserver = router?.actionObserver ?? ViewModelActionObserverCompanion.shared.NoOp\n    let viewModelObserver = ViewModelObservers.shared.combined(observer: router?.viewModelObserver, actions: actionObserver)\n")
-        assertContains(swift, "case .agent(let args, _):\n        let model: AgentViewModel = factories.agentFactory(args, ObservingAgentNavigator(delegate: AppleAgentNavigator(ownerId: entry.ownerID, host: host), observer: navigationObserver))\n        return .agent(ObservableAgentViewModel(model, observer: viewModelObserver))")
+        assertContains(swift, "case .agent(let args, _):\n        let model: AgentViewModel = factories.agentFactory(args, ObservingAgentNavigator(delegate: HostAgentNavigator(ownerId: entry.ownerID, host: host), observer: navigationObserver))\n        return .agent(ObservableAgentViewModel(model, observer: viewModelObserver))")
         // A leaf destination's close-only navigator gets its decorator too.
-        assertContains(swift, "let model: ConfirmViewModel = factories.confirmFactory(ObservingConfirmNavigator(delegate: AppleConfirmNavigator(ownerId: entry.ownerID, host: host), observer: navigationObserver), responder)")
+        assertContains(swift, "let model: ConfirmViewModel = factories.confirmFactory(ObservingConfirmNavigator(delegate: HostConfirmNavigator(ownerId: entry.ownerID, host: host), observer: navigationObserver), responder)")
         assertContains(swift, "case .confirm(_, let responder):\n        guard let responder else {\n            preconditionFailure(\"basekitViewModel: the confirm entry has no responder.")
         // Every destination has a factory (the processor fails the build otherwise): nothing throws.
         assertFalse("throw" in swift)
@@ -301,23 +301,23 @@ class SwiftWrapperGeneratorTest {
     fun compose_destination_models_wrap_navigators_and_actions_with_the_router_observers() {
         val out = RecordingCodeGenerator()
         val agent = ViewModelFactoryInfo("agentFactory", "sample.AgentViewModelImpl", listOf("sample.AgentViewModel.Args", "sample.nav.AgentNavigator"),
-            FactoryRoute("agent", "AgentViewModel", "AppleAgentNavigator", hasArgs = true, responding = false, listOf(RouteParameter.ARGS, RouteParameter.NAVIGATOR), "sample.AgentViewModel"))
+            FactoryRoute("agent", "AgentViewModel", "HostAgentNavigator", hasArgs = true, responding = false, listOf(RouteParameter.ARGS, RouteParameter.NAVIGATOR), "sample.AgentViewModel"))
         val confirm = ViewModelFactoryInfo("confirmFactory", "other.ConfirmViewModelImpl", listOf("sample.nav.CloseNavigationTarget"),
-            FactoryRoute("confirm", "ConfirmViewModel", "AppleConfirmNavigator", hasArgs = false, responding = false, listOf(RouteParameter.NAVIGATOR), "other.ConfirmViewModel"))
+            FactoryRoute("confirm", "ConfirmViewModel", "HostConfirmNavigator", hasArgs = false, responding = false, listOf(RouteParameter.NAVIGATOR), "other.ConfirmViewModel"))
         ComposeDestinationModelGenerator(out, Dependencies(false), "sample.nav", "sample").generate(listOf(agent to agent.route!!, confirm to confirm.route!!))
         val kotlin = out.text("BasekitDestinationModels.kt")
         // One import of the decorator extension per spec package.
         assertContains(kotlin, "import other.observing\nimport sample.observing\n")
         assertContains(kotlin, "    val router = host as? BasekitNavigationRouter\n    val navigationObserver = router?.navigationObserver ?: NavigationObserver.NoOp\n    val actionObserver = router?.actionObserver ?: ViewModelActionObserver.NoOp\n    val viewModelObserver = ViewModelObservers.combined(router?.viewModelObserver, actionObserver)\n    return when (val route = entry.route) {")
-        assertContains(kotlin, "is BasekitRoute.Agent -> BasekitDestinationModel.Agent(factories.agentFactory(route.args, ObservingAgentNavigator(AppleAgentNavigator(entry.ownerId, host), navigationObserver)).observing(viewModelObserver))")
-        assertContains(kotlin, "is BasekitRoute.Confirm -> BasekitDestinationModel.Confirm(factories.confirmFactory(ObservingConfirmNavigator(AppleConfirmNavigator(entry.ownerId, host), navigationObserver)).observing(viewModelObserver))")
+        assertContains(kotlin, "is BasekitRoute.Agent -> BasekitDestinationModel.Agent(factories.agentFactory(route.args, ObservingAgentNavigator(HostAgentNavigator(entry.ownerId, host), navigationObserver)).observing(viewModelObserver))")
+        assertContains(kotlin, "is BasekitRoute.Confirm -> BasekitDestinationModel.Confirm(factories.confirmFactory(ObservingConfirmNavigator(HostConfirmNavigator(entry.ownerId, host), navigationObserver)).observing(viewModelObserver))")
         assertContains(kotlin, "    val model = remember(entry.id) { basekitViewModel(entry, host, factories) }\n    LaunchedEffect(entry.id) { (host as? BasekitNavigationRouter)?.didShow(entry) }")
     }
 
     @Test
     fun destinations_without_a_usable_factory_are_build_errors() {
         val agent = ViewModelFactoryInfo("agentFactory", "sample.AgentViewModelImpl", listOf("sample.nav.AgentNavigator"),
-            FactoryRoute("agent", "AgentViewModel", "AppleAgentNavigator", hasArgs = false, responding = false, listOf(RouteParameter.NAVIGATOR)))
+            FactoryRoute("agent", "AgentViewModel", "HostAgentNavigator", hasArgs = false, responding = false, listOf(RouteParameter.NAVIGATOR)))
         val odd = ViewModelFactoryInfo("oddFactory", "sample.OddViewModelImpl", listOf("kotlin.String"))
         val errors = missingDestinationFactories(
             listOf(

@@ -4,8 +4,8 @@ import android.os.Looper
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
-import com.latenighthack.basekit.demo.AppleDetailNavigator
-import com.latenighthack.basekit.demo.AppleNavigationEdge
+import com.latenighthack.basekit.demo.HostDetailNavigator
+import com.latenighthack.basekit.demo.NavigationEdge
 import com.latenighthack.basekit.demo.BasekitDestinationModel
 import com.latenighthack.basekit.demo.BasekitDestinationView
 import com.latenighthack.basekit.demo.BasekitNavigationDecision
@@ -82,7 +82,7 @@ class RouterObserversTest {
             navigationObserver = navigationObserver,
             actionObserver = actionObserver,
         )
-        router.showPicker("home", PickerViewModel.Args(), AppleNavigationEdge.HOME_ON_PICK, null) {}
+        router.showPicker("home", PickerViewModel.Args(), NavigationEdge.HOME_ON_PICK, null) {}
         val child = router.host(router.sheet!!)
         assertSame(navigationObserver, child.navigationObserver)
         assertSame(actionObserver, child.actionObserver)
@@ -121,9 +121,9 @@ class RouterObserversTest {
         assertEquals(listOf("to HOME", "to DETAIL", "closed DETAIL"), screens())
 
         // A navigator's close is reported by its decorator only.
-        router.showDetail("home", detail(), AppleNavigationEdge.HOME_ON_OPEN_DETAIL, null)
+        router.showDetail("home", detail(), NavigationEdge.HOME_ON_OPEN_DETAIL, null)
         val again = router.path.single()
-        ObservingDetailNavigator(AppleDetailNavigator(again.ownerId, router), router.navigationObserver).close(null)
+        ObservingDetailNavigator(HostDetailNavigator(again.ownerId, router), router.navigationObserver).close(null)
         idle()
         assertTrue(router.path.isEmpty())
         assertEquals(listOf("to HOME", "to DETAIL", "closed DETAIL", "closed DETAIL"), screens())
@@ -131,7 +131,7 @@ class RouterObserversTest {
 
     @Test fun deepLinksAndDismissedSheetsAreReported() {
         val router = BasekitNavigationRouter(
-            { request -> if (request.edge == AppleNavigationEdge.HOME_ON_PICK) BasekitNavigationDecision(BasekitPresentation.Sheet) else BasekitNavigationDecision() },
+            { request -> if (request.edge == NavigationEdge.HOME_ON_PICK) BasekitNavigationDecision(BasekitPresentation.Sheet) else BasekitNavigationDecision() },
             navigationObserver = navigationObserver,
             actionObserver = actionObserver,
         )
@@ -142,7 +142,7 @@ class RouterObserversTest {
         assertEquals(DetailViewModel::class, opened.destination)
         assertEquals("7", (opened.args as DetailViewModel.Args).id)
 
-        router.showPicker("home", PickerViewModel.Args(), AppleNavigationEdge.HOME_ON_PICK, null) {}
+        router.showPicker("home", PickerViewModel.Args(), NavigationEdge.HOME_ON_PICK, null) {}
         router.updateSheet(null)
         router.updateSheet(null)
         assertEquals(listOf("to DETAIL", "closed PICKER"), screens())
@@ -163,7 +163,7 @@ class RouterObserversTest {
         }
         compose.waitForIdle()
         assertEquals(listOf("to HOME"), screens())
-        compose.runOnIdle { router.showDetail("home", detail(), AppleNavigationEdge.HOME_ON_OPEN_DETAIL, null) }
+        compose.runOnIdle { router.showDetail("home", detail(), NavigationEdge.HOME_ON_OPEN_DETAIL, null) }
         compose.waitForIdle()
         // Shown by a navigator, so its decorator reported it.
         assertEquals(listOf("to HOME"), screens())

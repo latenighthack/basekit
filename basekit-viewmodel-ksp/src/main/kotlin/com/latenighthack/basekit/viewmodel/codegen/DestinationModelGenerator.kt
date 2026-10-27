@@ -77,7 +77,7 @@ class DestinationModelGenerator(
             appendLine("@MainActor")
             appendLine("public func basekitViewModel(")
             appendLine("    for entry: BasekitNavigationEntry,")
-            appendLine("    host: AppleNavigationHost,")
+            appendLine("    host: NavigationHost,")
             appendLine("    factories: GeneratedViewModelFactories")
             appendLine(") -> BasekitDestinationModel {")
             appendLine("    // The observers of the router the entry reports to; another kind of host observes nothing.")
@@ -105,7 +105,7 @@ class DestinationModelGenerator(
             appendLine()
             appendLine("    public init(")
             appendLine("        for entry: BasekitNavigationEntry,")
-            appendLine("        host: AppleNavigationHost,")
+            appendLine("        host: NavigationHost,")
             appendLine("        factories: GeneratedViewModelFactories,")
             appendLine("        @ViewBuilder content: @escaping (BasekitDestinationModel) -> Content")
             appendLine("    ) {")
@@ -163,8 +163,8 @@ class DestinationModelGenerator(
     }
 }
 
-/** The generated decorator of [FactoryRoute.navigatorType] (`AppleHomeNavigator`): `ObservingHomeNavigator`. */
-internal val FactoryRoute.observingNavigatorType: String get() = "Observing" + navigatorType.removePrefix("Apple")
+/** The generated decorator of [FactoryRoute.navigatorType] (`HostHomeNavigator`): `ObservingHomeNavigator`. */
+internal val FactoryRoute.observingNavigatorType: String get() = "Observing" + navigatorType.removePrefix("Host")
 
 /** A `@Destination` as a build error names it: its `BasekitRoute` case, its spec and where it is declared. */
 data class DestinationSite(val caseName: String, val qualifiedName: String, val location: String?)

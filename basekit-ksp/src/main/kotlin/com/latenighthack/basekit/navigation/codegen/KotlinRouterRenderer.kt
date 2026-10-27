@@ -29,7 +29,7 @@ internal val ComposeRouterFlavor = KotlinRouterFlavor(
 
 /**
  * Renders the route model, decision, entry, request, policy and transaction types and the
- * `BasekitNavigationRouter` that implements `AppleNavigationHost`, as the Swift router behaves.
+ * `BasekitNavigationRouter` that implements `NavigationHost`, as the Swift router behaves.
  */
 internal fun StringBuilder.appendKotlinRouter(
     flavor: KotlinRouterFlavor,
@@ -38,12 +38,12 @@ internal fun StringBuilder.appendKotlinRouter(
     actionObservers: Boolean,
 ) {
     appendLine("public sealed interface BasekitRoute {")
-    appendLine("    public val edge: AppleNavigationEdge?")
+    appendLine("    public val edge: NavigationEdge?")
     appendLine()
     destinations.forEach { destination ->
         val params = buildList {
             destination.argsQualifiedName?.let { add("public val args: $it") }
-            add("override val edge: AppleNavigationEdge?")
+            add("override val edge: NavigationEdge?")
             destination.responseQualifiedName?.let { add("public val responder: NavigationResponder<$it>?") }
         }.joinToString(", ")
         appendLine("    public class ${destination.routeClass}($params) : BasekitRoute")
@@ -84,7 +84,7 @@ internal fun StringBuilder.appendKotlinRouter(
     appendLine("    public val id: ${flavor.idType} = ${flavor.newId},")
     appendLine("    public val ownerId: String = ${flavor.newOwnerId},")
     appendLine("    public val route: BasekitRoute,")
-    appendLine("    public val edge: AppleNavigationEdge? = null,")
+    appendLine("    public val edge: NavigationEdge? = null,")
     appendLine("    public val context: Any? = null,")
     appendLine("    public val decision: BasekitNavigationDecision = BasekitNavigationDecision(),")
     appendLine(") {")
@@ -96,7 +96,7 @@ internal fun StringBuilder.appendKotlinRouter(
     appendLine("public class BasekitNavigationRequest(")
     appendLine("    public val ownerId: String,")
     appendLine("    public val route: BasekitRoute,")
-    appendLine("    public val edge: AppleNavigationEdge,")
+    appendLine("    public val edge: NavigationEdge,")
     appendLine("    public val context: Any?,")
     appendLine(")")
     appendLine()
@@ -165,7 +165,7 @@ internal fun StringBuilder.appendKotlinRouter(
     appendLine("    public val navigationObserver: NavigationObserver,")
     if (actionObservers) appendLine("    public val actionObserver: ViewModelActionObserver,")
     appendLine("    private val parent: BasekitNavigationRouter?,")
-    appendLine(") : AppleNavigationHost {")
+    appendLine(") : NavigationHost {")
     val noOpAction = if (actionObservers) " ViewModelActionObserver.NoOp," else ""
     appendLine("    public constructor(policy: BasekitNavigationPolicy = BasekitDefaultNavigationPolicy) : this(policy, NavigationObserver.NoOp,$noOpAction null)")
     appendLine()
@@ -296,7 +296,7 @@ internal fun StringBuilder.appendKotlinRouter(
         val params = buildList {
             add("ownerId: String")
             target.argsQualifiedName?.let { add("args: $it") }
-            add("edge: AppleNavigationEdge")
+            add("edge: NavigationEdge")
             add("context: Any?")
             target.responseQualifiedName?.let { add("responder: NavigationResponder<$it>") }
         }.joinToString(", ")
@@ -312,7 +312,7 @@ internal fun StringBuilder.appendKotlinRouter(
     }
 
     appendLine()
-    appendLine("    private fun receive(ownerId: String, route: BasekitRoute, edge: AppleNavigationEdge, context: Any?, responder: NavigationResponder<*>? = null) {")
+    appendLine("    private fun receive(ownerId: String, route: BasekitRoute, edge: NavigationEdge, context: Any?, responder: NavigationResponder<*>? = null) {")
     appendLine("        // A dismissed entry's view model can still navigate; nothing shows this router any more.")
     appendLine("        @Suppress(\"UNCHECKED_CAST\")")
     appendLine("        if (closed) { (responder as NavigationResponder<Any>?)?.respond(null); return }")

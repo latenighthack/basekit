@@ -3,8 +3,8 @@ package com.latenighthack.basekit.navigation.codegen
 import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Dependencies
 
-/** Generates the typed host boundary and scoped navigators consumed by native Apple routers. */
-class AppleHostedNavigatorGenerator(
+/** Generates the typed host boundary and scoped navigators that the Swift, Compose and web routers present. */
+class HostedNavigatorGenerator(
     private val codeGenerator: CodeGenerator,
     private val dependencies: Dependencies,
     private val navPackage: String,
@@ -32,7 +32,7 @@ class AppleHostedNavigatorGenerator(
 
         // A single action can carry multiple @NavigateTo (fan out to several targets); those call sites
         // share a source+method base name. Disambiguate colliding names by target so every
-        // AppleNavigationEdge entry stays unique and no call site is dropped.
+        // NavigationEdge entry stays unique and no call site is dropped.
         val colliding = rawSites.groupingBy { (edge, _) -> edge.sourceEntry }
             .eachCount().filterValues { it > 1 }.keys
         val sites = rawSites.map { (edge, target) ->
@@ -44,24 +44,24 @@ class AppleHostedNavigatorGenerator(
         val sitesByTarget = sites.groupBy { it.target.qualifiedName }
         generateEdge(sites)
         generateHost(sitesByTarget)
-        // A destination named `close` already gets an `AppleCloseNavigator`, which also closes.
+        // A destination named `close` already gets an `HostCloseNavigator`, which also closes.
         if (sources.none { it.navName.toUpperCamelCase() == "Close" }) generateCloseNavigator()
         sources.forEach { generateNavigator(it, sites, sitesByTarget) }
     }
 
-    private fun generateEdge(sites: List<CallSite>) = write("AppleNavigationEdge") {
+    private fun generateEdge(sites: List<CallSite>) = write("NavigationEdge") {
         buildString {
-            appendLine("public enum class AppleNavigationEdge {")
+            appendLine("public enum class NavigationEdge {")
             sites.forEach { appendLine("    ${it.edgeName},") }
             appendLine("}")
         }
     }
 
-    private fun generateHost(sitesByTarget: Map<String, List<CallSite>>) = write("AppleNavigationHost") {
+    private fun generateHost(sitesByTarget: Map<String, List<CallSite>>) = write("NavigationHost") {
         buildString {
             appendLine("import com.latenighthack.basekit.navigation.NavigationResponder")
             appendLine()
-            appendLine("public interface AppleNavigationHost {")
+            appendLine("public interface NavigationHost {")
             appendLine("    public fun close(ownerId: String, context: Any?)")
             for (sites in sitesByTarget.values) {
                 val target = sites.first().target
@@ -69,7 +69,7 @@ class AppleHostedNavigatorGenerator(
                 val params = buildList {
                     add("ownerId: String")
                     target.argsQualifiedName?.let { add("args: $it") }
-                    add("edge: AppleNavigationEdge")
+                    add("edge: NavigationEdge")
                     add("context: Any?")
                     target.responseQualifiedName?.let { add("responder: NavigationResponder<$it>") }
                 }.joinToString(", ")
@@ -81,16 +81,16 @@ class AppleHostedNavigatorGenerator(
 
     /**
      * A navigator that only closes, for code that needs a `CloseNavigationTarget` without naming a
-     * destination (each leaf destination also gets its own `Apple<Name>Navigator`).
+     * destination (each leaf destination also gets its own `Host<Name>Navigator`).
      */
-    private fun generateCloseNavigator() = write("AppleCloseNavigator") {
+    private fun generateCloseNavigator() = write("HostCloseNavigator") {
         buildString {
             appendLine("import com.latenighthack.basekit.navigation.runOnMainThread")
             appendLine()
-            appendLine("/** Closes the entry [ownerId] owns in [host]; the call hops to the main thread like every Apple navigator. */")
-            appendLine("public class AppleCloseNavigator(")
+            appendLine("/** Closes the entry [ownerId] owns in [host]; the call hops to the main thread like every host navigator. */")
+            appendLine("public class HostCloseNavigator(")
             appendLine("    public val ownerId: String,")
-            appendLine("    private val host: AppleNavigationHost,")
+            appendLine("    private val host: NavigationHost,")
             appendLine(") : CloseNavigationTarget {")
             appendLine("    override fun close(context: Any?) = runOnMainThread { host.close(ownerId, context) }")
             appendLine("}")
@@ -108,16 +108,16 @@ class AppleHostedNavigatorGenerator(
         val cap = destination.navName.toUpperCamelCase()
         val navigatorType = if (sourceSites.isEmpty()) "CloseNavigationTarget" else "${cap}Navigator"
 
-        write("Apple${cap}Navigator") {
+        write("Host${cap}Navigator") {
             buildString {
                 appendLine("import com.latenighthack.basekit.navigation.awaitNavigationResult")
                 appendLine("import com.latenighthack.basekit.navigation.runOnMainThread")
                 appendLine()
                 appendLine("// Host calls cross into platform UI (UIKit/AppKit), which requires the main thread; the")
                 appendLine("// ViewModel action driving navigation may run on any dispatcher, so every call hops to main.")
-                appendLine("public class Apple${cap}Navigator(")
+                appendLine("public class Host${cap}Navigator(")
                 appendLine("    public val ownerId: String,")
-                appendLine("    private val host: AppleNavigationHost,")
+                appendLine("    private val host: NavigationHost,")
                 appendLine(") : $navigatorType {")
                 // A hosted component is not a screen, so its navigator has no close().
                 if (!destination.hosted) {
@@ -138,12 +138,12 @@ class AppleHostedNavigatorGenerator(
                         buildString {
                             appendLine("when (source) {")
                             allTargetSites.forEach { site ->
-                                appendLine("                ${targetCap}NavigationTarget.${targetCap}Source.${site.sourceEntry} -> AppleNavigationEdge.${site.edgeName}")
+                                appendLine("                ${targetCap}NavigationTarget.${targetCap}Source.${site.sourceEntry} -> NavigationEdge.${site.edgeName}")
                             }
                             append("            }")
                         }
                     } else {
-                        "AppleNavigationEdge.${allTargetSites.single().edgeName}"
+                        "NavigationEdge.${allTargetSites.single().edgeName}"
                     }
                     val callArgs = buildList {
                         add("ownerId")

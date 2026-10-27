@@ -10,7 +10,7 @@ import kotlinx.coroutines.launch
  * actions, however, run on whatever coroutine dispatcher launched them (typically a background one), so
  * a `navigateTo…`/`close` invoked straight from an action would touch UI off the main thread.
  *
- * The generated `Apple<X>Navigator` routes every host call through [runOnMainThread] so navigation is
+ * The generated `Host<X>Navigator` routes every host call through [runOnMainThread] so navigation is
  * always delivered to the platform on the main thread, regardless of the dispatcher the action ran on.
  */
 private val mainThreadScope = CoroutineScope(Dispatchers.Main.immediate)

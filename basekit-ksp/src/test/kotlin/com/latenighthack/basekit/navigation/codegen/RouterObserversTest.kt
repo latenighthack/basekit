@@ -90,7 +90,7 @@ class RouterObserversTest {
                 "    public val navigationObserver: NavigationObserver,\n" +
                 "    public val actionObserver: ViewModelActionObserver,\n" +
                 "    private val parent: BasekitNavigationRouter?,\n" +
-                ") : AppleNavigationHost {",
+                ") : NavigationHost {",
         )
         // `BasekitNavigationRouter()`, `(policy)` and `{ policy }` still mean the policy constructor; the
         // observers have one of their own, which needs both.

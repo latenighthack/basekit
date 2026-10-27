@@ -26,9 +26,9 @@ class ReactDestinationModelGeneratorTest {
     }
 
     private val agent = ViewModelFactoryInfo("agentFactory", "sample.AgentViewModelImpl", listOf("sample.AgentViewModel.Args", "sample.nav.AgentNavigator"),
-        FactoryRoute("agent", "AgentViewModel", "AppleAgentNavigator", hasArgs = true, responding = false, listOf(RouteParameter.ARGS, RouteParameter.NAVIGATOR), "sample.AgentViewModel"))
+        FactoryRoute("agent", "AgentViewModel", "HostAgentNavigator", hasArgs = true, responding = false, listOf(RouteParameter.ARGS, RouteParameter.NAVIGATOR), "sample.AgentViewModel"))
     private val confirm = ViewModelFactoryInfo("confirmFactory", "sample.ConfirmViewModelImpl", listOf("sample.nav.CloseNavigationTarget", "com.latenighthack.basekit.navigation.NavigationResponder<kotlin.Boolean>"),
-        FactoryRoute("confirm", "ConfirmViewModel", "AppleConfirmNavigator", hasArgs = false, responding = true, listOf(RouteParameter.NAVIGATOR, RouteParameter.RESPONDER), "sample.ConfirmViewModel"))
+        FactoryRoute("confirm", "ConfirmViewModel", "HostConfirmNavigator", hasArgs = false, responding = true, listOf(RouteParameter.NAVIGATOR, RouteParameter.RESPONDER), "sample.ConfirmViewModel"))
 
     private fun models(): String {
         val out = RecordingCodeGenerator()
@@ -42,7 +42,7 @@ class ReactDestinationModelGeneratorTest {
         assertContains(source, "package sample.nav\n")
         assertContains(source, "import sample.observing\nimport sample.reactReference\n")
         assertContains(source, "factories: sample.GeneratedViewModelFactories,\n): BasekitDestinationModel {")
-        assertContains(source, "is BasekitRoute.Agent -> BasekitDestinationModel.Agent(factories.agentFactory(route.args, ObservingAgentNavigator(AppleAgentNavigator(entry.ownerId, host), navigationObserver)).observing(viewModelObserver))")
+        assertContains(source, "is BasekitRoute.Agent -> BasekitDestinationModel.Agent(factories.agentFactory(route.args, ObservingAgentNavigator(HostAgentNavigator(entry.ownerId, host), navigationObserver)).observing(viewModelObserver))")
         assertContains(source, "requireNotNull(route.responder) { \"basekitViewModel: the confirm entry has no responder.")
     }
 

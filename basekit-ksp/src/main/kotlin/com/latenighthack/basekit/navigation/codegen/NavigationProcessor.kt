@@ -165,7 +165,7 @@ class NavigationProcessor(
         NavigationScreenGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations)
         ObservingNavigatorGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations, hostedComponents)
         RouteTableGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations)
-        AppleHostedNavigatorGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations, hostedComponents)
+        HostedNavigatorGenerator(codeGenerator, dependencies, navigationPackage).generate(destinations, hostedComponents)
 
         if (options[GENERATE_TEST_NAVIGATOR_OPTION]?.toBoolean() == true) {
             TestNavigatorGenerator(codeGenerator, logger, dependencies, navigationPackage).generate(destinations, hostedComponents)

@@ -4,6 +4,22 @@ All notable changes to basekit are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor versions may break API).
 
+## [Unreleased]
+
+- Breaking (navigation): the generated host-navigation types no longer start with `Apple`. The
+  Swift, Compose and web routers all use them.
+
+  | 0.8.0 | Now |
+  |---|---|
+  | `AppleNavigationHost` | `NavigationHost` |
+  | `AppleNavigationEdge` | `NavigationEdge` |
+  | `AppleCloseNavigator` | `HostCloseNavigator` |
+  | `Apple<X>Navigator` | `Host<X>Navigator` |
+
+  Code that names them, in Kotlin or Swift, must use the new names. No aliases are generated. Names
+  that are only for Apple keep the prefix: `BasekitAppleNavigation.swift` and the
+  `collectBasekitAppleSwift` tasks.
+
 ## [0.8.0] — 2026-10-27
 
 Requires deltalist 0.4.8.
