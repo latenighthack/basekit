@@ -298,8 +298,9 @@ value it was given or got back.
 
 ## Limits
 
-- React has no generated router. React code gets fakes where it builds view models through a
-  kotlin-inject component, or through `FakeViewModels`.
+- React gets fakes where its view models come from `GeneratedViewModelFactories`: the generated web
+  router's `basekitWebDestinations(factories)`, a kotlin-inject component, or `FakeViewModels`. React
+  code that constructs a real implementation itself still gets the real one.
 - Code that names a real implementation type (`val home: RealHomeViewModel = component.homeFactory(…)`)
   does not compile in a fake build, because the factory returns the fake.
 - A real implementation that takes no navigator, but whose spec has edges, gets a fake that logs those

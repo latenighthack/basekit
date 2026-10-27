@@ -7,20 +7,20 @@ package com.latenighthack.basekit.demo
  */
 public class FakeNavigator(
     public val stack: com.latenighthack.basekit.fake.FakeStack = com.latenighthack.basekit.fake.FakeStack(),
-) : HomeNavigator, SplashNavigator, HomeNavigationTarget, DetailNavigationTarget, PickerNavigationTarget, CloseNavigationTarget, com.latenighthack.basekit.fake.FakeRedirector {
+) : HomeNavigator, SplashNavigator, DetailNavigationTarget, HomeNavigationTarget, PickerNavigationTarget, CloseNavigationTarget, com.latenighthack.basekit.fake.FakeRedirector {
     /** The view model on top of the stack. */
     public val top: Any? get() = stack.top
-
-    public fun startHome(args: com.latenighthack.basekit.demo.HomeViewModel.Args = FakeArgs.home()): com.latenighthack.basekit.demo.HomeViewModel {
-        val viewModel = com.latenighthack.basekit.demo.FakeHomeViewModel(com.latenighthack.basekit.fake.BasekitFakes.data("HomeViewModel"), fakeArgs = args, detailTarget = this, pickerTarget = this)
-        stack.root("HomeViewModel", viewModel)
-        viewModel.fakeRedirect()
-        return viewModel
-    }
 
     public fun startDetail(args: com.latenighthack.basekit.demo.DetailViewModel.Args = FakeArgs.detail()): com.latenighthack.basekit.demo.DetailViewModel {
         val viewModel = com.latenighthack.basekit.demo.FakeDetailViewModel(com.latenighthack.basekit.fake.BasekitFakes.data("DetailViewModel"), fakeArgs = args)
         stack.root("DetailViewModel", viewModel)
+        viewModel.fakeRedirect()
+        return viewModel
+    }
+
+    public fun startHome(args: com.latenighthack.basekit.demo.HomeViewModel.Args = FakeArgs.home()): com.latenighthack.basekit.demo.HomeViewModel {
+        val viewModel = com.latenighthack.basekit.demo.FakeHomeViewModel(com.latenighthack.basekit.fake.BasekitFakes.data("HomeViewModel"), fakeArgs = args, detailTarget = this, pickerTarget = this)
+        stack.root("HomeViewModel", viewModel)
         viewModel.fakeRedirect()
         return viewModel
     }
@@ -39,15 +39,15 @@ public class FakeNavigator(
         return viewModel
     }
 
-    override fun navigateToHome(args: com.latenighthack.basekit.demo.HomeViewModel.Args, context: Any?) {
-        val viewModel = com.latenighthack.basekit.demo.FakeHomeViewModel(com.latenighthack.basekit.fake.BasekitFakes.data("HomeViewModel"), fakeArgs = args, detailTarget = this, pickerTarget = this)
-        stack.push("HomeViewModel", viewModel)
-        viewModel.fakeRedirect()
-    }
-
     override fun navigateToDetail(args: com.latenighthack.basekit.demo.DetailViewModel.Args, source: DetailNavigationTarget.DetailSource, context: Any?) {
         val viewModel = com.latenighthack.basekit.demo.FakeDetailViewModel(com.latenighthack.basekit.fake.BasekitFakes.data("DetailViewModel"), fakeArgs = args)
         stack.push("DetailViewModel", viewModel)
+        viewModel.fakeRedirect()
+    }
+
+    override fun navigateToHome(args: com.latenighthack.basekit.demo.HomeViewModel.Args, context: Any?) {
+        val viewModel = com.latenighthack.basekit.demo.FakeHomeViewModel(com.latenighthack.basekit.fake.BasekitFakes.data("HomeViewModel"), fakeArgs = args, detailTarget = this, pickerTarget = this)
+        stack.push("HomeViewModel", viewModel)
         viewModel.fakeRedirect()
     }
 
