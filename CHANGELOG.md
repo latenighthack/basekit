@@ -4,7 +4,9 @@ All notable changes to basekit are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor versions may break API).
 
-## [Unreleased]
+## [0.8.1] — 2026-10-27
+
+Requires deltalist 0.4.8.
 
 - ViewModel (web): each generated `{Vm}ReactHook.kt` is now a `ReactDescriptor`. It holds what
   differs per view model as compiled lambdas: State reads, actions and mutators as function
