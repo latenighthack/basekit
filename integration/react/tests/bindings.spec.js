@@ -32,6 +32,9 @@ test('generated package preserves typed actions, custom values and effect lifeti
   await expect(page.locator('#failure')).toHaveText('none');
   await page.getByRole('button', {name: 'Enum', exact: true}).click();
   await expect(page.locator('#failure')).toHaveText('try-again');
+  await page.getByRole('button', {name: 'Bad enum', exact: true}).click();
+  await expect(page.locator('#error')).toContainText('Not a ProbeFailure: retry; expected one of none, try-again');
+  await expect(page.locator('#failure')).toHaveText('try-again');
   await page.getByRole('button', {name: 'Fail', exact: true}).click();
   await expect(page.locator('#error')).toContainText('probe failure');
   for (let i = 0; i < 3; i++) {

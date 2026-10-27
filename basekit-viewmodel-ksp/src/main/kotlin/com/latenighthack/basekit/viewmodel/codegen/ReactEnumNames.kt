@@ -48,11 +48,14 @@ internal fun reactEnumToJs(type: VmType, expression: String): String {
     return "when ($expression) { $branches }"
 }
 
-/** `when ([expression]) { "a" -> Enum.A … else -> throw }` over [type]'s entries. */
+/**
+ * The runtime's `reactEnumValue` over [type]'s entries: the entry spelled [expression], or a throw
+ * naming the expected spellings.
+ */
 internal fun reactEnumFromJs(type: VmType, expression: String): String {
     val cases = requireNotNull(type.enumCases)
     val names = requireNotNull(type.reactEnumNames)
-    val branches = cases.zip(names).joinToString("; ") { (case, name) -> "\"$name\" -> ${type.qualifiedName}.$case" }
-    val expected = names.joinToString(", ")
-    return "when (val name = $expression.unsafeCast<String>()) { $branches; else -> throw IllegalArgumentException(\"Not a ${type.qualifiedName.substringAfterLast('.')}: \" + name + \"; expected one of $expected\") }"
+    val spellings = names.joinToString(", ") { kotlinStringLiteral(it) }
+    val entries = cases.joinToString(", ") { "${type.qualifiedName}.$it" }
+    return "com.latenighthack.basekit.viewmodel.reactEnumValue($expression, arrayOf($spellings), arrayOf($entries), ${kotlinStringLiteral(type.qualifiedName.substringAfterLast('.'))})"
 }

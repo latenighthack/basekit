@@ -6,6 +6,18 @@ All notable changes to basekit are documented here. The format follows
 
 ## [Unreleased]
 
+- ViewModel (web): each generated `{Vm}ReactHook.kt` is now a `ReactDescriptor`. It holds what
+  differs per view model as compiled lambdas: State reads, actions and mutators as function
+  references, lists, and children. The runtime's `useReactViewModel` does the rest: the shared
+  binding, the external-store reads, the action functions, the row handles and the result object.
+  - Lists with the same row types share one `ReactRows`.
+  - Enum mutators look their value up with `reactEnumValue`.
+  - The generated files have no top-level properties, so Kotlin/JS adds no initialization check to
+    each function in them.
+  - The hooks behave as before. The JavaScript they return, `basekit-react.js` and
+    `basekit-react.d.ts` are unchanged.
+  - In the demo, minified, the hooks are 51% smaller (26.2 KB to 12.9 KB for ten view models).
+    `basekit-viewmodel` grows by 5.9 KB, once.
 - Breaking (navigation): the generated host-navigation types no longer start with `Apple`. The
   Swift, Compose and web routers all use them.
 

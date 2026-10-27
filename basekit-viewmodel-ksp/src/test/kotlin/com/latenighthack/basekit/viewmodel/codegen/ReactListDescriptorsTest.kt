@@ -34,25 +34,20 @@ class ReactListDescriptorsTest {
     )
 
     @Test
-    fun factory_emits_exact_discriminated_child_handles() {
-        val source = reactListElementFactory(viewModel, messages)
+    fun rows_are_exact_discriminated_child_handles() {
+        val source = reactRows(messages)
 
-        assertContains(source, "is sample.IncomingMessageItemViewModel")
-        assertContains(source, "result.kind = \"incomingMessageItem\"")
-        assertContains(source, "result.kind = \"statusMessageItem\"")
-        assertContains(source, "result.key = child.initialState.id")
-        assertContains(source, "result.use = { sample.useIncomingMessageItemViewModel(child) }")
-        assertContains(source, "emitted an undeclared child type")
+        assertContains(source, "val messagesRows = ReactRows(")
+        assertContains(source, "reactRow<sample.IncomingMessageItemViewModel>(\"incomingMessageItem\", { row, observer -> row.observing(observer) }, { sample.useIncomingMessageItemViewModel(it) }, id = { it.initialState.id })")
+        assertContains(source, "reactRow<sample.StatusMessageItemViewModel>(\"statusMessageItem\", { row, observer -> row.observing(observer) }, { sample.useStatusMessageItemViewModel(it) })")
         assertFalse("result.raw" in source)
         assertFalse("filter(" in source)
         assertFalse("map(" in source)
     }
 
     @Test
-    fun factory_name_is_list_specific() {
-        assertEquals(
-            "bindChatViewModelMessagesReactElement",
-            reactListFactoryName(viewModel, messages),
-        )
+    fun an_identity_property_keys_rows_by_type_and_value() {
+        val named = messages.copy(possibleTypes = listOf(VmListElementType("NamedViewModel", "sample.NamedViewModel", true, identityProperty = "key")))
+        assertContains(reactRows(named), ", keyPrefix = \"sample.NamedViewModel:\", key = { it.key })")
     }
 }

@@ -130,8 +130,8 @@ class SwiftWrapperGeneratorTest {
         val out = RecordingCodeGenerator()
         ReactHookGenerator(out, Dependencies(false)).generate(listOf(vm("ItemViewModel", listOf(string("in"), string("title")))))
         val source = out.text("ItemViewModelReactHook.kt")
-        assertContains(source, "result.`in` = state.`in`")
-        assertContains(source, "result.title = state.title")
+        assertContains(source, "field(\"in\") { it.`in` }")
+        assertContains(source, "field(\"title\") { it.title }")
     }
 
     private val sealedHeader = VmSectionHeader(
@@ -245,10 +245,8 @@ class SwiftWrapperGeneratorTest {
         val out = RecordingCodeGenerator()
         ReactHookGenerator(out, Dependencies(false)).generate(listOf(host, shelves))
         val hook = out.text("HostViewModelReactHook.kt")
-        assertContains(hook, "val rows: ReactSectionedDeltaListStore = ReactSectionedDeltaListStore(viewModel.boundList(\"sample.HostViewModel\", \"rows\", viewModel.rows), ::bindHostViewModelRowsReactHeader, { raw -> bindHostViewModelRowsReactElement(raw, basekitObservedRows) })")
-        assertContains(hook, "ReactViewModelBinding(viewModel, \"sample.HostViewModel\")")
-        assertContains(hook, "result.rows = rows.handle")
-        assertContains(hook, "is sample.HostViewModel.Section.Custom -> {\n        val header: dynamic = js(\"({})\")\n        header.kind = \"Custom\"")
+        assertContains(hook, "sectionedList(\"rows\", { it.rows }, { raw -> reactHeaderKind(when (raw) { is sample.HostViewModel.Section.Personal -> \"Personal\"; is sample.HostViewModel.Section.Custom -> \"Custom\"; else -> error(")
+        assertContains(hook, "reactDescriptor<sample.HostViewModel, sample.HostViewModel.State>(\"sample.HostViewModel\", \"HostViewModel\")")
         assertContains(out.text("ShelfViewModelReactHook.kt"), "(raw as sample.Shelf).name")
         ReactTypesGenerator(out, Dependencies(false)).generate(listOf(host, shelves), "sample-runtime")
         val types = out.text("basekit-react.d.ts")

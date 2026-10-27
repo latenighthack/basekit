@@ -9,9 +9,10 @@ import java.io.File
 import java.io.OutputStream
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
-/** Checks the generated React hook: shared per-instance stores, stable functions, a memoized object. */
+/** Checks the generated React hook: one descriptor per view model, read by the runtime's `useReactViewModel`. */
 class ReactHookGeneratorTest {
     private class RecordingCodeGenerator : CodeGenerator {
         val files = mutableMapOf<String, ByteArrayOutputStream>()
@@ -55,37 +56,52 @@ class ReactHookGeneratorTest {
     }
 
     @Test
-    fun state_and_lists_are_read_from_shared_external_stores() {
+    fun the_hook_reads_one_descriptor_through_the_runtime() {
         val source = hook()
-        assertContains(source, "val binding = ProbeViewModelReactBinding.of(viewModel)")
-        assertContains(source, "private val bindings = ReactBindingCache<sample.ProbeViewModel, ProbeViewModelReactBinding> { ProbeViewModelReactBinding(it) }")
-        assertContains(source, "val state = React.useSyncExternalStore(binding.core.state.subscribe, binding.core.state.getSnapshot).unsafeCast<sample.ProbeViewModel.State>()")
-        assertContains(source, "val rows: ReactDeltaListStore = ReactDeltaListStore(viewModel.boundList(\"sample.ProbeViewModel\", \"rows\", viewModel.rows), { raw -> bindProbeViewModelRowsReactElement(raw, basekitObservedRows) })")
-        assertContains(source, "val rowsRevision = React.useSyncExternalStore(binding.rows.subscribe, binding.rows.getSnapshot)")
-        assertFalse("useState" in source)
-        assertFalse("useEffect" in source)
-        assertFalse("setState(viewModel.initialState)" in source)
+        assertContains(source, "    val descriptor = reactDescriptor<sample.ProbeViewModel, sample.ProbeViewModel.State>(\"sample.ProbeViewModel\", \"ProbeViewModel\") {")
+        assertContains(source, "public fun useProbeViewModel(viewModelArg: dynamic): dynamic =\n    useReactViewModel(ProbeViewModelReact.descriptor, viewModelArg.unsafeCast<sample.ProbeViewModel>())")
+        assertContains(source, "        list(\"rows\", { it.rows }, rowsRows)")
+        assertContains(source, "    reactRow<sample.RowViewModel>(\"row\", { row, observer -> row.observing(observer) }, { sample.useRowViewModel(it) })")
+        // The mechanics live in the runtime, not in each generated file.
+        assertFalse("useSyncExternalStore" in source)
+        assertFalse("ReactBindingCache" in source)
+        assertFalse("js(\"({})\")" in source)
     }
 
     @Test
-    fun functions_are_created_once_and_the_object_is_memoized_on_its_inputs() {
+    fun members_are_described_in_the_order_the_object_lists_them() {
         val source = hook()
-        assertContains(source, "private val refreshAction: dynamic = { core.run { viewModel.refresh() } }")
-        assertContains(source, "private val setTitleAction: dynamic = { value: dynamic -> core.run { viewModel.setTitle(value.unsafeCast<kotlin.String>()) } }")
-        assertContains(source, "fun result(state: sample.ProbeViewModel.State, rowsRevision: dynamic, childBinding: dynamic): dynamic = core.result(arrayOf(state, rowsRevision, childBinding)) {")
-        assertContains(source, "        result.refresh = refreshAction")
-        assertContains(source, "        result.rows = rows.proxy")
-        assertContains(source, "        result.child = childBinding")
-        assertContains(source, "val childBinding = sample.useChildViewModel(viewModel.child)")
-        assertContains(source, "return binding.result(state, rowsRevision, childBinding)")
+        val lines = listOf(
+            "        field(\"title\") { it.title }",
+            "        converted(\"tags\", { it.tags }) { value -> value.map { element -> element }.toTypedArray() }",
+            "        action(\"refresh\", sample.ProbeViewModel::refresh)",
+            "        mutator<kotlin.String>(\"setTitle\", sample.ProbeViewModel::setTitle)",
+            "        list(\"rows\", { it.rows }, rowsRows)",
+            "        child(\"child\") { sample.useChildViewModel(it.child) }",
+        )
+        lines.forEach { assertContains(source, it) }
+        assertEquals(lines.sortedBy { source.indexOf(it) }, lines)
     }
 
     @Test
-    fun converted_lists_are_reused_while_their_value_is() {
-        val source = hook()
-        assertContains(source, "private val tagsValue = ReactConversion<kotlin.collections.List<kotlin.String>> { value -> value.map { element -> element }.toTypedArray() }")
-        assertContains(source, "        result.tags = tagsValue(state.tags)")
-        assertContains(source, "        result.title = state.title")
+    fun a_mutator_converts_only_values_kotlin_does_not_take_as_they_are() {
+        val status = VmType("sample.Status", enumCases = listOf("ON", "OFF"))
+        val source = hook(probe.copy(mutators = listOf(
+            VmMutator("setTitle", "value", "String", "kotlin.String"),
+            VmMutator("setStatus", "value", "Status", "sample.Status", type = status),
+        )))
+        assertContains(source, "        mutator<kotlin.String>(\"setTitle\", sample.ProbeViewModel::setTitle)\n")
+        assertContains(source, "        mutator<sample.Status>(\"setStatus\", sample.ProbeViewModel::setStatus) { value -> com.latenighthack.basekit.viewmodel.reactEnumValue(value, arrayOf(\"ON\", \"OFF\")")
+    }
+
+    @Test
+    fun lists_of_the_same_row_types_share_one_rows_value() {
+        val rows = probe.lists.single()
+        val source = hook(probe.copy(lists = listOf(rows, rows.copy(propertyName = "pinned"), rows.copy(propertyName = "other", possibleTypes = listOf(VmListElementType("OtherViewModel", "sample.OtherViewModel", false))))))
+        assertEquals(1, Regex("val rowsRows = ").findAll(source).count())
+        assertContains(source, "        list(\"pinned\", { it.pinned }, rowsRows)")
+        assertContains(source, "        list(\"other\", { it.other }, otherRows)")
+        assertFalse("pinnedRows" in source)
     }
 
     @Test

@@ -1,33 +1,25 @@
 package com.latenighthack.basekit.viewmodel.codegen
 
-internal fun reactHeaderFactoryName(vm: VmInfo, list: VmList): String =
-    "bind${vm.simpleName}${list.propertyName.toUpperCamelCase()}ReactHeader"
-
 /** The TypeScript header type of a sectioned list, e.g. `SidebarViewModelConnectionsHeader`. */
 internal fun reactHeaderTypeName(vm: VmInfo, list: VmList): String =
     "${vm.simpleName}${list.propertyName.toUpperCamelCase()}Header"
 
 /**
- * A sectioned list's header for React: an enum entry's React spelling (a string-literal union; see
- * [ReactEnumNames]), or `{ kind }` for a sealed subclass (a `kind`-tagged union) spelled as in Kotlin.
+ * A sectioned list's header for React, as a lambda over the raw header: an enum entry's React
+ * spelling (a string-literal union; see [ReactEnumNames]), or `{ kind }` for a sealed subclass (a
+ * `kind`-tagged union) spelled as in Kotlin.
  */
-internal fun reactHeaderFactory(vm: VmInfo, list: VmList): String {
-    val header = list.header ?: return ""
-    val body = if (header.isEnum && header.cases.all { it.jsName == it.name }) {
-        "(raw as ${header.qualifiedName}).name"
+internal fun reactHeaderLambda(vm: VmInfo, list: VmList): String? {
+    val header = list.header ?: return null
+    return if (header.isEnum && header.cases.all { it.jsName == it.name }) {
+        "{ raw -> (raw as ${header.qualifiedName}).name }"
     } else if (header.isEnum) {
         val branches = header.cases.joinToString("; ") { "${header.qualifiedName}.${it.name} -> \"${it.jsName}\"" }
-        "when (raw as ${header.qualifiedName}) { $branches }"
+        "{ raw -> when (raw as ${header.qualifiedName}) { $branches } }"
     } else {
-        val branches = header.cases.joinToString("\n") { case ->
-            "    is ${case.qualifiedName} -> {\n        val header: dynamic = js(\"({})\")\n        header.kind = \"${case.name}\"\n        header\n    }"
-        }
-        "when (raw) {\n$branches\n    else -> error(\"${vm.simpleName}.${list.propertyName} emitted an undeclared header: ${'$'}raw\")\n}"
+        val branches = header.cases.joinToString("; ") { "is ${it.qualifiedName} -> \"${it.name}\"" }
+        "{ raw -> reactHeaderKind(when (raw) { $branches; else -> error(\"${vm.simpleName}.${list.propertyName} emitted an undeclared header: ${'$'}raw\") }) }"
     }
-    return """
-    |/** Typed React header for `${list.propertyName}`. */
-    |private fun ${reactHeaderFactoryName(vm, list)}(raw: Any?): Any = $body
-    """.trimMargin()
 }
 
 /** The TypeScript declaration of [reactHeaderTypeName]. */
@@ -41,47 +33,24 @@ internal fun reactHeaderType(vm: VmInfo, list: VmList): String {
     return "export type ${reactHeaderTypeName(vm, list)} = $cases;"
 }
 
-internal fun reactListFactoryName(vm: VmInfo, list: VmList): String =
-    "bind${vm.simpleName}${list.propertyName.toUpperCamelCase()}ReactElement"
+/** The name of the `ReactRows` val for [list]'s row types; lists of the same types share the first one's. */
+internal fun reactRowsName(list: VmList): String = "${list.propertyName}Rows"
 
-/** Emits the exact raw-child to generated React handle classifier for one ViewModel list. */
-internal fun reactListElementFactory(vm: VmInfo, list: VmList): String {
-    val branches = list.possibleTypes.joinToString("\n") { type ->
-        val caseName = type.simpleName.toListCaseName()
+/**
+ * The `ReactRows` of one list's closed row set. `kind` selects the exact row, `key` supplies
+ * identity, and `use()` invokes the generated row hook without exposing the raw ViewModel.
+ */
+internal fun reactRows(list: VmList): String {
+    val rows = list.possibleTypes.joinToString(",\n") { type ->
         val childPackage = type.qualifiedName.substringBeforeLast('.', "")
-        val childHook = if (childPackage.isEmpty()) {
-            "use${type.simpleName}"
-        } else {
-            "$childPackage.use${type.simpleName}"
+        val childHook = if (childPackage.isEmpty()) "use${type.simpleName}" else "$childPackage.use${type.simpleName}"
+        val identity = when {
+            type.identityProperty != null -> ", keyPrefix = ${kotlinStringLiteral("${type.qualifiedName}:")}, key = { it.${type.identityProperty} }"
+            type.reactId -> ", id = { it.initialState.id }"
+            else -> ""
         }
-        val identity = if (type.identityProperty != null) {
-            "result.key = \"${type.qualifiedName}:\" + child.${type.identityProperty}"
-        } else if (type.reactId) {
-            """
-            |            result.id = child.initialState.id
-            |            result.key = child.initialState.id
-            """.trimMargin()
-        } else {
-            ""
-        }
-
-        """
-        |        is ${type.qualifiedName} -> {
-        |            val child = basekitObservedRows.get(raw) { row, observer -> row.observing(observer) }
-        |            val result: dynamic = js("({})")
-        |            result.kind = "$caseName"
-        |$identity
-        |            result.use = { $childHook(child) }
-        |            result
-        |        }
-        """.trimMargin()
+        "        reactRow<${type.qualifiedName}>(\"${type.simpleName.toListCaseName()}\", { row, observer -> row.observing(observer) }, { $childHook(it) }$identity)"
     }
-
-    return """
-    |/** Closed React child handle for `${list.propertyName}`. Raw ViewModel state stays generated. */
-    |private fun ${reactListFactoryName(vm, list)}(raw: Any?, basekitObservedRows: ReactObservedRows): Any = when (raw) {
-    |$branches
-    |        else -> error("${vm.simpleName}.${list.propertyName} emitted an undeclared child type: ${'$'}{raw?.let { it::class.simpleName }}")
-    |    }
-    """.trimMargin()
+    return "    /** Closed React row handles for `${list.propertyName}`. Raw ViewModel state stays generated. */\n" +
+        "    val ${reactRowsName(list)} = ReactRows(\n$rows,\n    )"
 }

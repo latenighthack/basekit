@@ -35,6 +35,8 @@ function Probe() {
     <button onClick={() => void model.setNote(null)}>Clear</button>
     <button onClick={() => void model.setMessage(new ProbeMessage('custom'))}>Custom</button>
     <button onClick={() => void model.setFailure('try-again')}>Enum</button>
+    {/* A spelling the union rules out, as untyped JavaScript could pass. */}
+    <button onClick={() => void model.setFailure('retry' as never).catch(e => setError(String(e)))}>Bad enum</button>
     <button onClick={() => void model.fail().catch(e => setError(String(e)))}>Fail</button>
     <button onClick={() => probe.populate()}>Populate</button>
     <button onClick={() => probe.staticRows('static original')}>Static original</button>

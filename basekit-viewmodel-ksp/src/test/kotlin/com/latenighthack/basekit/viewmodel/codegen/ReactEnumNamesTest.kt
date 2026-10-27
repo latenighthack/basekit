@@ -39,29 +39,33 @@ class ReactEnumNamesTest {
     }
 
     @Test
-    fun state_and_mutator_conversions_are_inverse_whens() {
+    fun state_and_mutator_conversions_are_inverse() {
         val toJs = reactToJs(status, "state.status")
         val fromJs = reactFromJs(status, "value")
         assertEquals(
             "when (state.status) { sample.Status.ENABLED -> \"enabled\"; sample.Status.SIGNED_IN -> \"signedIn\"; sample.Status.TRY_AGAIN -> \"try-again\" }",
             toJs,
         )
-        assertContains(fromJs, "when (val name = value.unsafeCast<String>()) {")
-        assertContains(fromJs, "\"try-again\" -> sample.Status.TRY_AGAIN; else -> throw IllegalArgumentException(")
-        // Round trip: every entry maps to a name and that name maps back to the same entry.
+        assertEquals(
+            "com.latenighthack.basekit.viewmodel.reactEnumValue(value, arrayOf(\"enabled\", \"signedIn\", \"try-again\"), " +
+                "arrayOf(sample.Status.ENABLED, sample.Status.SIGNED_IN, sample.Status.TRY_AGAIN), \"Status\")",
+            fromJs,
+        )
+        // Round trip: every entry maps to a name, and the name is read back at the entry's index.
         val written = Regex("""sample\.Status\.(\w+) -> "([^"]+)"""").findAll(toJs).associate { it.groupValues[1] to it.groupValues[2] }
-        val read = Regex(""""([^"]+)" -> sample\.Status\.(\w+)""").findAll(fromJs).associate { it.groupValues[1] to it.groupValues[2] }
+        val (names, entries) = Regex("""arrayOf\(([^)]*)\)""").findAll(fromJs).map { match -> match.groupValues[1].split(", ") }.toList()
+        val read = names.map { it.trim('"') }.zip(entries.map { it.substringAfterLast('.') }).toMap()
         assertEquals(status.enumCases, written.keys.toList())
         for ((entry, name) in written) assertEquals(entry, read[name])
         assertEquals(written.size, read.size)
     }
 
     @Test
-    fun kotlin_names_keep_the_name_read_and_still_parse_with_a_when() {
+    fun kotlin_names_keep_the_name_read_and_still_parse_by_spelling() {
         val plain = VmType("sample.Failure", enumCases = listOf("NONE", "RETRY"))
         assertEquals("state.failure.name", reactToJs(plain, "state.failure"))
-        assertContains(reactFromJs(plain, "value"), "\"RETRY\" -> sample.Failure.RETRY")
-        assertContains(reactFromJs(plain.copy(nullable = true), "value"), "if (value == null) null else when")
+        assertContains(reactFromJs(plain, "value"), "arrayOf(\"NONE\", \"RETRY\"), arrayOf(sample.Failure.NONE, sample.Failure.RETRY)")
+        assertContains(reactFromJs(plain.copy(nullable = true), "value"), "if (value == null) null else com.latenighthack.basekit.viewmodel.reactEnumValue(")
         val list = VmType("kotlin.collections.List", arguments = listOf(status))
         assertContains(reactToJs(list, "state.statuses"), "map { element -> when (element) { sample.Status.ENABLED -> \"enabled\"")
     }
@@ -79,6 +83,6 @@ class ReactEnumNamesTest {
             header = VmSectionHeader("sample.Shelf", "Shelf", isEnum = true, cases = listOf(VmHeaderCase("TOP", jsName = "top"), VmHeaderCase("BOTTOM", jsName = "bottom"))),
         )
         assertEquals("export type ShelfViewModelRowsHeader = 'top' | 'bottom';", reactHeaderType(vm, list))
-        assertContains(reactHeaderFactory(vm, list), "when (raw as sample.Shelf) { sample.Shelf.TOP -> \"top\"; sample.Shelf.BOTTOM -> \"bottom\" }")
+        assertContains(reactHeaderLambda(vm, list)!!, "when (raw as sample.Shelf) { sample.Shelf.TOP -> \"top\"; sample.Shelf.BOTTOM -> \"bottom\" }")
     }
 }

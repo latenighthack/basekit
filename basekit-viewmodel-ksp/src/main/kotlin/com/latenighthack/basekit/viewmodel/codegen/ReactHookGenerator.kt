@@ -5,8 +5,9 @@ import com.google.devtools.ksp.processing.Dependencies
 
 /**
  * Emits, per `@ViewModelSpec`, a `@JsExport use{Vm}(viewModel)` React hook (Kotlin/JS) and the
- * `{Vm}ReactBinding` it reads. One binding exists per view model instance and every component bound
- * to that instance shares it:
+ * `ReactDescriptor` it reads with `useReactViewModel`. The descriptor holds only what differs per
+ * view model, as compiled lambdas: State reads, actions, mutators, lists and children. The runtime
+ * keeps one binding per view model instance, shared by every component bound to it:
  *
  * - `state` is a `ReactFlowStore` over `boundState` (which passes a throw from `state` to the view
  *   model's failure handler and keeps the last state), read with `useSyncExternalStore`. When
@@ -27,148 +28,111 @@ class ReactHookGenerator(
 ) {
     fun generate(viewModels: List<VmInfo>) {
         for (vm in viewModels) {
-            val hookName = "use${vm.simpleName}"
-            val bindingName = "${vm.simpleName}ReactBinding"
-            val name = kotlinStringLiteral(vm.qualifiedName)
-
-            val listStores = vm.lists.joinToString("\n") { list ->
-                val source = "viewModel.boundList($name, ${kotlinStringLiteral(list.propertyName)}, viewModel.${list.propertyName.kotlinRef()})"
-                val rows = "{ raw -> ${reactListFactoryName(vm, list)}(raw, basekitObservedRows) }"
-                if (list.sectioned) {
-                    "    val ${list.propertyName.kotlinRef()}: ReactSectionedDeltaListStore = ReactSectionedDeltaListStore($source, ::${reactHeaderFactoryName(vm, list)}, $rows)"
-                } else {
-                    "    val ${list.propertyName.kotlinRef()}: ReactDeltaListStore = ReactDeltaListStore($source, $rows)"
-                }
+            codeGenerator.createNewFile(dependencies, vm.packageName, "${vm.simpleName}ReactHook", "kt").use {
+                it.write(render(vm).encodeToByteArray())
             }
-
-            val listFactories = vm.lists.flatMap { list ->
-                listOf(reactListElementFactory(vm, list), reactHeaderFactory(vm, list))
-            }.filter { it.isNotEmpty() }.joinToString("\n\n")
-
-            val conversions = vm.stateProperties.filter { reactConvertsToNewObject(it.type, it.reactAdapter) }.joinToString("\n") {
-                "    private val ${it.name}Value = ReactConversion<${it.type.kotlinName}> { value -> ${reactToJs(it.type, "value", it.reactAdapter)} }"
-            }
-            val stateAssigns = vm.stateProperties.joinToString("\n") {
-                val value = if (reactConvertsToNewObject(it.type, it.reactAdapter)) {
-                    "${it.name}Value(state.${it.name.kotlinRef()})"
-                } else {
-                    reactToJs(it.type, "state.${it.name.kotlinRef()}", it.reactAdapter)
-                }
-                "        result.${it.name.kotlinRef()} = $value"
-            }
-
-            val actionFunctions = vm.actions.joinToString("\n") { action ->
-                "    private val ${action.name}Action: dynamic = { core.run { viewModel.${action.name.kotlinRef()}() } }"
-            }
-            val mutatorFunctions = vm.mutators.joinToString("\n") { mutator ->
-                "    private val ${mutator.name}Action: dynamic = { value: dynamic -> core.run { viewModel.${mutator.name.kotlinRef()}(${reactFromJs(mutator.type, "value", mutator.reactAdapter)}) } }"
-            }
-            val callableAssigns = (vm.actions.map { it.name } + vm.mutators.map { it.name }).joinToString("\n") {
-                "        result.${it.kotlinRef()} = ${it}Action"
-            }
-            val listAssigns = vm.lists.joinToString("\n") {
-                if (it.sectioned) "        result.${it.propertyName.kotlinRef()} = ${it.propertyName.kotlinRef()}.handle"
-                else "        result.${it.propertyName.kotlinRef()} = ${it.propertyName.kotlinRef()}.proxy"
-            }
-            val childAssigns = vm.children.joinToString("\n") {
-                "        result.${it.propertyName.kotlinRef()} = ${it.propertyName}Binding"
-            }
-
-            val resultParams = listOf("state: ${vm.stateQualifiedName}") +
-                vm.lists.map { "${it.propertyName}Revision: dynamic" } +
-                vm.children.map { "${it.propertyName}Binding: dynamic" }
-            val resultInputs = listOf("state") + vm.lists.map { "${it.propertyName}Revision" } + vm.children.map { "${it.propertyName}Binding" }
-
-            val hookReads = buildList {
-                add("    val state = React.useSyncExternalStore(binding.core.state.subscribe, binding.core.state.getSnapshot).unsafeCast<${vm.stateQualifiedName}>()")
-                vm.lists.forEach {
-                    add("    val ${it.propertyName}Revision = React.useSyncExternalStore(binding.${it.propertyName.kotlinRef()}.subscribe, binding.${it.propertyName.kotlinRef()}.getSnapshot)")
-                }
-                vm.children.forEach {
-                    add("    val ${it.propertyName}Binding = ${it.typeQualifiedName.substringBeforeLast('.')}.use${it.typeSimpleName}(viewModel.${it.propertyName.kotlinRef()})")
-                }
-            }.joinToString("\n")
-
-            codeGenerator.createNewFile(dependencies, vm.packageName, "${vm.simpleName}ReactHook", "kt").apply {
-                writeln("@file:Suppress(\"NON_EXPORTABLE_TYPE\")")
-                writeln()
-                writeln("package ${vm.packageName}")
-                writeln()
-                writeln("import com.latenighthack.basekit.viewmodel.React")
-                writeln("import com.latenighthack.basekit.viewmodel.ReactBindingCache")
-                writeln("import com.latenighthack.basekit.viewmodel.ReactConversion")
-                if (vm.lists.isNotEmpty()) writeln("import com.latenighthack.basekit.viewmodel.ReactObservedRows")
-                writeln("import com.latenighthack.basekit.viewmodel.ViewModelObserver")
-                if (vm.lists.isNotEmpty()) writeln("import com.latenighthack.basekit.viewmodel.viewModelObserver")
-                // Each row type's generated `observing` extension, imported when declared in another package.
-                vm.lists.flatMap { it.possibleTypes }.map { it.qualifiedName.substringBeforeLast('.', "") }
-                    .filter { it.isNotEmpty() && it != vm.packageName }.distinct().sorted()
-                    .forEach { writeln("import $it.observing") }
-                writeln("import com.latenighthack.basekit.viewmodel.ReactViewModelBinding")
-                if (vm.lists.isNotEmpty()) writeln("import com.latenighthack.basekit.viewmodel.boundList")
-                if (vm.lists.any { !it.sectioned }) writeln("import com.latenighthack.deltalist.react.ReactDeltaListStore")
-                if (vm.lists.any { it.sectioned }) writeln("import com.latenighthack.deltalist.react.ReactSectionedDeltaListStore")
-                writeln("import kotlin.js.ExperimentalJsExport")
-                writeln("import kotlin.js.JsExport")
-                writeln("import kotlin.js.JsName")
-                writeln()
-                if (listFactories.isNotEmpty()) {
-                    writeln(listFactories)
-                    writeln()
-                }
-                writeln("""
-                    |/** Export this reference from the app's Kotlin/JS client factory. */
-                    |@OptIn(ExperimentalJsExport::class)
-                    |@JsExport
-                    |public class ${vm.simpleName}ReactRef internal constructor(private val value: ${vm.qualifiedName}) {
-                    |    public val ${vm.simpleName.replaceFirstChar { it.lowercase() }}Reference: Boolean get() = true
-                    |    public fun use(): dynamic = $hookName(value)
-                    |}
-                    |public fun ${vm.qualifiedName}.reactReference(): ${vm.simpleName}ReactRef = ${vm.simpleName}ReactRef(this)
-                    |
-                    |/** A reference whose view model, children and rows report to [observer]; see `observing`. */
-                    |public fun ${vm.qualifiedName}.reactReference(observer: ViewModelObserver?): ${vm.simpleName}ReactRef = ${vm.simpleName}ReactRef(observing(observer))
-                    |
-                    |/** State, lists and actions of one [${vm.qualifiedName}], shared by every component bound to it. */
-                    |internal class $bindingName private constructor(private val viewModel: ${vm.qualifiedName}) {
-                    |    val core: ReactViewModelBinding<${vm.stateQualifiedName}> = ReactViewModelBinding(viewModel, $name)
-                """.trimMargin())
-                // Rows report to this view model's observer, one decorator per row.
-                if (vm.lists.isNotEmpty()) writeln("    private val basekitObservedRows = ReactObservedRows(viewModel.viewModelObserver())")
-                if (listStores.isNotEmpty()) writeln(listStores)
-                if (conversions.isNotEmpty()) writeln(conversions)
-                if (actionFunctions.isNotEmpty()) writeln(actionFunctions)
-                if (mutatorFunctions.isNotEmpty()) writeln(mutatorFunctions)
-                writeln()
-                writeln("    fun result(${resultParams.joinToString(", ")}): dynamic = core.result(arrayOf(${resultInputs.joinToString(", ")})) {")
-                writeln("        val result: dynamic = js(\"({})\")")
-                for (section in listOf(stateAssigns, callableAssigns, listAssigns, childAssigns)) {
-                    if (section.isNotEmpty()) writeln(section)
-                }
-                writeln("        result")
-                writeln("    }")
-                writeln()
-                writeln("    companion object {")
-                writeln("        private val bindings = ReactBindingCache<${vm.qualifiedName}, $bindingName> { $bindingName(it) }")
-                writeln("        fun of(viewModel: ${vm.qualifiedName}): $bindingName = bindings.get(viewModel)")
-                writeln("    }")
-                writeln("}")
-                writeln()
-                writeln(
-                    """
-                    |/** Generated React hook for [${vm.qualifiedName}]. */
-                    |@OptIn(ExperimentalJsExport::class)
-                    |@JsExport
-                    |@JsName("$hookName")
-                    |public fun $hookName(viewModelArg: dynamic): dynamic {
-                    |    val viewModel = viewModelArg.unsafeCast<${vm.qualifiedName}>()
-                    |    val binding = $bindingName.of(viewModel)
-                    """.trimMargin()
-                )
-                writeln(hookReads)
-                writeln("    return binding.result(${resultInputs.joinToString(", ")})")
-                writeln("}")
-            }.close()
         }
+    }
+
+    internal fun render(vm: VmInfo): String = buildString {
+        val hookName = "use${vm.simpleName}"
+        // The descriptor lives in an object: a file with top-level properties makes Kotlin/JS check
+        // their initialization at the start of every function in it, lambdas included.
+        val holder = "${vm.simpleName}React"
+
+        // Lists of the same row types share one ReactRows.
+        val rowsByTypes = LinkedHashMap<List<VmListElementType>, String>()
+        val rowsDeclarations = ArrayList<String>()
+        val rowsOf = vm.lists.associate { list ->
+            list.propertyName to rowsByTypes.getOrPut(list.possibleTypes) {
+                rowsDeclarations.add(reactRows(list))
+                reactRowsName(list)
+            }
+        }
+
+        appendLine("@file:Suppress(\"NON_EXPORTABLE_TYPE\")")
+        appendLine()
+        appendLine("package ${vm.packageName}")
+        appendLine()
+        if (vm.lists.isNotEmpty()) appendLine("import com.latenighthack.basekit.viewmodel.ReactRows")
+        appendLine("import com.latenighthack.basekit.viewmodel.ViewModelObserver")
+        // Each row type's generated `observing` extension, imported when declared in another package.
+        vm.lists.flatMap { it.possibleTypes }.map { it.qualifiedName.substringBeforeLast('.', "") }
+            .filter { it.isNotEmpty() && it != vm.packageName }.distinct().sorted()
+            .forEach { appendLine("import $it.observing") }
+        appendLine("import com.latenighthack.basekit.viewmodel.reactDescriptor")
+        if (vm.lists.any { list -> list.header?.let { !it.isEnum } == true }) appendLine("import com.latenighthack.basekit.viewmodel.reactHeaderKind")
+        if (vm.lists.isNotEmpty()) appendLine("import com.latenighthack.basekit.viewmodel.reactRow")
+        appendLine("import com.latenighthack.basekit.viewmodel.useReactViewModel")
+        appendLine("import kotlin.js.ExperimentalJsExport")
+        appendLine("import kotlin.js.JsExport")
+        appendLine("import kotlin.js.JsName")
+        appendLine()
+        appendLine(
+            """
+            |/** Export this reference from the app's Kotlin/JS client factory. */
+            |@OptIn(ExperimentalJsExport::class)
+            |@JsExport
+            |public class ${vm.simpleName}ReactRef internal constructor(private val value: ${vm.qualifiedName}) {
+            |    public val ${vm.simpleName.replaceFirstChar { it.lowercase() }}Reference: Boolean get() = true
+            |    public fun use(): dynamic = $hookName(value)
+            |}
+            |public fun ${vm.qualifiedName}.reactReference(): ${vm.simpleName}ReactRef = ${vm.simpleName}ReactRef(this)
+            |
+            |/** A reference whose view model, children and rows report to [observer]; see `observing`. */
+            |public fun ${vm.qualifiedName}.reactReference(observer: ViewModelObserver?): ${vm.simpleName}ReactRef = ${vm.simpleName}ReactRef(observing(observer))
+            |
+            |private object $holder {
+            """.trimMargin()
+        )
+        rowsDeclarations.forEach {
+            appendLine(it)
+            appendLine()
+        }
+        appendLine("    /** State, lists and actions of one [${vm.qualifiedName}], shared by every component bound to it. */")
+        appendLine("    val descriptor = reactDescriptor<${vm.qualifiedName}, ${vm.stateQualifiedName}>(${kotlinStringLiteral(vm.qualifiedName)}, ${kotlinStringLiteral(vm.simpleName)}) {")
+        vm.stateProperties.forEach { property ->
+            val name = kotlinStringLiteral(property.name)
+            if (reactConvertsToNewObject(property.type, property.reactAdapter)) {
+                appendLine("        converted($name, { it.${property.name.kotlinRef()} }) { value -> ${reactToJs(property.type, "value", property.reactAdapter)} }")
+            } else {
+                appendLine("        field($name) { ${reactToJs(property.type, "it.${property.name.kotlinRef()}", property.reactAdapter)} }")
+            }
+        }
+        vm.actions.forEach { action ->
+            appendLine("        action(${kotlinStringLiteral(action.name)}, ${vm.qualifiedName}::${action.name.kotlinRef()})")
+        }
+        vm.mutators.forEach { mutator ->
+            // A value passed to Kotlin as it is needs no conversion.
+            val conversion = reactFromJs(mutator.type, "value", mutator.reactAdapter)
+                .takeIf { it != "value.unsafeCast<${mutator.type.kotlinName}>()" }
+                ?.let { ") { value -> $it }" } ?: ")"
+            appendLine("        mutator<${mutator.type.kotlinName}>(${kotlinStringLiteral(mutator.name)}, ${vm.qualifiedName}::${mutator.name.kotlinRef()}$conversion")
+        }
+        vm.lists.forEach { list ->
+            val name = kotlinStringLiteral(list.propertyName)
+            val source = "{ it.${list.propertyName.kotlinRef()} }"
+            val rows = rowsOf.getValue(list.propertyName)
+            val header = reactHeaderLambda(vm, list)
+            if (header == null) appendLine("        list($name, $source, $rows)")
+            else appendLine("        sectionedList($name, $source, $header, $rows)")
+        }
+        vm.children.forEach { child ->
+            val childPackage = child.typeQualifiedName.substringBeforeLast('.')
+            appendLine("        child(${kotlinStringLiteral(child.propertyName)}) { $childPackage.use${child.typeSimpleName}(it.${child.propertyName.kotlinRef()}) }")
+        }
+        appendLine("    }")
+        appendLine("}")
+        appendLine()
+        appendLine(
+            """
+            |/** Generated React hook for [${vm.qualifiedName}]. */
+            |@OptIn(ExperimentalJsExport::class)
+            |@JsExport
+            |@JsName("$hookName")
+            |public fun $hookName(viewModelArg: dynamic): dynamic =
+            |    useReactViewModel($holder.descriptor, viewModelArg.unsafeCast<${vm.qualifiedName}>())
+            """.trimMargin()
+        )
     }
 }
