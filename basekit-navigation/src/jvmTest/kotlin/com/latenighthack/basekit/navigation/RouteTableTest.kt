@@ -86,4 +86,18 @@ class RouteTableTest {
         assertEquals(RequestArgs::class, table.match("/agents/add?tab=x")?.args?.let { it::class })
         assertEquals(TaskArgs::class, table.match("/agents/a1?tab=x")?.args?.let { it::class })
     }
+
+    // An optional query capture doesn't make a template more specific: a required one still wins.
+    @Test
+    fun an_optional_query_capture_does_not_outrank_a_required_one() {
+        val table = RouteTable().apply {
+            register("/requests?request={requestId}") { RequestArgs() }
+            register("/requests?from={from?}") { HomeArgs() }
+        }
+        assertEquals(RequestArgs::class, table.match("/requests?from=mail&request=r1")?.args?.let { it::class })
+        val home = table.match("/requests?from=mail")
+        assertEquals(HomeArgs::class, home?.args?.let { it::class })
+        assertEquals(mapOf("from" to "mail"), home?.params)
+        assertEquals(emptyMap(), table.match("/requests")?.params)
+    }
 }

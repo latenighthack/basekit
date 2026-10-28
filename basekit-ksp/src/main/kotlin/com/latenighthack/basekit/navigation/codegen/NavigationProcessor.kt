@@ -66,13 +66,18 @@ data class DestinationInfo(
     val routeArgs: List<String>,
     val edges: List<NavEdge>,
     val hosted: Boolean = false,
-    /** `@Route(aliases)`: other paths that open the destination, with the same params as [routePath]. */
+    /**
+     * `@Route(aliases)`: other templates that open the destination. Each captures every non-null
+     * @RouteArg and any of the nullable ones.
+     */
     val routeAliases: List<String> = emptyList(),
     /**
      * The value a route gives each argument it does not capture, as Kotlin source: `false` for a
      * `Boolean`, `null` for a nullable type. A route sets these so no platform reads an unset argument.
      */
     val routeDefaults: List<Pair<String, String>> = emptyList(),
+    /** The [routeArgs] of type `String?`: a template that doesn't capture one sets it to null. */
+    val nullableRouteArgs: Set<String> = emptySet(),
 )
 
 /**

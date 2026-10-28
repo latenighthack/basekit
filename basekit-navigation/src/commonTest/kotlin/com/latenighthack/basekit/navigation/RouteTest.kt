@@ -84,6 +84,60 @@ class RouteTest {
     }
 
     @Test
+    fun an_optional_query_capture_matches_with_or_without_its_key() {
+        val route = Route.parse("/agents/{agentId}/connections/{connectionId}?resource={resourceId?}")
+        assertEquals(
+            mapOf("agentId" to "a1", "connectionId" to "c1"),
+            route.match("/agents/a1/connections/c1"),
+        )
+        assertEquals(
+            mapOf("agentId" to "a1", "connectionId" to "c1"),
+            route.match("/agents/a1/connections/c1?resource="),
+        )
+        assertEquals(
+            mapOf("agentId" to "a1", "connectionId" to "c1", "resourceId" to "en.usa#holiday@group/v1"),
+            route.match("/agents/a1/connections/c1?resource=en.usa%23holiday%40group%2Fv1"),
+        )
+    }
+
+    @Test
+    fun an_optional_capture_in_the_path_is_rejected() {
+        assertFailsWith<IllegalArgumentException> { Route.parse("/burners/{burnerSessionId?}") }
+        assertFailsWith<IllegalArgumentException> { Route.parse("/burners?burner={?}") }
+    }
+
+    @Test
+    fun path_segments_are_decoded_after_the_path_is_split() {
+        val route = Route.parse("/files/{name}/edit")
+        assertEquals(mapOf("name" to "a/b?c#d"), route.match("/files/a%2Fb%3Fc%23d/edit"))
+        assertEquals(mapOf("name" to "a+b ü"), route.match("/files/a+b%20%C3%BC/edit"))
+        assertEquals(mapOf("name" to "100%"), route.match("/files/100%/edit"))
+        assertNull(route.match("/files/a/b/edit"))
+        assertEquals(emptyMap(), Route.parse("/café").match("/caf%C3%A9"))
+    }
+
+    @Test
+    fun address_fills_each_capture_escaped() {
+        val route = Route.parse("/files/{name}?tab={tab}&from={from?}")
+        assertEquals(
+            "/files/a%2Fb%20%C3%BC?tab=x%26y",
+            route.address(mapOf("name" to "a/b ü", "tab" to "x&y", "from" to null)),
+        )
+        assertEquals("/files/n?tab=t&from=f", route.address(mapOf("name" to "n", "tab" to "t", "from" to "f")))
+        assertEquals("/files/n?tab=t", route.address(mapOf("name" to "n", "tab" to "t", "from" to "")))
+        assertNull(route.address(mapOf("tab" to "t")))
+        assertNull(route.address(mapOf("name" to "n", "tab" to null)))
+        assertEquals("/", Route.parse("/").address(emptyMap()))
+    }
+
+    @Test
+    fun an_address_matches_back_to_its_values() {
+        val route = Route.parse("/agents/{agentId}/connections/{connectionId}?resource={resourceId?}")
+        val values = mapOf("agentId" to "a b", "connectionId" to "c/1", "resourceId" to "en.usa#holiday@group+v1")
+        assertEquals(values, route.match(route.address(values)!!))
+    }
+
+    @Test
     fun leading_and_trailing_slashes_are_normalized() {
         assertEquals(emptyMap(), Route.parse("/").match("/"))
         assertEquals(mapOf("id" to "42"), Route.parse("/detail/{id}").match("/detail/42/"))

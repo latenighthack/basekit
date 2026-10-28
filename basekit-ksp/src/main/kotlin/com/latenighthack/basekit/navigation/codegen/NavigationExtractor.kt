@@ -211,17 +211,6 @@ class NavigationExtractor(private val logger: KSPLogger) {
                 logger.error("@Route \"$template\" on $simpleName: $problem", argsDeclaration ?: declaration)
             }
         }
-        // An alias registers the same args factory, which binds every @RouteArg from the match.
-        routePath?.let(::routeParams)?.let { params ->
-            routeAliases.filter { routeParams(it) != params }.forEach { alias ->
-                logger.error(
-                    "@Route alias \"$alias\" on $simpleName must capture the same parameters as \"$routePath\" " +
-                        "(${params.sorted().joinToString().ifEmpty { "none" }})",
-                    argsDeclaration,
-                )
-            }
-        }
-
         val routeArgProperties = argsDeclaration
             ?.getDeclaredProperties()
             ?.filter { prop -> prop.annotations.any { it.qualifiedName() == ROUTE_ARG_ANNOTATION } }
@@ -242,14 +231,45 @@ class NavigationExtractor(private val logger: KSPLogger) {
             }
 
         val routeArgs = routeArgProperties.map { it.simpleName.asString() }
-        // The generated factory reads every @RouteArg from the match, so each must be captured.
-        routePath?.let(::routeParams)?.let { captured ->
-            routeArgProperties.filter { it.simpleName.asString() !in captured }.forEach { prop ->
-                logger.error(
-                    "@RouteArg ${simpleName}.${prop.simpleName.asString()} is not captured by \"$routePath\"; " +
-                        "add {${prop.simpleName.asString()}} to its path or query (key={${prop.simpleName.asString()}})",
-                    prop,
-                )
+        val nullableRouteArgs = routeArgProperties
+            .filter { it.type.resolve().isMarkedNullable }
+            .map { it.simpleName.asString() }
+            .toSet()
+        val templates = listOfNotNull(routePath) + routeAliases
+        // Each template's factory binds the @RouteArgs it captures and sets the nullable ones it doesn't
+        // to null, so a non-null @RouteArg must be a required capture of every template, and a nullable
+        // one a capture of at least one.
+        if (templates.isNotEmpty()) {
+            routeArgProperties.forEach { prop ->
+                val name = prop.simpleName.asString()
+                if (name in nullableRouteArgs) {
+                    if (templates.none { name in routeParams(it) }) {
+                        logger.error(
+                            "@RouteArg ${simpleName}.$name is not captured by any of ${templates.quotedList()}; " +
+                                "add {$name} to a path or query (key={$name} or key={$name?})",
+                            prop,
+                        )
+                    }
+                } else {
+                    templates.filter { name !in requiredRouteParams(it) }.forEach { template ->
+                        logger.error(
+                            "@RouteArg ${simpleName}.$name is not captured by \"$template\"; a non-null @RouteArg must " +
+                                "be a required capture of every route: add {$name} to its path or query (key={$name}), " +
+                                "or make it a String? that only some routes capture",
+                            prop,
+                        )
+                    }
+                }
+            }
+            // A capture with no @RouteArg would be matched and dropped, and give the web router no value
+            // to build its address from.
+            templates.forEach { template ->
+                (routeParams(template) - routeArgs.toSet()).forEach { name ->
+                    logger.error(
+                        "@Route \"$template\" on $simpleName captures {$name}, which is not a @RouteArg of its Args",
+                        argsDeclaration ?: declaration,
+                    )
+                }
             }
         }
 
@@ -299,6 +319,7 @@ class NavigationExtractor(private val logger: KSPLogger) {
             edges = edges,
             routeAliases = routeAliases,
             routeDefaults = routeDefaults,
+            nullableRouteArgs = nullableRouteArgs,
         )
     }
 
@@ -442,3 +463,5 @@ class NavigationExtractor(private val logger: KSPLogger) {
         return element?.type?.resolve()?.declaration as? KSClassDeclaration
     }
 }
+
+private fun List<String>.quotedList(): String = joinToString { "\"$it\"" }

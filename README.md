@@ -337,7 +337,10 @@ router from JavaScript, where the policy returns `'push'`, `'sheet'`, `'fullScre
 
 `BasekitBrowserHistory` mirrors the router's path in `window.history`. `attach()` opens the page's
 address as a deep link unless it is the root's, over the root. Each pushed entry adds a history entry
-at its `@Route` address, with `@RouteArg` values encoded (the current address when it has no route).
+at its `@Route` address, with `@RouteArg` values encoded: the address of the template requiring the
+most captures that its args fill (the current address when none does). `BasekitWebAddresses.routes` is
+the table it matches addresses against, and the app can register more routes in it;
+`BasekitWebAddresses.url` can give a route its address before its templates do.
 Browser back closes the entries over the one it returns to, answering their responders with null, and
 entries the router closes are popped from history. Sheets and covers add no history entry. Forward is
 undone, since the entries it would return to have closed. Leave guards, scroll restoration and
@@ -383,8 +386,8 @@ the convention plugins under [`basekit-gradle-plugin/`](basekit-gradle-plugin/sr
 | Annotation | Slice | On | Purpose |
 |---|---|---|---|
 | `@Destination(webPath, navName)` | navigation | interface | Marks a navigable destination; `navName` disambiguates colliding names |
-| `@Route(path, aliases)` | navigation | `Args` class | Deep-link template, e.g. `/detail/{id}` or `/requests?request={requestId}`; `aliases` are other templates with the same params |
-| `@RouteArg` | navigation | `Args` property | Binds the path or query capture of the same name from the URL (must be `String`) |
+| `@Route(path, aliases)` | navigation | `Args` class | Deep-link template, e.g. `/detail/{id}`, `/requests?request={requestId}` or, optional, `?resource={resourceId?}`; `aliases` are other templates, each capturing every non-null `@RouteArg` |
+| `@RouteArg` | navigation | `Args` property | Binds the path or query capture of the same name from the URL: a `String` every template captures, or a `String?` that only some do (null from the others) |
 | `@NavigateTo(target)` | navigation | function | Declares a navigation edge from this action to `target` |
 | `@RedirectsTo(targets)` | navigation | interface | Destinations this `@Destination` may replace itself with, without a user action; each joins its navigator with source `<SCREEN>_REDIRECT` |
 | `@ViewModelSpec(webPath)` | viewmodel | interface | Marks a ViewModel; drives the platform binding codegen |

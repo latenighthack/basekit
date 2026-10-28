@@ -90,3 +90,14 @@ test('an alias opens its destination at the canonical address, and reload restor
   // The deep link is reported as it opens, before the root is shown.
   expect(await events(page)).toEqual(['NavigatedTo DETAIL', 'NavigatedTo HOME']);
 });
+
+test('an escaped / stays in its segment, and a String? route arg picks the template that captures it', async ({ page }) => {
+  // Home's "/from/{referrer}" captures `referrer`; the root Home, without one, keeps "/".
+  await page.goto('/from/a%2Fb');
+  await expect(page).toHaveURL(/\/from\/a%2Fb$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  // The optional query capture opens Home too, at the address of the template that fits its args.
+  await page.goto('/welcome?ref=mail');
+  await expect(page).toHaveURL(/\/from\/mail$/);
+});

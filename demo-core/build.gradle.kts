@@ -103,6 +103,12 @@ if (providers.gradleProperty("basekit.demo.uncapturedRouteArg").isPresent) {
     kotlin.sourceSets.named("commonMain") { kotlin.srcDir("src/uncapturedRouteArg/kotlin") }
 }
 
+// `-Pbasekit.demo.unboundRouteArg` adds an alias that doesn't capture a non-null route arg, which
+// scripts/verify-binding-diagnostics.py expects the navigation processor to reject.
+if (providers.gradleProperty("basekit.demo.unboundRouteArg").isPresent) {
+    kotlin.sourceSets.named("commonMain") { kotlin.srcDir("src/unboundRouteArg/kotlin") }
+}
+
 // `-Pbasekit.demo.indistinctRoute` adds a route of the same shape as detail's, which
 // scripts/verify-binding-diagnostics.py expects the navigation processor to reject.
 if (providers.gradleProperty("basekit.demo.indistinctRoute").isPresent) {

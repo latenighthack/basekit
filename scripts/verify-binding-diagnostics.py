@@ -80,6 +80,13 @@ expected = 'UncapturedRouteArgViewModel.Args.count is not captured by "/uncaptur
 if result.returncode == 0 or expected not in result.stdout or 'UncapturedRouteArgViewModel.kt:' not in result.stdout:
     raise SystemExit(result.stdout)
 print('KSP rejected a route that leaves an argument without a default.')
+# Every template must capture a non-null route arg; only a String? one may be left to some of them.
+result = subprocess.run([str(root / 'gradlew'), ':demo-core:kspCommonMainKotlinMetadata', '-Pbasekit.demo.unboundRouteArg',
+                         '--console=plain'], cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+expected = '@RouteArg UnboundRouteArgViewModel.id is not captured by "/unbound"; a non-null @RouteArg must be a required capture of every route'
+if result.returncode == 0 or expected not in result.stdout or 'UnboundRouteArgViewModel.kt:' not in result.stdout:
+    raise SystemExit(result.stdout)
+print('KSP rejected an alias that leaves a non-null route arg uncaptured.')
 # Two routes of the same shape: neither is more specific, so only registration order would choose.
 result = subprocess.run([str(root / 'gradlew'), ':demo-core:kspCommonMainKotlinMetadata', '-Pbasekit.demo.indistinctRoute',
                          '--console=plain'], cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

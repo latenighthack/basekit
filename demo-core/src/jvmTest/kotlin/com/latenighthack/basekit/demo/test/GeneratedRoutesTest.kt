@@ -34,4 +34,15 @@ class GeneratedRoutesTest {
         assertNull(demoRoutes.match("/items?item="))
         assertEquals(HomeViewModel.Args::class, demoRoutes.match("/?item=7")?.args?.let { it::class })
     }
+
+    // Each template binds the String? route arg it captures; the one that doesn't capture it sets null.
+    @Test
+    fun aNullableRouteArgIsBoundOnlyByTheTemplatesThatCaptureIt() {
+        assertEquals("a/b", (demoRoutes.match("/from/a%2Fb")?.args as HomeViewModel.Args).referrer)
+        assertEquals("mail", (demoRoutes.match("/welcome?ref=mail")?.args as HomeViewModel.Args).referrer)
+        val withoutRef = demoRoutes.match("/welcome")?.args as HomeViewModel.Args
+        assertNull(withoutRef.referrer)
+        assertEquals(false, withoutRef.welcome)
+        assertNull((demoRoutes.match("/?ref=mail")?.args as HomeViewModel.Args).referrer)
+    }
 }

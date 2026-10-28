@@ -109,7 +109,7 @@ Types use their simple Kotlin names, such as `String?` or `List<RecentMessageMod
 | `spec`                  | Qualified name of the `@ViewModelSpec` (or `@Destination`) interface.                    |
 | `navigation.args`       | The public properties of the destination's `Args` class.                                 |
 | `navigation.route`      | `@Route.path` on the `Args` class, falling back to `@Destination.webPath`.               |
-| `navigation.route_aliases` | `@Route.aliases`: other paths that open the screen, capturing the same params as `route`. Written only when there are some. |
+| `navigation.route_aliases` | `@Route.aliases`: other templates that open the screen. Each captures every non-null route arg; a nullable route arg can be captured by only some of `route` and the aliases. Written only when there are some. |
 | `navigation.route_args` | The `Args` properties marked `@RouteArg`.                                                |
 | `navigation.response`   | `R` of `RespondingDestination<Args, R>`.                                                 |
 | `redirects_to`          | `@RedirectsTo` on the destination.                                                       |

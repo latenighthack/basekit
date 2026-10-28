@@ -4,6 +4,50 @@ All notable changes to basekit are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor versions may break API).
 
+## [0.8.3] — 2026-10-28
+
+Requires deltalist 0.4.8. There is no 0.8.2.
+
+- Navigation: a screen can have one address for each way it opens. A `@RouteArg` can be a `String?`,
+  and each `@Route` template (the path and each alias) gets its own args factory. A factory binds the
+  route args its template captures and sets a `String?` one it doesn't capture to null. Every template
+  must still capture each non-null `@RouteArg`, but aliases no longer need to capture the same
+  parameters as the path.
+
+  ```kotlin
+  @Route("/burners", aliases = ["/burners/{burnerSessionId}"])
+  class Args : NavigatorArgs() {
+      @RouteArg var burnerSessionId: String? by storedProperty()
+  }
+  ```
+
+  The catalog's `route_aliases` and `route_args` follow the same rule.
+- Navigation: a query capture can be optional, written `key={name?}`. The template also matches a URL
+  without the key, and the `String?` argument is null. Only a query capture can be optional. Optional
+  captures don't make a template more specific, and they aren't part of the shape the build compares,
+  so `/burners` and `/burners?burner={id?}` on two destinations are reported as the same shape.
+- Navigation: `Route.match` and `RouteTable.match` decode each path segment after splitting the path at
+  `/` (`%XX` is an escaped byte; `+` stays a `+`), so a path capture can hold an escaped `/`, `?` or
+  `#`. Pass the address as it appears in a URL. A path that was decoded before it was passed in is
+  decoded again, which changes only a value holding a `%` followed by two hex digits. A literal
+  segment is compared with the decoded segment.
+- Navigation: `Route.address(values)` builds a template's address from capture values, escaping each
+  as `encodeURIComponent` does. It is null when a path or required query capture has no value, and
+  leaves out an optional query capture without one.
+- Navigation: a `@Route` capture that is not a `@RouteArg` of its `Args` is a build error. The route
+  table dropped its value, and the web router read it from `Args` to build the address.
+- Navigation (web): an entry's address comes from the template requiring the most captures whose
+  required captures all have a value in its args; the path comes before an alias requiring as many.
+  An entry no template fits has no address and keeps the current one, as one without a `@Route` does.
+  A `String?` route arg that was never set counts as having no value, so `Args()` built without it
+  still gets an address.
+- Navigation (web): `BasekitWebAddresses` (Kotlin only) holds what the web router matches and builds
+  addresses with. `BasekitWebAddresses.routes` is the `RouteTable` that `open`, `root` and
+  `BasekitBrowserHistory` match against; it holds `GeneratedRoutes`, and an app can register addresses
+  in it that its `@Route`s don't declare. `BasekitWebAddresses.url` is an optional function that gives
+  a route its address before its `@Route` templates do. The web router no longer decodes an address's
+  path before matching it; `Route` does.
+
 ## [0.8.1] — 2026-10-27
 
 Requires deltalist 0.4.8.

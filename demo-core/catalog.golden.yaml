@@ -44,7 +44,8 @@ screens:
         welcome: Boolean
         referrer: String?
       route: "/"
-      route_args: []
+      route_aliases: ["/from/{referrer}", "/welcome?ref={referrer?}"]
+      route_args: [referrer]
       response: null
 
     state:

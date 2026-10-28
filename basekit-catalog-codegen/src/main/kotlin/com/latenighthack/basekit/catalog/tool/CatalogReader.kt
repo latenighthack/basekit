@@ -89,16 +89,32 @@ object CatalogReader {
                 if (aliases.isNotEmpty() && route == null) {
                     throw CatalogException("$path.navigation.route_aliases: needs a route")
                 }
-                // basekit registers an alias with the route's args factory, which binds every route arg.
-                aliases.filter { route != null && routeParams(it) != routeParams(route) }.forEach {
-                    throw CatalogException(
-                        "$path.navigation.route_aliases: \"$it\" must capture the same parameters as \"$route\"",
-                    )
+                val args = fields(nav["args"], "$path.navigation.args")
+                val routeArgs = strings(nav["route_args"], "$path.navigation.route_args")
+                // basekit gives each template its own args factory: a non-null route arg must be a
+                // required capture of every template, and a nullable one a capture of at least one.
+                if (route != null) {
+                    val templates = listOf(route to "$path.navigation.route") +
+                        aliases.map { it to "$path.navigation.route_aliases" }
+                    routeArgs.forEach { arg ->
+                        val isNullable = args.firstOrNull { it.name == arg }?.type?.trim()?.endsWith("?") == true
+                        if (isNullable) {
+                            if (templates.none { (template, _) -> arg in routeParams(template, required = false) }) {
+                                throw CatalogException("$path.navigation.route_args: \"$arg\" is not captured by the route or an alias")
+                            }
+                        } else {
+                            templates.firstOrNull { (template, _) -> arg !in routeParams(template, required = true) }?.let { (template, at) ->
+                                throw CatalogException(
+                                    "$at: \"$template\" must capture \"$arg\", a non-null route arg, as {$arg} or key={$arg}",
+                                )
+                            }
+                        }
+                    }
                 }
                 Navigation(
-                    args = fields(nav["args"], "$path.navigation.args"),
+                    args = args,
                     route = route,
-                    routeArgs = strings(nav["route_args"], "$path.navigation.route_args"),
+                    routeArgs = routeArgs,
                     response = nav["response"] as? String,
                     routeAliases = aliases,
                 )
@@ -146,8 +162,12 @@ object CatalogReader {
             )
         }
 
-        private fun routeParams(template: String): Set<String> =
-            Regex("""\{([^/}]+)}""").findAll(template).map { it.groupValues[1] }.toSet()
+        /** The names [template] captures; with [required], leaving out optional `key={name?}` captures. */
+        private fun routeParams(template: String, required: Boolean): Set<String> =
+            Regex("""\{([^/}]+)}""").findAll(template).map { it.groupValues[1] }
+                .filterNot { required && it.endsWith("?") }
+                .map { it.removeSuffix("?") }
+                .toSet()
 
         private fun type(name: String, body: Map<*, *>, path: String): CatalogTypeDef = known(body, TYPE_KEYS, path).let { CatalogTypeDef(
             name = name,

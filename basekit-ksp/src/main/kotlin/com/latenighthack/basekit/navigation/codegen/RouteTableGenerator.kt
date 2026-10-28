@@ -6,9 +6,12 @@ import com.google.devtools.ksp.processing.Dependencies
 /**
  * Emits `GeneratedRoutes.register(table)`, which registers one deep-link route per `@Route`
  * destination, plus one per `@Route` alias, into a [com.latenighthack.basekit.navigation.RouteTable].
- * Properties annotated `@RouteArg` are bound from the matched URL's path and query captures
- * (String-valued in this slice). Every other argument gets its [DestinationInfo.routeDefaults] value,
- * so a destination opened from an address never reads an unset argument on any platform.
+ * Each template's factory binds the `@RouteArg` properties it captures from the matched URL's path and
+ * query (String-valued in this slice): a non-null one with `params.getValue`, a `String?` one with
+ * `params[...]`, which is null when an optional `key={name?}` capture is missing. A `String?` route arg
+ * the template doesn't capture is set to null. Every other argument gets its
+ * [DestinationInfo.routeDefaults] value, so a destination opened from an address never reads an unset
+ * argument on any platform.
  */
 class RouteTableGenerator(
     private val codeGenerator: CodeGenerator,
@@ -28,19 +31,22 @@ class RouteTableGenerator(
             appendLine("    public fun register(table: RouteTable) {")
             for (destination in routed) {
                 val argsType = destination.argsQualifiedName!!
-                // Each alias registers the same factory as the destination's own path.
                 for (path in listOf(destination.routePath!!) + destination.routeAliases) {
-                    if (destination.routeArgs.isEmpty() && destination.routeDefaults.isEmpty()) {
+                    val captured = routeParams(path)
+                    val readsParams = destination.routeArgs.any { it in captured }
+                    val assignments = destination.routeArgs.map { arg ->
+                        when {
+                            arg !in captured -> "$arg = null"
+                            arg in destination.nullableRouteArgs -> "$arg = params[\"$arg\"]"
+                            else -> "$arg = params.getValue(\"$arg\")"
+                        }
+                    } + destination.routeDefaults.map { (arg, value) -> "$arg = $value" }
+                    if (assignments.isEmpty()) {
                         appendLine("        table.register(\"$path\") { _ -> $argsType() }")
                     } else {
-                        appendLine("        table.register(\"$path\") { params ->")
+                        appendLine("        table.register(\"$path\") { ${if (readsParams) "params" else "_"} ->")
                         appendLine("            $argsType().apply {")
-                        for (arg in destination.routeArgs) {
-                            appendLine("                $arg = params.getValue(\"$arg\")")
-                        }
-                        for ((arg, value) in destination.routeDefaults) {
-                            appendLine("                $arg = $value")
-                        }
+                        assignments.forEach { appendLine("                $it") }
                         appendLine("            }")
                         appendLine("        }")
                     }

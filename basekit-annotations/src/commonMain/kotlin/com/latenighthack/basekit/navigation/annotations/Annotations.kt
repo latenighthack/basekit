@@ -32,17 +32,25 @@ public annotation class HostedComponent(val navName: String = "")
  * Declares the deep-link template for a destination's `Args` type, e.g. `/detail/{id}`. A template can
  * also capture query parameters: each `key={name}` part after `?` binds the URL's `key` parameter, so
  * `/requests?request={requestId}` opens for `/requests?request=7` with `requestId` = `7`. It opens only
- * when every captured key has a non-empty value; other query parameters are ignored. When several
- * templates match, one capturing more query parameters wins, so `/requests` and
+ * when every captured key has a non-empty value, except a `key={name?}` capture, which is optional and
+ * leaves its `String?` argument null when the key is missing. Other query parameters are ignored. When
+ * several templates match, one with more required query captures wins, so `/requests` and
  * `/requests?request={requestId}` can open different destinations.
  *
- * @param aliases other templates that open the same destination, such as an old URL kept working. Each
- *   must capture the same `{params}` as [path], from its path or its query.
+ * @param aliases other templates that open the same destination, such as an old URL kept working or an
+ *   address for one way of opening it. Every template captures each non-null [RouteArg]; a `String?`
+ *   [RouteArg] can be captured by only some of them, and the others set it to null. The web router
+ *   gives an entry the address of the template requiring the most captures whose required captures
+ *   all have a value.
  */
 @Target(AnnotationTarget.CLASS)
 public annotation class Route(val path: String = "", val aliases: Array<String> = [])
 
-/** Marks an `Args` property as a route parameter bound from the matched URL's path or query capture of the same name. */
+/**
+ * Marks an `Args` property as a route parameter bound from the matched URL's path or query capture of
+ * the same name. It is a `String`, which every template must capture (not as an optional `{name?}`), or
+ * a `String?`, which only some templates need capture; a template that doesn't sets it to null.
+ */
 @Target(AnnotationTarget.PROPERTY)
 public annotation class RouteArg
 

@@ -348,6 +348,24 @@ class CatalogCodegenTest {
     }
 
     @Test
+    fun `a nullable route arg is captured by some templates and set to null by the others`() {
+        val burners = catalog.replace(
+            "args: {}\n      route: \"/\"\n      route_args: []",
+            "args:\n        burnerSessionId: String?\n        resourceId: String?\n      route: \"/\"\n" +
+                "      route_aliases: [\"/burners/{burnerSessionId}?resource={resourceId?}\"]\n      route_args: [burnerSessionId, resourceId]",
+        )
+        val spec = CatalogCodegen.generate(CatalogReader.read(burners)).first { it.path == "com/example/HomeViewModel.kt" }.content
+        assertTrue("@Route(\"/\", aliases = [\"/burners/{burnerSessionId}?resource={resourceId?}\"])" in spec, spec)
+        assertTrue("@RouteArg\n        var burnerSessionId: String? by storedProperty()" in spec, spec)
+        assertFailsWith<CatalogException> { CatalogReader.read(burners.replace("?resource={resourceId?}", "")) }
+            .also { assertTrue("screens.Home.navigation.route_args" in it.message!!, it.message) }
+        // A non-null route arg can't be an optional capture.
+        assertFailsWith<CatalogException> {
+            CatalogReader.read(catalog.replace("route: \"/detail/{id}\"\n", "route: \"/detail/{id}\"\n      route_aliases: [\"/items?item={id?}\"]\n"))
+        }.also { assertTrue("screens.Detail.navigation.route_aliases" in it.message!!, it.message) }
+    }
+
+    @Test
     fun `a sectioned list declares its rows so every platform can bind them`() {
         val sectioned = catalog.replace(
             "      items:\n        kind: flat\n        element: FeedRow\n        rows: [FeedItem, FeedEmpty]",

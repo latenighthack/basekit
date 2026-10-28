@@ -48,19 +48,53 @@ class ReactNavigationGeneratorTest {
     fun buildsEachRoutedAddressFromItsArgs() {
         val source = render()
         assertContains(source, "    is BasekitRoute.Home -> \"/\"\n")
-        assertContains(source, "    is BasekitRoute.Room -> \"/rooms/\${basekitEncode(route.args.roomId)}?tab=\${basekitEncode(route.args.tab)}\"\n")
+        assertContains(source, "    val room: List<Route> = listOf(Route.parse(\"/rooms/{roomId}?tab={tab}\"))\n")
+        assertContains(source, "    is BasekitRoute.Room -> basekitAddress(BasekitRouteTemplates.room, \"roomId\" to route.args.roomId, \"tab\" to route.args.tab)\n")
         // The picker has no @Route, so it keeps the current address.
         assertContains(source, "    else -> null\n")
-        assertContains(source, "val match = basekitRoutes.match(basekitDecodePath(url)) ?: return null")
-        assertContains(source, "private val basekitRoutes: RouteTable by lazy { RouteTable().also { GeneratedRoutes.register(it) } }")
+        assertContains(source, "internal fun basekitUrl(route: BasekitRoute): String? = BasekitWebAddresses.url?.invoke(route) ?: when (route) {")
+    }
+
+    // A destination opened without some of its arguments takes the address of the template that
+    // captures them all, the one requiring the most captures first.
+    @Test
+    fun triesTheTemplateRequiringTheMostCapturesFirst() {
+        val burners = destination("BurnersViewModel", "sample.BurnersViewModel", "burners").copy(
+            argsQualifiedName = "sample.BurnersViewModel.Args",
+            routePath = "/burners",
+            routeAliases = listOf("/burners/{burnerSessionId}", "/burners?from={from?}"),
+            routeArgs = listOf("burnerSessionId", "from"),
+            nullableRouteArgs = setOf("burnerSessionId", "from"),
+        )
+        val source = render(listOf(home, room, picker, burners))
+        assertContains(
+            source,
+            "    val burners: List<Route> = listOf(Route.parse(\"/burners/{burnerSessionId}\"), Route.parse(\"/burners\"), Route.parse(\"/burners?from={from?}\"))\n",
+        )
+        assertContains(source, "    is BasekitRoute.Burners -> basekitAddress(BasekitRouteTemplates.burners, " +
+            "\"burnerSessionId\" to basekitOptional { route.args.burnerSessionId }, \"from\" to basekitOptional { route.args.from })\n")
+        // A String? route arg that was never set has no value, so the entry still gets an address.
+        assertContains(source, "private inline fun basekitOptional(read: () -> String?): String? =\n    try { read() } catch (_: IllegalStateException) { null }\n")
+    }
+
+    // Addresses are matched as they are, still escaped: `Route` decodes each segment after splitting
+    // the path, so an escaped `/` stays in its segment. The app can add routes and addresses.
+    @Test
+    fun opensAddressesThroughATableTheAppCanExtend() {
+        val source = render()
+        assertContains(source, "public object BasekitWebAddresses {\n    public val routes: RouteTable = RouteTable().also { GeneratedRoutes.register(it) }\n    public var url: ((BasekitRoute) -> String?)? = null\n}")
+        assertContains(source, "    val match = BasekitWebAddresses.routes.match(url) ?: return null\n")
+        assertFalse("decodeURIComponent" in source)
     }
 
     @Test
-    fun withoutRoutesNoAddressOpensAnything() {
+    fun withoutRoutesOnlyTheAppsRoutesOpenAnything() {
         val unrouted = listOf(home.copy(routePath = null), room.copy(routePath = null, routeArgs = emptyList()))
         val source = render(unrouted)
         assertFalse("GeneratedRoutes.register" in source)
-        assertContains(source, "internal fun basekitRoute(url: String): BasekitRoute? {\n    return null\n}")
+        assertFalse("BasekitRouteTemplates" in source)
+        assertContains(source, "    public val routes: RouteTable = RouteTable()\n")
+        assertContains(source, "internal fun basekitUrl(route: BasekitRoute): String? = BasekitWebAddresses.url?.invoke(route) ?: when (route) {\n    else -> null\n}")
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.latenighthack.basekit.navigation.NavigatorArgs
 import com.latenighthack.basekit.navigation.annotations.Destination
 import com.latenighthack.basekit.navigation.annotations.NavigateTo
 import com.latenighthack.basekit.navigation.annotations.Route
+import com.latenighthack.basekit.navigation.annotations.RouteArg
 import com.latenighthack.basekit.viewmodel.StatefulViewModel
 import com.latenighthack.basekit.viewmodel.ViewModel
 import com.latenighthack.basekit.viewmodel.annotations.ViewModelInject
@@ -33,10 +34,15 @@ interface HomeViewModel :
     NavigationDestination<HomeViewModel.Args>,
     ViewModel<HomeViewModel.State> {
 
-    // "/" captures nothing, so the route sets `welcome` to false and `referrer` to null.
-    @Route("/")
+    // "/" captures nothing, so it sets `welcome` to false and `referrer` to null. `referrer` is a
+    // String? route arg, so the aliases may capture it: "/from/{referrer}" in its path and
+    // "/welcome?ref={referrer?}" optionally in its query. Home with a referrer has the address
+    // "/from/{referrer}", the template requiring the most captures; without one, "/".
+    @Route("/", aliases = ["/from/{referrer}", "/welcome?ref={referrer?}"])
     class Args : NavigatorArgs() {
         var welcome: Boolean by storedProperty()
+
+        @RouteArg
         var referrer: String? by storedProperty()
     }
 

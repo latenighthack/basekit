@@ -165,7 +165,7 @@ automatically Serializable. Current Apple arguments use in-memory storage; that
 does not establish process restoration. Prove the chosen wrapper's transport or
 provide a narrow adapter before claiming the Args work on every target.
 
-The current `@RouteArg` binding requires `String`. Confine any such generated
+The current `@RouteArg` binding requires `String` or `String?`. Confine any such generated
 encoded field to a route adapter, immediately decode it into `ItemId`, and pass
 only typed arguments to the application factory. Use distinct adapter types if
 needed; never add a public raw-string ID overload or weaken domain Args to satisfy
@@ -196,11 +196,29 @@ a form value (`+` is a space, `%XX` an escaped byte). The template matches only
 when every key it captures has a non-empty value. Query parameters it does not
 name are ignored, and a repeated key gives its first value.
 
+A `key={name?}` capture is optional: the template also matches a URL without the
+key, and leaves the `String?` argument null. Only a query capture can be optional.
+
+```kotlin
+@Route("/agents/{agentId}/connections/{connectionId}?resource={resourceId?}")
+class Args() : NavigatorArgs() {
+    @RouteArg var agentId: String by storedProperty()
+    @RouteArg var connectionId: String by storedProperty()
+    @RouteArg var resourceId: String? by storedProperty() // null without ?resource=
+}
+```
+
+`RouteTable.match` takes the address as it appears in a URL. It splits the path
+at `/` and then decodes each segment (`%XX` is an escaped byte; `+` stays a `+`),
+so a path capture can hold an escaped `/`, `?` or `#`: `/files/a%2Fb` captures
+`a/b` for `/files/{name}`. `Route.address(values)` builds the address the other
+way, escaping each value as `encodeURIComponent` does.
+
 When several templates match one URL, the most specific one opens, whatever order
 they were registered in. At the first path segment where two templates differ, a
 literal wins over a parameter: `/agents/add` opens the add screen and
 `/agents/{agentId}` every other agent. With the same literals and parameters in the
-same places, the one capturing more query parameters wins, so a plain `/requests`,
+same places, the one with more required query captures wins, so a plain `/requests`,
 `/requests?request={requestId}` and `/requests?task={taskId}` can open three
 destinations.
 
@@ -208,12 +226,15 @@ The build fails on templates that can match one address with neither more
 specific: two of the same shape, such as `/agents/{agentId}` and `/agents/{id}`,
 and two whose paths cross, each literal where the other has a parameter, such as
 `/teams/new/{section}` and `/teams/{teamId}/settings` (both match
-`/teams/new/settings`). Make one literal wherever the other is. Templates on the
+`/teams/new/settings`). Make one literal wherever the other is. Optional captures
+don't count toward a template's shape, so `/burners` and `/burners?burner={id?}`
+have the same shape. Templates on the
 same path that capture different query keys are allowed: a URL carrying both,
 such as `/requests?request=r1&task=t1`, opens the one the generated
 `GeneratedRoutes` registers first, which is by destination name. A query part that is not
-`key={name}`, a name captured twice, or a `@RouteArg` its route does not capture
-is a build error.
+`key={name}` or `key={name?}`, a `{name?}` in the path, a name captured twice, a
+capture that is not a `@RouteArg`, or a `@RouteArg` its routes do not capture is a
+build error.
 
 A route sets every argument of its `Args`, so a destination opened from its address
 never reads an unset one. An argument it does not capture gets a default: `false`
@@ -228,10 +249,26 @@ class Args() : NavigatorArgs() {
 }
 ```
 
-`GeneratedRoutes` registers each alias with the same args factory as the path.
-An alias must capture the same `{params}` as the path, from its path or its
-query, because the factory binds every `@RouteArg` from the match; the build fails otherwise. The catalog records
-aliases as `route_aliases`.
+`GeneratedRoutes` registers each template, the path and each alias, with its own
+args factory. A factory binds the `@RouteArg`s its template captures and sets a
+`String?` one it does not capture to null. So every template must capture each
+non-null `@RouteArg` (not as an optional `{name?}`), and a `String?` one only needs
+capturing by some of them; the build fails otherwise. This gives a screen one
+address for each way it opens:
+
+```kotlin
+// The list opens at /burners, and one burner's chat at /burners/{burnerSessionId}.
+@Route("/burners", aliases = ["/burners/{burnerSessionId}"])
+class Args() : NavigatorArgs() {
+    @RouteArg var burnerSessionId: String? by storedProperty()
+}
+```
+
+The web router gives an entry the address of the template requiring the most
+captures whose required captures all have a value in its args, and the path
+before an alias that requires as many. Above, a burner's chat is
+`/burners/b1` and the list `/burners`. An entry no template fits has no address,
+and keeps the current one. The catalog records aliases as `route_aliases`.
 
 Tokens, proofs, SDK objects, pending continuations and arbitrary return URLs do
 not belong in navigation arguments. Use typed safe-return destinations and explicit
@@ -416,10 +453,17 @@ The generated web router (`basekit.viewmodel.react`) leaves one owner of history
 history entry at its `@Route` address; browser back closes the entries over the
 one it returns to, answering their responders with null; and entries the router
 closes are popped from history. Sheets and covers add no history entry, and
-forward is undone because the entries it would return to have closed. A path
-`@RouteArg` cannot contain `/`: the browser address decodes it into another
-segment. Query-only selection, replace, leave guards, scroll restoration and
-modified clicks are still the host's. See the
+forward is undone because the entries it would return to have closed. Addresses
+are matched still escaped, so a path `@RouteArg` can contain `/`.
+
+`BasekitWebAddresses` (Kotlin only) holds what the web router matches addresses
+against and builds them from. `BasekitWebAddresses.routes` is the `RouteTable`
+that `open`, `root` and the history match against; it holds `GeneratedRoutes`,
+and the app can register addresses in it that its `@Route`s don't declare.
+`BasekitWebAddresses.url` is an optional function that gives a route its
+address before its `@Route` templates do; returning null uses them. Set both
+before the history attaches. Query-only selection, replace, leave guards,
+scroll restoration and modified clicks are still the host's. See the
 [README](../../README.md#web-navigation).
 
 ## Test the graph and the actual hosts
