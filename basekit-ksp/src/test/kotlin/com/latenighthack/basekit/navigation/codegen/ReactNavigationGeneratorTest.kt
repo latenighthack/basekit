@@ -131,7 +131,41 @@ class ReactNavigationGeneratorTest {
         assertContains(sync, "window.history.pushState(state(index + 1), \"\", basekitUrl(path[index].route) ?: currentAddress())")
         val popped = render().substringAfter("private fun popped(state: dynamic) {").substringBefore("\n    }\n")
         assertContains(popped, "if (traversing) { traversing = false; sync(); return }")
-        assertContains(popped, "depth < mirrored.size -> { mirrored = mirrored.take(depth); router.reconcilePath(mirrored.toTypedArray()) }")
+        // A responder answered while the path is half closed must not push a history entry.
+        assertContains(popped, "mirrored = mirrored.take(depth); matchingHistory { router.reconcilePath(mirrored.toTypedArray()) }")
+    }
+
+    @Test
+    fun browserForwardReopensWhatBrowserBackClosed() {
+        val popped = render().substringAfter("private fun popped(state: dynamic) {").substringBefore("\n    }\n")
+        // Back keeps the entries it closes, in front of those an earlier back kept, before closing them.
+        val kept = popped.indexOf("forward = path.filter { it.id in mirrored.drop(depth) } + forward")
+        assertTrue(kept in 0 until popped.indexOf("router.reconcilePath("))
+        // Forward to entries back closed reopens them; history already holds them, so nothing is pushed.
+        assertContains(popped, "depth - mirrored.size in 1..forward.size -> {")
+        assertContains(popped, "matchingHistory { router.router.reopen(reopened) }")
+        assertFalse("pushState" in popped)
+        // Forward past them is still undone.
+        assertTrue(popped.indexOf("depth - mirrored.size in 1..forward.size") < popped.indexOf("depth > mirrored.size -> { traversing = true"))
+        val sync = render().substringAfter("private fun sync() {").substringBefore("\n    }\n")
+        assertContains(sync, "if (traversing || applying) return")
+        // Entries the router closes itself, and a new push, drop what forward could reopen.
+        assertContains(sync, "mirrored = mirrored.take(kept); forward = emptyList(); traversing = true")
+        assertContains(sync, "if (kept < path.size) forward = emptyList()")
+    }
+
+    @Test
+    fun aReopenedEntryIsNewAndARespondingOneDiscardsItsResult() {
+        val source = render()
+        val reopen = source.substringAfter("public fun reopen(entries: List<BasekitNavigationEntry>) {").substringBefore("\n    }\n")
+        assertContains(reopen, "if (closed || entries.isEmpty()) return")
+        assertContains(reopen, "val responder: NavigationResponder<*>? = if (responds(entry.route)) BasekitDiscardingResponder<Any>() else null")
+        assertContains(reopen, "val route = attach(responder, entry.route, entryId)")
+        assertContains(reopen, "topRouter.reportedEntryIds += entryId; reportShown(route)")
+        assertContains(reopen, "pathEntries.add(BasekitNavigationEntry(entryId, basekitNextId(), route, entry.edge, entry.context, entry.decision))")
+        val responds = source.substringAfter("private fun responds(route: BasekitRoute): Boolean = when (route) {").substringBefore("\n    }\n")
+        assertContains(responds, "is BasekitRoute.Picker -> true")
+        assertFalse("BasekitRoute.Room" in responds)
     }
 
     @Test

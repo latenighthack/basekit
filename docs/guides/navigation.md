@@ -452,8 +452,13 @@ The generated web router (`basekit.viewmodel.react`) leaves one owner of history
 `BasekitBrowserHistory` mirrors the top router's path. Each pushed entry adds a
 history entry at its `@Route` address; browser back closes the entries over the
 one it returns to, answering their responders with null; and entries the router
-closes are popped from history. Sheets and covers add no history entry, and
-forward is undone because the entries it would return to have closed. Addresses
+closes are popped from history. Sheets and covers add no history entry. Browser
+forward reopens the entries browser back closed (`BasekitNavigationRouter.reopen`):
+the same route, args, edge and decision, as new entries with new view models, so
+an entry without a `@Route` comes back too. A reopened responding destination gets
+a responder that discards its result; the original caller already got null on
+back. Pushing an entry after back drops them, as it drops the browser's forward
+entries, and forward to entries the router closed itself is undone. Addresses
 are matched still escaped, so a path `@RouteArg` can contain `/`.
 
 `BasekitWebAddresses` (Kotlin only) holds what the web router matches addresses

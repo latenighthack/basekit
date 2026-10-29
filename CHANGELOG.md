@@ -4,6 +4,18 @@ All notable changes to basekit are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor versions may break API).
 
+## [0.8.4] — 2026-10-29
+
+- Web navigation: browser forward reopens the entries browser back closed, instead of being undone.
+  `BasekitBrowserHistory` keeps each entry back closes, and forward pushes a new entry with the same
+  route, args, edge, context and decision, with a new id, owner and view model. This works for
+  entries without a `@Route`. Back still answers responders with null; a reopened responding
+  destination gets a responder that discards its result, as a deep link does. Pushing an entry after
+  back drops the entries forward could reopen, and forward to entries the router closed itself is
+  still undone. The generated router has a new `reopen(entries)` for this.
+- Web navigation: browser back over a responding entry with another entry under it no longer pushes
+  and pops a stray history entry, which dropped the browser's forward entries.
+
 ## [0.8.3] — 2026-10-28
 
 Requires deltalist 0.4.8. There is no 0.8.2.

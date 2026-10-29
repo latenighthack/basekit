@@ -15,15 +15,17 @@ private class BrowserViewModelFactories(private val store: DemoStore = InMemoryD
 
 /**
  * The generated web router over the demo graph, with its destinations and a home root, for the browser
- * acceptance fixture. The picker opens as a sheet and detail is pushed. [events] records what the
- * router reports to its navigation observer.
+ * acceptance fixture. The picker opens as a sheet, or is pushed when [pushPicker] is set, and detail is
+ * pushed. [events] records what the router reports to its navigation observer.
  */
 @kotlin.js.JsExport
 class BrowserNavigationProbe {
     private val recorded = mutableListOf<String>()
+    /** Push the picker, a responding destination without a `@Route`, instead of showing it as a sheet. */
+    var pushPicker: Boolean = false
     private val router = BasekitNavigationRouter(
         policy = { request ->
-            if (request.route is BasekitRoute.Picker) BasekitNavigationDecision(BasekitPresentation.Sheet) else BasekitNavigationDecision()
+            if (request.route is BasekitRoute.Picker && !pushPicker) BasekitNavigationDecision(BasekitPresentation.Sheet) else BasekitNavigationDecision()
         },
         navigationObserver = NavigationObserver { event ->
             recorded += when (event) {

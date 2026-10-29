@@ -342,9 +342,11 @@ most captures that its args fill (the current address when none does). `BasekitW
 the table it matches addresses against, and the app can register more routes in it;
 `BasekitWebAddresses.url` can give a route its address before its templates do.
 Browser back closes the entries over the one it returns to, answering their responders with null, and
-entries the router closes are popped from history. Sheets and covers add no history entry. Forward is
-undone, since the entries it would return to have closed. Leave guards, scroll restoration and
-modified clicks stay with the host.
+entries the router closes are popped from history. Sheets and covers add no history entry. Browser
+forward reopens the entries browser back closed, with the same route and args, including entries
+without a `@Route`; each is a new entry with a new view model, and a responding one gets a responder
+that discards its result. Pushing an entry after back drops them. Forward to entries the router
+closed itself is undone. Leave guards, scroll restoration and modified clicks stay with the host.
 
 ## Wiring KSP manually
 

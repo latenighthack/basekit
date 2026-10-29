@@ -101,3 +101,90 @@ test('an escaped / stays in its segment, and a String? route arg picks the templ
   await page.goto('/welcome?ref=mail');
   await expect(page).toHaveURL(/\/from\/mail$/);
 });
+
+// Browser forward reopens what browser back closed: the same route and args, as a new entry with a
+// new view model.
+const entryId = locator => locator.getAttribute('data-basekit-entry');
+// Clicks a button of the hidden home screen, as its navigator would push over the top entry.
+const clickHome = (page, name) => page.evaluate(name => [...document.querySelectorAll('#navigation [data-basekit-screen="home"] button')]
+  .find(button => button.textContent === name).click(), name);
+
+test('browser forward reopens the entry browser back closed, as a new entry', async ({ page }) => {
+  await page.goto('/');
+  await nav(page).getByRole('button', { name: 'Open detail' }).click();
+  const detail = screen(page, 'detail');
+  await expect(detail.locator('.detail-id')).toHaveText('first');
+  const before = await entryId(detail);
+  await page.goBack();
+  await expect(detail).toHaveCount(0);
+  await page.goForward();
+  await expect(detail.locator('.detail-id')).toHaveText('first');
+  await expect(page).toHaveURL(/\/detail\/first$/);
+  expect(await entryId(detail)).not.toBe(before);
+  expect(await events(page)).toEqual(['NavigatedTo HOME', 'NavigatedTo DETAIL', 'Closed DETAIL', 'NavigatedTo DETAIL']);
+  // The reopened entry is mirrored like any other: back closes it again.
+  await page.goBack();
+  await expect(detail).toHaveCount(0);
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test('forward reopens each entry a multi-step back closed, in order', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => { window.navigation.pushPicker = true; });
+  await nav(page).getByRole('button', { name: 'Open detail' }).click();
+  await expect(screen(page, 'detail')).toBeVisible();
+  await clickHome(page, 'Pick');
+  await expect(screen(page, 'picker')).toBeVisible();
+  await page.evaluate(() => window.history.go(-2));
+  await expect(screen(page, 'detail')).toHaveCount(0);
+  await expect(screen(page, 'picker')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/$/);
+  await page.goForward();
+  await expect(screen(page, 'detail').locator('.detail-id')).toHaveText('first');
+  await expect(screen(page, 'picker')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/detail\/first$/);
+  await page.goForward();
+  await expect(screen(page, 'picker')).toBeVisible();
+  await expect(screen(page, 'detail')).toBeHidden();
+  // The picker has no @Route, so it kept the address under it.
+  await expect(page).toHaveURL(/\/detail\/first$/);
+});
+
+test('a reopened responding entry without a @Route runs, and its result is discarded', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => { window.navigation.pushPicker = true; });
+  await nav(page).getByRole('button', { name: 'Pick' }).click();
+  const picker = screen(page, 'picker');
+  await expect(picker).toBeVisible();
+  const before = await entryId(picker);
+  await page.goBack();
+  await expect(picker).toHaveCount(0);
+  // Back answered the caller with null.
+  await expect(nav(page).locator('#home-feed')).toHaveText('2');
+  await page.goForward();
+  await expect(picker).toBeVisible();
+  expect(await entryId(picker)).not.toBe(before);
+  await picker.getByRole('button', { name: 'Bananas' }).click();
+  await expect(picker).toHaveCount(0);
+  await expect(screen(page, 'home')).toBeVisible();
+  // Nobody waits for the reopened picker's choice.
+  await expect(nav(page).locator('#home-feed')).toHaveText('2');
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test('a push after back drops the entries forward would have reopened', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => { window.navigation.pushPicker = true; });
+  await nav(page).getByRole('button', { name: 'Open detail' }).click();
+  await expect(screen(page, 'detail')).toBeVisible();
+  await page.goBack();
+  await expect(screen(page, 'detail')).toHaveCount(0);
+  await nav(page).getByRole('button', { name: 'Pick' }).click();
+  await expect(screen(page, 'picker')).toBeVisible();
+  await page.goForward();
+  await expect(screen(page, 'picker')).toBeVisible();
+  await expect(screen(page, 'detail')).toHaveCount(0);
+  await page.goBack();
+  await expect(screen(page, 'picker')).toHaveCount(0);
+  await expect(screen(page, 'home')).toBeVisible();
+});
