@@ -1,7 +1,8 @@
 import com.latenighthack.basekit.gradle.plugin.basekitProcessor
-import org.gradle.api.file.DuplicatesStrategy
-import org.gradle.api.tasks.Copy
+import com.latenighthack.basekit.gradle.plugin.registerBasekitAppleSwiftTasks
+import com.latenighthack.basekit.gradle.plugin.wireKspAfterCommonMetadata
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import java.util.Locale
 
@@ -26,44 +27,15 @@ extensions.configure<KotlinMultiplatformExtension> {
     }
 
     targets.configureEach {
-        val native = name.startsWith("ios") || name.startsWith("macos") || name.startsWith("tvos") || name.startsWith("watchos")
-        if (name == "metadata" || !(native || name.startsWith("android") || name == "js")) return@configureEach
+        val apple = this is KotlinNativeTarget && konanTarget.family.isAppleFamily
+        if (name == "metadata" || !(apple || name.startsWith("android") || name == "js")) return@configureEach
         val configuration = "ksp" + name.replaceFirstChar { it.titlecase(Locale.US) }
         project.dependencies.add(configuration, basekitProcessor(":basekit-ksp", "basekit-ksp"))
     }
 }
 
-tasks.matching { it.name.startsWith("ksp") && it.name != "kspCommonMainKotlinMetadata" }
-    .configureEach { dependsOn(tasks.matching { it.name == "kspCommonMainKotlinMetadata" }) }
-
-val verifyAppleSwift = if ("verifyBasekitAppleSwiftIsUniversal" in tasks.names) {
-    tasks.named("verifyBasekitAppleSwiftIsUniversal")
-} else {
-    tasks.register("verifyBasekitAppleSwiftIsUniversal") {
-        val kspDir = layout.buildDirectory.dir("generated/ksp").get().asFile
-        dependsOn(tasks.matching { it.name.startsWith("ksp") })
-        doLast {
-            val divergent = kspDir.walkTopDown().filter { it.isFile && it.extension == "swift" }
-                .groupBy { it.name }.filterValues { copies -> copies.map { it.readText() }.distinct().size > 1 }
-            if (divergent.isNotEmpty()) throw GradleException("Generated Swift differs between Apple targets for ${divergent.keys.sorted()}")
-        }
-    }
-}
-
-val collectAppleSwift = if ("collectBasekitAppleSwift" in tasks.names) {
-    tasks.named<Sync>("collectBasekitAppleSwift")
-} else {
-    // Sync, not Copy: a file whose spec was removed must leave the collected directory too.
-    tasks.register<Sync>("collectBasekitAppleSwift") {
-        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-        includeEmptyDirs = false
-        into(layout.buildDirectory.dir("generated/basekit-apple/swift"))
-    }
-}
-collectAppleSwift.configure {
-    dependsOn(verifyAppleSwift, tasks.matching { it.name.startsWith("ksp") })
-    from(layout.buildDirectory.dir("generated/ksp")) { include("**/*.swift"); eachFile { path = name } }
-}
+wireKspAfterCommonMetadata()
+registerBasekitAppleSwiftTasks()
 
 afterEvaluate {
     // Generation must run before anything compiles the generated commonMain sources. Depend via a

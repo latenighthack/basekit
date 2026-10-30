@@ -206,7 +206,12 @@ The viewmodel processor emits, per `@ViewModelSpec`:
   Delivered as **source**; a consuming Xcode/SwiftPM target
   compiles them alongside the exported KMP framework. Collect them with the
   `collectBasekitAppleSwift` Gradle task (`collectBasekitViewModelSwift` remains as a compatibility
-  alias). Every `@ViewModelList` also becomes a direct DeltaList-native binding property. SwiftUI
+  alias). Every Apple target emits the same Swift, so the task runs the KSP pass of one target: the
+  one Xcode is building, read from `SDK_NAME` and `ARCHS` when Gradle runs from an Xcode build
+  phase, or the targets named by `-Pbasekit.appleTargets=iosArm64[,…]`, which takes precedence.
+  With neither it runs every Apple target's main pass. It fails when the requested targets are not
+  declared in the module. `verifyBasekitAppleSwiftIsUniversal` runs every Apple pass and fails if two
+  emit the same file name with different bytes; it is not part of collect, so run it in CI. Every `@ViewModelList` also becomes a direct DeltaList-native binding property. SwiftUI
   renders it with `DeltaListView(model.items)` / `DeltaForEach(model.items)`; UIKit and AppKit use
   `collectionView.items(model.items, cell:/item:/using:)`. The older generated `bindItems` and
   `observeItems(into:)` helpers remain temporarily but are deprecated.
@@ -361,9 +366,16 @@ kotlin.sourceSets.named("commonMain") {
     kotlin.srcDir(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/kotlin"))
 }
 ksp { arg("Basekit_NavigationPackage", "com.example.app") } // where the navigators land
-// Make every other ksp task run after the metadata pass:
-tasks.matching { it.name.startsWith("ksp") && it.name != "kspCommonMainKotlinMetadata" }
-    .configureEach { dependsOn("kspCommonMainKotlinMetadata") }
+// Make every other ksp task run after the metadata pass. KSP names each compilation's task after its
+// compile task (compileKotlinIosArm64 -> kspKotlinIosArm64):
+kotlin.targets.configureEach {
+    compilations.configureEach {
+        val kspTask = compileKotlinTaskName.replaceFirst("compile", "ksp")
+        if (kspTask != "kspCommonMainKotlinMetadata") {
+            tasks.named { it == kspTask }.configureEach { dependsOn("kspCommonMainKotlinMetadata") }
+        }
+    }
+}
 ```
 
 **viewmodel** (per-platform code, so add to every target's ksp configuration):

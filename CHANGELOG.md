@@ -4,6 +4,21 @@ All notable changes to basekit are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor versions may break API).
 
+## [Unreleased]
+
+- Gradle plugins: `collectBasekitAppleSwift` runs only the Apple main KSP passes, not every KSP task
+  in the module. Before, it also ran the JVM, Android, JS and test passes, and Kotlin 2.4's Swift
+  Export pass, each of which compiles the upstream modules for its own target.
+- Gradle plugins: `collectBasekitAppleSwift` runs only the Apple target being built. From an Xcode
+  build phase it reads `SDK_NAME` and `ARCHS`; `-Pbasekit.appleTargets=iosArm64[,…]` names the targets
+  and takes precedence. With neither it runs every Apple target's main pass. It fails when the
+  requested targets are not declared in the module.
+- Gradle plugins: `collectBasekitAppleSwift` no longer runs `verifyBasekitAppleSwiftIsUniversal`.
+  Run the verify task in CI; it runs every Apple main pass and checks only their output.
+  `verifyBasekitViewModelSwiftIsUniversal` remains as an alias.
+- Gradle plugins: the per-target KSP passes are found from the Kotlin compilations, not by
+  task-name prefix.
+
 ## [0.8.4] — 2026-10-29
 
 - Web navigation: browser forward reopens the entries browser back closed, instead of being undone.

@@ -143,6 +143,7 @@ tasks.register("verifyPublishedPlugin") {
             verifyProcessor("ksp$it", "basekit-ksp")
         }
         check(tasks.findByName("collectBasekitAppleSwift") != null)
+        check(tasks.findByName("verifyBasekitAppleSwiftIsUniversal") != null)
         check(tasks.findByName("generateBasekitCatalog") != null)
         check(tasks.findByName("generateFromBasekitCatalog") != null)
     }
