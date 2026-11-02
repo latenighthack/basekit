@@ -4,6 +4,13 @@ All notable changes to basekit are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor versions may break API).
 
+## [0.8.7] — 2026-11-01
+
+- deltalist 0.4.10: SwiftUI rows keep their child view models while hidden (another tab, a pushed
+  screen) instead of rebuilding them on every show, and a delta no longer builds every row.
+- Build: `-Platenighthack.mavenLocal=true` opts a build into resolving com.latenighthack artifacts
+  from Maven Local. Off by default; release builds never set it.
+
 ## [0.8.6] — 2026-10-30
 
 - Gradle plugins: `collectBasekitAppleSwift` runs only the Apple main KSP passes, not every KSP task

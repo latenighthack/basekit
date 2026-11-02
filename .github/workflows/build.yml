@@ -17,15 +17,17 @@ concurrency:
 
 jobs:
   swift-runtime-compatibility:
-    name: Swift runtime compatibility (Xcode 15.4)
-    runs-on: macos-14
+    name: Swift runtime compatibility (Xcode 16.0)
+    # GitHub retired the macOS 14 images (and with them Xcode 15.4) on 2026-11-02. Xcode 16.0 on
+    # macOS 15 is the oldest compiler a hosted runner still offers.
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
 
       # Keep the oldest CI compiler covered even if the runner's default Xcode changes.
-      - name: Typecheck Swift runtime with Xcode 15.4
+      - name: Typecheck Swift runtime with Xcode 16.0
         env:
-          DEVELOPER_DIR: /Applications/Xcode_15.4.app/Contents/Developer
+          DEVELOPER_DIR: /Applications/Xcode_16.app/Contents/Developer
         run: >
           xcrun swiftc -typecheck -swift-version 5 -warnings-as-errors
           basekit-viewmodel/src/commonMain/swift/KvoViewModel.swift
@@ -33,8 +35,9 @@ jobs:
   apple:
     name: All targets + Apple frameworks + generated-Swift typecheck
     # macOS is required so the Kotlin/Native Apple targets + SKIE compile; an ubuntu run would
-    # silently skip them. Matches release.yml.
-    runs-on: macos-26
+    # silently skip them. Matches release.yml. On this Intel host the arm64 test tasks are skipped and
+    # the x64 ones run; the arm64 links and Swift typechecks below cross-compile.
+    runs-on: macos-26-intel
     env:
       # Generated navigation uses Swift 6.2 actor-isolated protocol conformances.
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer

@@ -8,6 +8,10 @@ pluginManagement {
     // than the published coordinate.
     includeBuild("basekit-gradle-plugin")
     repositories {
+        // Opt-in Maven Local for com.latenighthack artifacts; see dependencyResolutionManagement.
+        if (providers.gradleProperty("latenighthack.mavenLocal").orNull == "true") {
+            mavenLocal { content { includeGroupByRegex("com\\.latenighthack(\\..*)?") } }
+        }
         google()
         mavenCentral()
         gradlePluginPortal()
@@ -17,9 +21,15 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
+        // Global Maven Local is excluded unless a build opts in with -Platenighthack.mavenLocal=true
+        // (or that line in ~/.gradle/gradle.properties). It then resolves com.latenighthack
+        // artifacts, such as an unreleased deltalist, from ~/.m2 first. Release builds never set it;
+        // -PfhWorkspace remains the isolated alternative.
+        if (providers.gradleProperty("latenighthack.mavenLocal").orNull == "true") {
+            mavenLocal { content { includeGroupByRegex("com\\.latenighthack(\\..*)?") } }
+        }
         google()
         mavenCentral()
-        // Global Maven Local is intentionally excluded; use -PfhWorkspace for local development.
         // TamboUI (the `tui` slice's terminal-UI toolkit) is snapshot-only for now.
         maven {
             url = uri("https://central.sonatype.com/repository/maven-snapshots/")

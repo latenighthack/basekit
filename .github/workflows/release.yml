@@ -13,8 +13,10 @@ jobs:
   publish:
     name: Publish to Maven Central
     # macOS is required so the KMP iOS targets + SKIE compile — an ubuntu run would silently
-    # skip them and publish an incomplete artifact set.
-    runs-on: macos-26
+    # skip them and publish an incomplete artifact set. Intel, because the org has not been given an
+    # arm64 macOS runner since 2026-10-30; Kotlin/Native cross-compiles every Apple target, and the
+    # image carries the same pinned Xcode 26.6.
+    runs-on: macos-26-intel
     env:
       # Match the validated Apple build toolchain.
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
