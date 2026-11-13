@@ -1,5 +1,6 @@
 package com.latenighthack.basekit.viewmodel.compose
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -35,6 +36,7 @@ public fun <T : Any> DeltaRows(
     source: Flow<Delta<T>>,
     identity: (T) -> Any,
     modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(),
     placeholder: @Composable (Int) -> Unit = {},
     row: @Composable (T) -> Unit,
 ) {
@@ -47,7 +49,7 @@ public fun <T : Any> DeltaRows(
         }
     }
     val current by tracked.collectAsStateWithLifecycle(initialValue = null)
-    LazyColumn(modifier) {
+    LazyColumn(modifier, contentPadding = contentPadding) {
         val snapshot = current ?: return@LazyColumn
         val items = snapshot.items
         val key = { index: Int -> rowKey(items, index, keys, identity) { "tracked:" + snapshot.ids.itemId(0, index) } }
@@ -69,13 +71,14 @@ public fun <H, T : Any> DeltaSections(
     identity: (T) -> Any,
     header: @Composable (header: H, sectionIndex: Int) -> Unit,
     modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(),
     placeholder: @Composable (Int) -> Unit = {},
     row: @Composable (T) -> Unit,
 ) {
     val keys = remember { RowKeys() }
     // No itemKey: deltalist would read it from a peeked value, which maps lazily mapped rows.
     val state = source.collectAsSectionedDeltaState()
-    LazyColumn(modifier) {
+    LazyColumn(modifier, contentPadding = contentPadding) {
         for ((sectionIndex, section) in state.sections.withIndex()) {
             item(key = section.key) { header(section.header, sectionIndex) }
             val items = section.items

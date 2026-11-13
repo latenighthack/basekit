@@ -96,8 +96,12 @@ internal class ComposeGenerator(private val generator: CodeGenerator, private va
                             inline -> "DeltaForEach(source = $source, "
                             else -> "DeltaRows(source = $source, "
                         }
-                        val modifierArgument = if (inline) "" else "modifier = modifier, "
-                        val modifierParameter = if (inline) "" else "modifier: Modifier = Modifier, "
+                        val modifierArgument = if (inline) "" else "modifier = modifier, contentPadding = contentPadding, "
+                        val modifierParameter = if (inline) {
+                            ""
+                        } else {
+                            "modifier: Modifier = Modifier, contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(), "
+                        }
                         val method = if (inline) "${name}ForEach" else name
                         file.writeln("    @Composable public fun $method(\n$headerSlot$rows,\n        ${modifierParameter}placeholder: @Composable (Int) -> Unit = {},\n    ) {")
                         if (single != null) {

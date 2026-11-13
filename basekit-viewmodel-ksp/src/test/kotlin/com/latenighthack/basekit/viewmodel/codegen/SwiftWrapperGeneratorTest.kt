@@ -235,7 +235,7 @@ class SwiftWrapperGeneratorTest {
     fun compose_sectioned_list_has_a_typed_header_slot() {
         val source = compose(sectioned(sealedHeader, row("RowViewModel", "rowId"), element = "RowViewModel"))
         assertContains(source, "header: @Composable (header: sample.HostViewModel.Section, sectionIndex: Int) -> Unit,")
-        assertContains(source, "DeltaSections(source = remember(model) { model.boundList(\"sample.HostViewModel\", \"rows\", model.rows) }, header = header, modifier = modifier, placeholder = placeholder, identity = { raw -> \"sample.RowViewModel:\" + raw.rowId }) { raw -> row(sample.bindRowViewModel(remember(raw, basekitRowObserver) { raw.observing(basekitRowObserver) }, launchAction)) }")
+        assertContains(source, "DeltaSections(source = remember(model) { model.boundList(\"sample.HostViewModel\", \"rows\", model.rows) }, header = header, modifier = modifier, contentPadding = contentPadding, placeholder = placeholder, identity = { raw -> \"sample.RowViewModel:\" + raw.rowId }) { raw -> row(sample.bindRowViewModel(remember(raw, basekitRowObserver) { raw.observing(basekitRowObserver) }, launchAction)) }")
     }
 
     @Test

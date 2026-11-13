@@ -65,6 +65,8 @@ internal class ReactTypesGenerator(private val generator: CodeGenerator, private
             appendLine("  /** The row key at [index], loaded or not; undefined when the list has no keys or [index] is out of range. */")
             appendLine("  keyAt(index: number): string | number | undefined;")
             appendLine("  visibleRange(start: number, endInclusive: number): void;")
+            appendLine("  /** Every position in order: [render] for a loaded row, [placeholder] for an unloaded one; attach its ref, and the slot loads while it's in view. */")
+            appendLine("  mapSlots<R>(render: (item: T, index: number) => R, placeholder: (index: number, ref: (element: Element | null) => void) => R): R[];")
             appendLine("}")
             appendLine("/** One section of a SectionedViewModelList: a typed header and its delegated rows. */")
             appendLine("export interface ViewModelSection<H, T> { readonly key: string; readonly header: H; readonly items: ViewModelList<T>; }")
