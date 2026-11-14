@@ -10,9 +10,11 @@ All notable changes to basekit are documented here. The format follows
   reaches a destination's child and row view models, so their actions are reported too. Before, only
   the destination's own actions were. `viewModelObserver()` returns the action observer instead of
   null; its bindings still report nothing.
-- Swift: the `Observing{Spec}` and `Observing{X}Navigator` decorators, `observing`, `observingActions`
-  and the `GeneratedViewModelFactories` members are hidden from Objective-C, which drops their bridges
-  from the framework. Swift builds view models through the new `BasekitAppleViewModels.shared`
+- Swift: the `Observing{Spec}` and `Observing{X}Navigator` decorators, `observing` and
+  `observingActions` are hidden from Objective-C, which drops their bridges from the framework. The
+  `GeneratedViewModelFactories` members are hidden from the header too, though Kotlin/Native still
+  bridges an exported protocol's members, and the interface itself stays exported: a hidden interface
+  requires every implementation, kotlin-inject's generated component included, to be hidden. Swift builds view models through the new `BasekitAppleViewModels.shared`
   (`make{Destination}(…)`, and `make{Component}(…)` for a `@HostedComponent`) and decorates them with
   `basekitObserving(observer:)`. Swift can no longer implement `GeneratedViewModelFactories`;
   implement it in Kotlin and pass it to Swift.

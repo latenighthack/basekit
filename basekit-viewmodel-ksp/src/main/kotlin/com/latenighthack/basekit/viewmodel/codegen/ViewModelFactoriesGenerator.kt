@@ -33,7 +33,8 @@ data class ViewModelFactoryInfo(
  *
  * The factories are hidden from Objective-C: they return implementations, which Swift reaches through
  * `BasekitAppleViewModels` instead (see [AppleViewModelsGenerator]). The interface stays visible, so
- * Swift can hand it over.
+ * Swift can hand it over: Kotlin/Native requires every implementation of a hidden interface, such as
+ * kotlin-inject's generated component, to be hidden too.
  */
 class ViewModelFactoriesGenerator(
     private val codeGenerator: CodeGenerator,
