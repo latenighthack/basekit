@@ -14,7 +14,7 @@ final class DestinationTests: XCTestCase {
         let responder = try XCTUnwrap(attached, "open attaches a responder to a responding route")
 
         // The destination builds without a responder of its own, and its row responds through the entry's.
-        guard case .picker = basekitViewModel(for: entry, host: router, factories: CountingFactories()) else {
+        guard case .picker = basekitViewModel(for: entry, host: router, factories: CountingFactories().factories) else {
             return XCTFail("Expected the picker view model")
         }
         try await RealPickerOptionViewModel(option: PickerOption(id: 1, label: "Apples"), responder: responder).onSelected()
@@ -33,7 +33,7 @@ final class DestinationTests: XCTestCase {
         let probe = ContentProbe()
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 480))
         window.rootViewController = UIHostingController(
-            rootView: DestinationHost(trigger: trigger, router: router, entry: entry, factories: factories, probe: probe)
+            rootView: DestinationHost(trigger: trigger, router: router, entry: entry, factories: factories.factories, probe: probe)
         )
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
@@ -115,22 +115,13 @@ final class DestinationTests: XCTestCase {
 }
 
 /// Builds the demo's view models directly, counting home builds.
-private final class CountingFactories: NSObject, GeneratedViewModelFactories {
-    private let store = InMemoryDemoStore()
+/// The demo's factories, counting how often home is built.
+private final class CountingFactories {
     private(set) var homeBuilds = 0
-
-    var detailFactory: (DetailViewModelArgs) -> RealDetailViewModel {
-        { [store] args in RealDetailViewModel(store: store, args: args) }
-    }
-    var homeFactory: (any HomeNavigator) -> RealHomeViewModel {
-        { [unowned self] navigator in
-            homeBuilds += 1
-            return RealHomeViewModel(store: store, navigator: navigator)
-        }
-    }
-    var pickerFactory: (any NavigationResponder) -> RealPickerViewModel {
-        { [store] responder in RealPickerViewModel(store: store, responder: responder) }
-    }
+    private(set) lazy var factories: GeneratedViewModelFactories = DemoViewModelFactories(
+        store: InMemoryDemoStore(),
+        onHomeBuilt: { [unowned self] in homeBuilds += 1 }
+    )
 }
 
 @MainActor

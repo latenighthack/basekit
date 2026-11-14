@@ -93,17 +93,14 @@ internal fun appleListDescriptorProperty(vm: VmInfo, list: VmList, style: AppleW
 
 /**
  * The `init(_:observer:)` of a generated Apple wrapper: the view model decorated by its Kotlin
- * `Observing{Spec}`, as `observing(observer)` does, so it, its children and its rows report to
- * [observer]. List binders build rows with it, and a host passes its observer to it explicitly.
+ * `Observing{Spec}` through `basekitObserving`, as `observing(observer)` does, so it, its children and
+ * its rows report to [observer]. List binders build rows with it, and a host passes its observer to it
+ * explicitly.
  */
 internal fun appleObserverInit(vm: VmInfo): String = """
     |    /// [viewModel] reporting to [observer] with its children and rows, as Kotlin's `observing(observer)`
     |    /// installs it; [viewModel] as it is when [observer] is nil or already installed.
     |    public convenience init(_ viewModel: ${vm.simpleName}, observer: (any ViewModelObserver)?) {
-    |        if let observer, viewModel.viewModelObserver() !== observer {
-    |            self.init(Observing${vm.simpleName}(delegate: viewModel, observer: observer))
-    |        } else {
-    |            self.init(viewModel)
-    |        }
+    |        self.init(viewModel.basekitObserving(observer: observer))
     |    }
 """.trimMargin()

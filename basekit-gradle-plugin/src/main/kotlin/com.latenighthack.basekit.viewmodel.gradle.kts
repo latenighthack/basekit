@@ -1,3 +1,5 @@
+import com.google.devtools.ksp.gradle.KspExtension
+import com.latenighthack.basekit.gradle.plugin.BasekitViewModelExtension
 import com.latenighthack.basekit.gradle.plugin.basekitProcessor
 import com.latenighthack.basekit.gradle.plugin.registerBasekitAppleSwiftTasks
 import com.latenighthack.basekit.gradle.plugin.wireKspAfterCommonMetadata
@@ -16,6 +18,22 @@ plugins {
 
 dependencies {
     add("kspCommonMainMetadata", basekitProcessor(":basekit-viewmodel-ksp", "basekit-viewmodel-ksp"))
+}
+
+// `basekitViewModel { kvo = false; stateDiff = false }` passes each switch set to the processor.
+val viewModelOptions = extensions.create<BasekitViewModelExtension>("basekitViewModel")
+afterEvaluate {
+    extensions.configure<KspExtension> {
+        mapOf(
+            "basekit.viewmodel.swiftui" to viewModelOptions.swiftUi,
+            "basekit.viewmodel.kvo" to viewModelOptions.kvo,
+            "basekit.viewmodel.compose" to viewModelOptions.compose,
+            "basekit.viewmodel.androidView" to viewModelOptions.androidView,
+            "basekit.viewmodel.reactHooks" to viewModelOptions.reactHooks,
+            "basekit.viewmodel.stateDiff" to viewModelOptions.stateDiff,
+            "basekit.viewmodel.failureForwarding" to viewModelOptions.failureForwarding,
+        ).forEach { (option, value) -> value.orNull?.let { arg(option, it.toString()) } }
+    }
 }
 
 extensions.configure<KotlinMultiplatformExtension> {

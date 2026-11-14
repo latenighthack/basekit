@@ -304,8 +304,10 @@ class ViewModelObserverTest {
         val adapted = actionObserverAsViewModelObserver { actions += "${it.viewModelName}.${it.actionName}" }
         val model = ObservedStringViewModel(flowOf("a"), adapted)
 
-        assertNull(model.viewModelObserver())
+        // Passed on to children and rows, so their actions are reported too; the bindings report nothing.
+        assertSame(adapted, model.viewModelObserver())
         assertEquals(listOf("a"), model.boundState("Spec").toList())
+        assertEquals(listOf("a"), model.boundList("Spec", "rows", flowOf("a")).toList())
         adapted.observeCall("Spec", "save", ViewModelOperationKind.ACTION, model) { assertEquals(listOf("Spec.save"), actions) }
         adapted.observeCall("Spec", "setName", ViewModelOperationKind.MUTATOR, model) { }
 
@@ -439,6 +441,48 @@ class ViewModelObserverTest {
         )
         assertEquals(LoadDirection.INITIAL, (paging.first().event as PagingEvent.Requested).direction)
         assertSame(recorder.events.first().operation, paging.first().operation)
+    }
+
+    @Test
+    fun failuresReachTheHandlerUnderADecoratorThatDoesNotForwardThem() = runTest {
+        val handled = mutableListOf<String>()
+        val inner = object : ViewModel<String>, ViewModelFailureHandler<String> {
+            override val initialState = "initial"
+            override val state: Flow<String> = flow { throw IllegalStateException("state") }
+            override suspend fun onStateFailed(failure: ViewModelFailure, lastState: String): Flow<String> {
+                handled += "state: ${failure.error.message}"
+                return flowOf("recovered")
+            }
+            override suspend fun onListFailed(failure: ViewModelFailure) {
+                handled += "${failure.source}: ${failure.error.message}"
+            }
+        }
+        // A decorator generated with basekit.viewmodel.failureForwarding=false and stateDiff=false.
+        val decorated = object : ViewModel<String> by inner, ObservedViewModel<String> {
+            override val basekitObserver: ViewModelObserver = actionObserverAsViewModelObserver { }
+            override val basekitDelegate: Any get() = inner
+        }
+
+        assertEquals(listOf("recovered"), decorated.boundState("Spec").toList())
+        assertEquals(emptyList(), decorated.boundList("Spec", "rows", flow<String> { throw IllegalStateException("list") }).toList())
+        assertEquals(listOf("state: state", "rows: list"), handled)
+    }
+
+    @Test
+    fun aDecoratorWithoutAStateDiffReportsNoChangedProperties() = runTest {
+        val recorder = Recorder()
+        val plain = object : ViewModel<String> {
+            override val initialState = "initial"
+            override val state = flowOf("a")
+        }
+        val decorated = object : ViewModel<String> by plain, ObservedViewModel<String> {
+            override val basekitObserver: ViewModelObserver = recorder
+            override val basekitDelegate: Any get() = plain
+        }
+
+        decorated.boundState("Spec").toList()
+
+        assertEquals(listOf(emptyList(), null), recorder.events.filterIsInstance<ViewModelEvent.StateChanged>().map { it.changedProperties })
     }
 
     @Test

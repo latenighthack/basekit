@@ -156,6 +156,7 @@ class ViewModelExtractor(
             children = children,
             identityProperty = identity?.simpleName?.asString(),
             identitySwiftName = identity?.swiftExportedName(),
+            includedBindings = declaration.includedBindings(),
         )
     }
 

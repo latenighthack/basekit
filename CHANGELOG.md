@@ -4,6 +4,28 @@ All notable changes to basekit are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor versions may break API).
 
+## [0.9.0] — 2026-11-14
+
+- Observation: an action observer (`observingActions`, or the router's `actionObserver` alone) now
+  reaches a destination's child and row view models, so their actions are reported too. Before, only
+  the destination's own actions were. `viewModelObserver()` returns the action observer instead of
+  null; its bindings still report nothing.
+- Swift: the `Observing{Spec}` and `Observing{X}Navigator` decorators, `observing`, `observingActions`
+  and the `GeneratedViewModelFactories` members are hidden from Objective-C, which drops their bridges
+  from the framework. Swift builds view models through the new `BasekitAppleViewModels.shared`
+  (`make{Destination}(…)`, and `make{Component}(…)` for a `@HostedComponent`) and decorates them with
+  `basekitObserving(observer:)`. Swift can no longer implement `GeneratedViewModelFactories`;
+  implement it in Kotlin and pass it to Swift.
+- Codegen options, as KSP arguments or `basekitViewModel { … }` in Gradle:
+  `basekit.viewmodel.swiftui`, `kvo`, `androidView` and `reactHooks` switch their bindings off
+  (`compose` stays opt-in), and `@ViewModelBindings(ViewModelBinding.KVO, …)` switches one back on for a
+  spec with its rows and children. `basekit.viewmodel.stateDiff=false` leaves the changed property
+  names out of the decorators (`StateChanged.changedProperties` is now nullable), and
+  `basekit.viewmodel.failureForwarding=false` leaves out their `ViewModelFailureHandler`: bindings find
+  the handler under the decorators either way.
+- Navigation: each host navigator maps a source to its `NavigationEdge` through one shared
+  `{Target}Source.navigationEdge` per target, instead of repeating the target's whole table.
+
 ## [0.8.7] — 2026-11-01
 
 - deltalist 0.4.10: SwiftUI rows keep their child view models while hidden (another tab, a pushed

@@ -405,6 +405,7 @@ the convention plugins under [`basekit-gradle-plugin/`](basekit-gradle-plugin/sr
 | `@NavigateTo(target)` | navigation | function | Declares a navigation edge from this action to `target` |
 | `@RedirectsTo(targets)` | navigation | interface | Destinations this `@Destination` may replace itself with, without a user action; each joins its navigator with source `<SCREEN>_REDIRECT` |
 | `@ViewModelSpec(webPath)` | viewmodel | interface | Marks a ViewModel; drives the platform binding codegen |
+| `@ViewModelBindings(include)` | viewmodel | interface | Generates the listed bindings for this spec, its rows and children when the module turns them off |
 | `@ViewModelList(possibleTypes)` | viewmodel | property | A `Flow<Delta<ChildVm>>`, or a `SectionedDeltaList<Header, ChildVm>` with an enum or sealed header; `possibleTypes` is the exact, non-overlapping closed child set used for list-specific Apple enums and React `kind` handles |
 | `@ChildViewModel` | viewmodel | property | A stable, non-null, read-only nested child ViewModel |
 | `@ViewModelInject` | viewmodel | class | Wires a concrete impl into the generated kotlin-inject module, and adds its factory (`homeFactory: (HomeNavigator) -> HomeViewModel`) to the generated `GeneratedViewModelFactories` interface |
@@ -428,6 +429,18 @@ the convention plugins under [`basekit-gradle-plugin/`](basekit-gradle-plugin/sr
 | `basekit.viewmodel.swiftFrameworkImports` | viewmodel | Comma-separated frameworks the generated Swift should `import` |
 | `basekit.navigation.swiftFrameworkImports` | navigation | Comma-separated frameworks the generated Apple navigation Swift should `import` |
 | `basekit.viewmodel.react` | navigation, viewmodel | `"true"` also generates the web router, destination models and React stack host |
+| `basekit.viewmodel.swiftui` | viewmodel | `"false"` skips the SwiftUI `Observable{Spec}` wrappers and Swift destination models |
+| `basekit.viewmodel.kvo` | viewmodel | `"false"` skips the UIKit/AppKit `Kvo{Spec}` wrappers |
+| `basekit.viewmodel.compose` | viewmodel | `"true"` generates the Compose bindings and destination models |
+| `basekit.viewmodel.androidView` | viewmodel | `"false"` skips the Android view `Abstract{Spec}Activity` classes |
+| `basekit.viewmodel.reactHooks` | viewmodel | `"false"` skips the React hooks, `basekit-react` and the web destination models |
+| `basekit.viewmodel.stateDiff` | viewmodel | `"false"` leaves the changed property names out of `Observing{Spec}`; `StateChanged.changedProperties` is null |
+| `basekit.viewmodel.failureForwarding` | viewmodel | `"false"` leaves `ViewModelFailureHandler` out of `Observing{Spec}`; bindings still reach the delegate's handler |
+
+The viewmodel plugin sets these from Gradle too: `basekitViewModel { kvo = false; stateDiff = false }`.
+A binding switched off is still generated for a spec annotated `@ViewModelBindings(ViewModelBinding.KVO)`,
+and for its rows and child view models. Destination models are generated only when every destination
+has the platform's binding.
 
 ## Optional PostHog metrics
 

@@ -31,6 +31,31 @@ public annotation class ViewModelSpec(val webPath: String = "")
 @Target(AnnotationTarget.PROPERTY)
 public annotation class ViewModelList(vararg val possibleTypes: KClass<*>)
 
+/** A platform binding the ViewModel processor generates for a `@ViewModelSpec`. */
+public enum class ViewModelBinding {
+    /** The SwiftUI `Observable{Spec}` wrapper (`basekit.viewmodel.swiftui`). */
+    SWIFTUI,
+
+    /** The UIKit/AppKit `Kvo{Spec}` wrapper, with its collection-view lists (`basekit.viewmodel.kvo`). */
+    KVO,
+
+    /** The Compose `{Spec}Binding` and `bind{Spec}` (`basekit.viewmodel.compose`). */
+    COMPOSE,
+
+    /** The Android view `Abstract{Spec}Activity` (`basekit.viewmodel.androidView`). */
+    ANDROID_VIEW,
+
+    /** The React `use{Spec}` hook and its `{Spec}ReactRef` (`basekit.viewmodel.reactHooks`). */
+    REACT,
+}
+
+/**
+ * Generates [include] for this spec when the module's options turn them off. The spec's list rows and
+ * child view models get them too, since its wrapper builds theirs.
+ */
+@Target(AnnotationTarget.CLASS)
+public annotation class ViewModelBindings(vararg val include: ViewModelBinding)
+
 /** Marks a property that holds a single nested child ViewModel bound alongside its parent. */
 @Target(AnnotationTarget.PROPERTY)
 public annotation class ChildViewModel

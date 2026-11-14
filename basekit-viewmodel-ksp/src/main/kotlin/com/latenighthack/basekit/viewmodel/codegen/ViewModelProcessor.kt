@@ -61,6 +61,7 @@ class ViewModelProcessor(
         logger.error("$REACT_ENUM_NAMES_OPTION must be one of ${ReactEnumNames.entries.joinToString { it.option }}, not \"${options[REACT_ENUM_NAMES_OPTION]}\"")
         ReactEnumNames.NAME
     }
+    private val generation = GenerationOptions.parse(options) { logger.error(it) }
     private val extractor = ViewModelExtractor(logger, reactEnumNames)
     private val viewModels = mutableListOf<VmInfo>()
     private var sourceFiles: List<KSFile> = emptyList()
@@ -173,7 +174,15 @@ class ViewModelProcessor(
         val navName = spec.stringArgument(DESTINATION_ANNOTATION, "navName")?.takeIf { it.isNotEmpty() }
             ?: spec.simpleName.asString().toDestinationNavName()
         val name = navName.toUpperCamelCase().replaceFirstChar { it.lowercase() } + "Factory"
-        return ViewModelFactoryInfo(name, implQn, parameterTypes, factoryRoute(spec, navName, parameterTypes), impl.hasAnnotation(GENERATED_FAKE_ANNOTATION))
+        return ViewModelFactoryInfo(
+            name,
+            implQn,
+            parameterTypes,
+            factoryRoute(spec, navName, parameterTypes),
+            impl.hasAnnotation(GENERATED_FAKE_ANNOTATION),
+            specQualifiedName = spec.qualifiedName?.asString(),
+            hostedNavigator = hostedNavigator(spec, parameterTypes),
+        )
     }
 
     /**
@@ -208,6 +217,19 @@ class ViewModelProcessor(
         )
     }
 
+    /**
+     * The navigator `Host{Cap}Navigator` implements for a `@HostedComponent` [spec] whose factory takes
+     * only that navigator, so Kotlin can build it for a host as it builds a destination; null otherwise.
+     */
+    private fun hostedNavigator(spec: KSClassDeclaration, parameterTypes: List<String>): String? {
+        if (!spec.hasAnnotation(HOSTED_COMPONENT_ANNOTATION)) return null
+        val navName = spec.stringArgument(HOSTED_COMPONENT_ANNOTATION, "navName")?.takeIf { it.isNotEmpty() }
+            ?: spec.simpleName.asString().toDestinationNavName()
+        val cap = navName.toUpperCamelCase()
+        val type = parameterTypes.singleOrNull() ?: return null
+        return cap.takeIf { type.substringAfterLast('.') == "${cap}Navigator" }
+    }
+
     /** `Basekit_NavigationPackage`, else the navigation processor's fallback: the destinations' common package. */
     private fun resolveNavigationPackage(resolver: Resolver): String {
         options[NAVIGATION_PACKAGE_OPTION]?.takeIf { it.isNotEmpty() }?.let { return it }
@@ -227,7 +249,7 @@ class ViewModelProcessor(
         // Every pass: a spec declared in a platform source set (a JS-only view model, say) gets its
         // decorator there, since that platform's bindings install it with `observing`.
         if (viewModels.isNotEmpty()) {
-            ObservingViewModelGenerator(codeGenerator, Dependencies(aggregating = true, *sourceFiles.toTypedArray()))
+            ObservingViewModelGenerator(codeGenerator, Dependencies(aggregating = true, *sourceFiles.toTypedArray()), generation, hideFromObjC = pass == Pass.METADATA || pass == Pass.APPLE)
                 .generate(if (pass == Pass.METADATA) viewModels else viewModels.filterNot { it.qualifiedName in existingActionDecorators })
         }
 
@@ -248,11 +270,12 @@ class ViewModelProcessor(
         val dependencies = Dependencies(aggregating = true, *sourceFiles.toTypedArray())
         when (pass) {
             Pass.ANDROID -> {
-                AndroidBindingGenerator(codeGenerator, dependencies).generate(viewModels)
-                if (options["basekit.viewmodel.compose"] == "true") {
-                    ComposeGenerator(codeGenerator, dependencies).generate(viewModels)
+                AndroidBindingGenerator(codeGenerator, dependencies).generate(bindingSpecs(GeneratedBinding.ANDROID_VIEW, viewModels, generation))
+                val composeSpecs = bindingSpecs(GeneratedBinding.COMPOSE, viewModels, generation)
+                if (composeSpecs.isNotEmpty()) {
+                    ComposeGenerator(codeGenerator, dependencies).generate(composeSpecs)
                     // The Compose counterpart of the Apple pass's destination models.
-                    val routes = uniqueFactories(warn = false).mapNotNull { factory -> factory.route?.let { factory to it } }
+                    val routes = destinationRoutes(GeneratedBinding.COMPOSE, composeSpecs)
                     if (routes.any { (_, route) -> RouteParameter.NAVIGATOR in route.parameters } && !reportMissingDestinationFactories()) {
                         val factoryDependencies = Dependencies(aggregating = true, *(sourceFiles + factorySourceFiles).toTypedArray())
                         val factoriesPackage = commonPackage(uniqueFactories(warn = false).map { it.implQualifiedName.substringBeforeLast('.', "") })
@@ -266,14 +289,24 @@ class ViewModelProcessor(
                         vm.stateProperties.forEach { it.swiftBindingType() }
                         vm.mutators.forEach { swiftType(it.type) }
                     }
-                    AppleBoundListsGenerator(codeGenerator, dependencies).generate(viewModels)
-                    SwiftKvoGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
-                    SwiftUIObservableGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(viewModels)
+                    val kvoSpecs = bindingSpecs(GeneratedBinding.KVO, viewModels, generation)
+                    val swiftUiSpecs = bindingSpecs(GeneratedBinding.SWIFTUI, viewModels, generation)
+                    val appleSpecs = viewModels.filter { vm -> vm in kvoSpecs || vm in swiftUiSpecs }
+                    AppleBoundListsGenerator(codeGenerator, dependencies).generate(appleSpecs)
+                    SwiftKvoGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(kvoSpecs)
+                    SwiftUIObservableGenerator(codeGenerator, dependencies, swiftFrameworkImports).generate(swiftUiSpecs)
                     // A factory taking a navigator means the graph has edges, so the navigation processor
                     // generated BasekitRoute and the host navigators this file refers to.
-                    val routes = uniqueFactories(warn = false).mapNotNull { factory -> factory.route?.let { factory to it } }
-                    if (routes.any { (_, route) -> RouteParameter.NAVIGATOR in route.parameters } && !reportMissingDestinationFactories()) {
-                        val factoryDependencies = Dependencies(aggregating = true, *(sourceFiles + factorySourceFiles).toTypedArray())
+                    val factoryDependencies = Dependencies(aggregating = true, *(sourceFiles + factorySourceFiles).toTypedArray())
+                    val factories = uniqueFactories(warn = false)
+                    val allRoutes = factories.mapNotNull { factory -> factory.route?.let { factory to it } }
+                    val hasGraph = allRoutes.any { (_, route) -> RouteParameter.NAVIGATOR in route.parameters } && !reportMissingDestinationFactories()
+                    // Swift builds every view model it shows through this Kotlin, since the decorators,
+                    // navigators' decorators and factories are hidden from Objective-C.
+                    AppleViewModelsGenerator(codeGenerator, factoryDependencies, navigationPackage.orEmpty())
+                        .generate(factories, if (hasGraph) allRoutes else emptyList())
+                    val routes = destinationRoutes(GeneratedBinding.SWIFTUI, swiftUiSpecs)
+                    if (hasGraph && routes.isNotEmpty()) {
                         DestinationModelGenerator(codeGenerator, factoryDependencies, swiftFrameworkImports).generate(routes)
                     }
                 } catch (error: IllegalArgumentException) { logger.error(error.message.orEmpty()) }
@@ -281,31 +314,51 @@ class ViewModelProcessor(
             }
             Pass.JS -> {
                 try {
-                    if (options.containsKey("basekit.viewmodel.reactModule")) viewModels.forEach { vm ->
+                    val reactSpecs = bindingSpecs(GeneratedBinding.REACT, viewModels, generation)
+                    if (options.containsKey("basekit.viewmodel.reactModule")) reactSpecs.forEach { vm ->
                         vm.stateProperties.forEach { reactType(it.type, it.reactAdapter) }
                         vm.mutators.forEach { reactType(it.type, it.reactAdapter); reactFromJs(it.type, it.paramName, it.reactAdapter) }
                     }
-                    ReactHookGenerator(codeGenerator, dependencies).generate(viewModels)
+                    ReactHookGenerator(codeGenerator, dependencies).generate(reactSpecs)
                     // The web counterpart of the Compose destination models, beside the navigation
                     // processor's web router.
-                    var destinationRoutes = emptyList<FactoryRoute>()
-                    if (options["basekit.viewmodel.react"] == "true") {
-                        val routes = uniqueFactories(warn = false).mapNotNull { factory -> factory.route?.let { factory to it } }
+                    var reactRoutes = emptyList<FactoryRoute>()
+                    if (options["basekit.viewmodel.react"] == "true" && reactSpecs.isNotEmpty()) {
+                        val routes = destinationRoutes(GeneratedBinding.REACT, reactSpecs)
                         if (routes.any { (_, route) -> RouteParameter.NAVIGATOR in route.parameters } && !reportMissingDestinationFactories()) {
                             val factoryDependencies = Dependencies(aggregating = true, *(sourceFiles + factorySourceFiles).toTypedArray())
                             val factoriesPackage = commonPackage(uniqueFactories(warn = false).map { it.implQualifiedName.substringBeforeLast('.', "") })
                             ReactDestinationModelGenerator(codeGenerator, factoryDependencies, navigationPackage.orEmpty(), factoriesPackage).generate(routes)
-                            destinationRoutes = routes.map { it.second }
+                            reactRoutes = routes.map { it.second }
                         }
                     }
-                    options["basekit.viewmodel.reactModule"]?.let {
-                        ReactTypesGenerator(codeGenerator, dependencies).generate(viewModels, it, options["basekit.viewmodel.reactPackageVersion"] ?: "0.0.0", destinationRoutes)
+                    if (reactSpecs.isNotEmpty()) options["basekit.viewmodel.reactModule"]?.let {
+                        ReactTypesGenerator(codeGenerator, dependencies).generate(reactSpecs, it, options["basekit.viewmodel.reactPackageVersion"] ?: "0.0.0", reactRoutes)
                     }
                 } catch (error: IllegalArgumentException) { logger.error(error.message.orEmpty()) }
                   catch (error: IllegalStateException) { logger.error(error.message.orEmpty()) }
             }
             Pass.METADATA, Pass.OTHER -> Unit // jvm pass produces no platform binding
         }
+    }
+
+    /**
+     * The destination routes a platform's destination models cover: every route, when each destination's
+     * spec has [binding] among [specs]. Otherwise none, with a warning naming the destinations without
+     * it, since the models' `when` must cover every route.
+     */
+    private fun destinationRoutes(binding: GeneratedBinding, specs: List<VmInfo>): List<Pair<ViewModelFactoryInfo, FactoryRoute>> {
+        val routes = uniqueFactories(warn = false).mapNotNull { factory -> factory.route?.let { factory to it } }
+        val bound = specs.map { it.qualifiedName }.toSet()
+        val missing = routes.map { it.second.specQualifiedName }.filter { it !in bound }.distinct().sorted()
+        if (missing.isEmpty()) return routes
+        if (routes.isNotEmpty()) {
+            logger.warn(
+                "${binding.option} is off, so no ${binding.name} destination models are generated: " +
+                    "these destinations do not include ${binding.name} with @ViewModelBindings: ${missing.joinToString()}",
+            )
+        }
+        return emptyList()
     }
 
     private fun uniqueFactories(warn: Boolean): List<ViewModelFactoryInfo> =
@@ -339,6 +392,7 @@ class ViewModelProcessor(
         const val SWIFT_FRAMEWORK_IMPORTS_OPTION = "basekit.viewmodel.swiftFrameworkImports"
         const val NAVIGATION_PACKAGE_OPTION = "Basekit_NavigationPackage"
         const val DESTINATION_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.Destination"
+        const val HOSTED_COMPONENT_ANNOTATION = "com.latenighthack.basekit.navigation.annotations.HostedComponent"
         const val NAVIGATION_DESTINATION = "com.latenighthack.basekit.navigation.NavigationDestination"
         const val RESPONDING_DESTINATION = "com.latenighthack.basekit.navigation.RespondingDestination"
         const val NAVIGATION_RESPONDER = "com.latenighthack.basekit.navigation.NavigationResponder"

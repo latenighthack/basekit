@@ -15,7 +15,9 @@ class ObservingViewModelTest {
         assertSame(model, model.observingActions(observer))
         assertSame(raw, raw.observingActions(ViewModelActionObserver.NoOp))
         assertSame(raw.state, model.state)
-        assertSame(raw.child, model.child)
+        // The child reports its actions to the same observer; it stays one instance per raw child.
+        assertNotSame(raw.child, model.child)
+        assertSame(model.child, model.child)
         assertSame(raw.rows, model.rows)
         assertEquals(raw.identity, model.identity)
         model.setNote("edited")
@@ -40,6 +42,7 @@ class ObservingViewModelTest {
         job.join()
         assertEquals(1, raw.cancelledActions)
         raw.child.observingActions(observer).select()
-        assertEquals(listOf("waitUntilCancelled", "select"), names)
+        model.child.select()
+        assertEquals(listOf("waitUntilCancelled", "select", "select"), names)
     }
 }

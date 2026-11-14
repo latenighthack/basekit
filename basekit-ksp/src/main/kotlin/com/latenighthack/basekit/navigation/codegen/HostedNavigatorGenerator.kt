@@ -42,18 +42,30 @@ class HostedNavigatorGenerator(
         }
 
         val sitesByTarget = sites.groupBy { it.target.qualifiedName }
-        generateEdge(sites)
+        generateEdge(sites, sitesByTarget)
         generateHost(sitesByTarget)
         // A destination named `close` already gets an `HostCloseNavigator`, which also closes.
         if (sources.none { it.navName.toUpperCamelCase() == "Close" }) generateCloseNavigator()
         sources.forEach { generateNavigator(it, sites, sitesByTarget) }
     }
 
-    private fun generateEdge(sites: List<CallSite>) = write("NavigationEdge") {
+    private fun generateEdge(sites: List<CallSite>, sitesByTarget: Map<String, List<CallSite>>) = write("NavigationEdge") {
         buildString {
             appendLine("public enum class NavigationEdge {")
             sites.forEach { appendLine("    ${it.edgeName},") }
             appendLine("}")
+            // One mapping per target with a Source enum, which every navigator reaching it shares.
+            sitesByTarget.values.filter { it.size > 1 }.forEach { targetSites ->
+                val targetCap = targetSites.first().target.navName.toUpperCamelCase()
+                appendLine()
+                appendLine("/** The edge a navigation to ${targetCap} from this source takes. */")
+                appendLine("internal val ${targetCap}NavigationTarget.${targetCap}Source.navigationEdge: NavigationEdge")
+                appendLine("    get() = when (this) {")
+                targetSites.forEach { site ->
+                    appendLine("        ${targetCap}NavigationTarget.${targetCap}Source.${site.sourceEntry} -> NavigationEdge.${site.edgeName}")
+                }
+                appendLine("    }")
+            }
         }
     }
 
@@ -135,13 +147,7 @@ class HostedNavigatorGenerator(
                         add("context: Any?")
                     }.joinToString(", ")
                     val edgeExpr = if (hasSource) {
-                        buildString {
-                            appendLine("when (source) {")
-                            allTargetSites.forEach { site ->
-                                appendLine("                ${targetCap}NavigationTarget.${targetCap}Source.${site.sourceEntry} -> NavigationEdge.${site.edgeName}")
-                            }
-                            append("            }")
-                        }
+                        "source.navigationEdge"
                     } else {
                         "NavigationEdge.${allTargetSites.single().edgeName}"
                     }

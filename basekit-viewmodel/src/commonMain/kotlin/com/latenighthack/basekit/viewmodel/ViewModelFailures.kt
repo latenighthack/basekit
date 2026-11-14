@@ -129,7 +129,7 @@ public fun <S> ViewModel<S>.boundState(viewModelName: String): Flow<S> {
  * each `Delta` or `SectionedDelta` with its change, size and how long the platform took to apply it.
  */
 public fun <T> ViewModel<*>.boundList(viewModelName: String, listName: String, list: Flow<T>): Flow<T> {
-    val observer = viewModelObserver()
+    val observer = bindingObserver()
     if (observer != null) return observedBoundList(viewModelName, listName, list, observer)
     val viewModel = this
     return list.catch { error ->
@@ -140,7 +140,7 @@ public fun <T> ViewModel<*>.boundList(viewModelName: String, listName: String, l
 
 internal suspend fun <S> ViewModel<S>.recoverState(failure: ViewModelFailure, lastState: S): Flow<S>? {
     @Suppress("UNCHECKED_CAST")
-    val handler = this as? ViewModelFailureHandler<S>
+    val handler = failureHandler() as? ViewModelFailureHandler<S>
     if (handler == null) {
         ViewModelFailures.report(failure)
         return null
@@ -150,12 +150,25 @@ internal suspend fun <S> ViewModel<S>.recoverState(failure: ViewModelFailure, la
 
 /** Runs a handler; a throw from it, other than cancellation, goes to [ViewModelFailures.unhandled]. */
 internal suspend fun ViewModel<*>.recoverList(failure: ViewModelFailure) {
-    val handler = this as? ViewModelFailureHandler<*>
+    val handler = failureHandler()
     if (handler == null) {
         ViewModelFailures.report(failure)
     } else {
         handlerCall(failure) { handler.onListFailed(failure) }
     }
+}
+
+/**
+ * This view model's [ViewModelFailureHandler]: itself, or the first view model under its generated
+ * decorators that implements it.
+ */
+private fun ViewModel<*>.failureHandler(): ViewModelFailureHandler<*>? {
+    var current: Any? = this
+    while (current != null) {
+        if (current is ViewModelFailureHandler<*>) return current
+        current = (current as? ObservedViewModel<*>)?.basekitDelegate
+    }
+    return null
 }
 
 private inline fun <R> handlerCall(failure: ViewModelFailure, call: () -> R): R? =

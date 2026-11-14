@@ -31,7 +31,8 @@ data class FactoryRoute(
  * `entry.ownerID`, the owner the router closes the entry by. When the host is the generated
  * `BasekitNavigationRouter`, the navigator is wrapped in its `Observing…Navigator` reporting to the
  * router's `navigationObserver`, and the view model in its `Observing…` decorator reporting to the
- * router's `actionObserver` unless that is `NoOp`. It does not throw: every destination has
+ * router's `actionObserver` unless that is `NoOp`. `BasekitAppleViewModels` (see
+ * [AppleViewModelsGenerator]) builds the view model and both decorators in Kotlin. It does not throw: every destination has
  * a factory (the processor fails the build otherwise, see [missingDestinationFactories]), and the
  * router gives every responding entry it presents a responder, deep links included. An entry built by
  * hand for a responding destination without one stops at a `preconditionFailure`.
@@ -149,17 +150,20 @@ class DestinationModelGenerator(
             appendLine("            preconditionFailure(\"basekitViewModel: the ${route.caseName} entry has no responder. BasekitNavigationRouter attaches one to every entry it presents; an entry built by hand must carry one.\")")
             appendLine("        }")
         }
-        val arguments = route.parameters.joinToString(", ") { parameter ->
-            when (parameter) {
-                RouteParameter.ARGS -> "args"
-                RouteParameter.NAVIGATOR ->
-                    "${route.observingNavigatorType}(delegate: ${route.navigatorType}(ownerId: entry.ownerID, host: host), observer: navigationObserver)"
-                RouteParameter.RESPONDER -> "responder"
+        val arguments = buildList {
+            add("factories: factories")
+            if (bindsArgs) add("args: args")
+            if (bindsResponder) add("responder: responder")
+            if (RouteParameter.NAVIGATOR in route.parameters) {
+                add("ownerId: entry.ownerID")
+                add("host: host")
+                add("navigationObserver: navigationObserver")
             }
-        }
+            add("viewModelObserver: viewModelObserver")
+        }.joinToString(", ")
         val spec = route.specSimpleName
-        appendLine("        let model: $spec = factories.${factory.name}($arguments)")
-        appendLine("        return .${route.caseName}(Observable$spec(model, observer: viewModelObserver))")
+        appendLine("        let model: $spec = BasekitAppleViewModels.shared.${appleViewModelFunction(route.caseName)}($arguments)")
+        appendLine("        return .${route.caseName}(Observable$spec(model))")
     }
 }
 

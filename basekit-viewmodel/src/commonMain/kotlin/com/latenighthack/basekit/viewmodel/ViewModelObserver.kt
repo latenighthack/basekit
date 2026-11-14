@@ -89,12 +89,13 @@ public sealed class ViewModelEvent {
      * A state the binding renders. [sequence] 0 is [ViewModel.initialState], reported as the binding
      * attaches with [operation] set to the binding; later states carry their attempt and count up
      * across attempts. [changedProperties] names the generated State properties that differ from the
-     * previous state, compared with `equals`, starting from [ViewModel.initialState].
+     * previous state, compared with `equals`, starting from [ViewModel.initialState]; null when the
+     * decorator was generated without them (`basekit.viewmodel.stateDiff=false`).
      */
     public data class StateChanged(
         override val operation: ViewModelOperation,
         val sequence: Long,
-        val changedProperties: List<String>,
+        val changedProperties: List<String>?,
         val state: Any?,
     ) : ViewModelEvent()
 
@@ -152,17 +153,31 @@ public interface ObservedViewModel<State> {
     /** The observer this view model reports to. */
     public val basekitObserver: ViewModelObserver
 
-    /** The generated State properties whose values differ between [previous] and [next]. */
-    public fun basekitChangedProperties(previous: State, next: State): List<String>
+    /**
+     * The view model this decorates. Failures of its bindings go to its [ViewModelFailureHandler] when
+     * the decorator does not forward them itself (`basekit.viewmodel.failureForwarding=false`).
+     */
+    public val basekitDelegate: Any? get() = null
+
+    /**
+     * The generated State properties whose values differ between [previous] and [next]; null when the
+     * decorator was generated without them (`basekit.viewmodel.stateDiff=false`).
+     */
+    public fun basekitChangedProperties(previous: State, next: State): List<String>? = null
 }
 
 /**
- * The observer installed on this view model by its generated decorator, which bindings report to and
- * pass to children and rows; null without one. A decorator made by `observingActions` reports actions
- * only, so this is null for it.
+ * The observer installed on this view model by its generated decorator, which it and its bindings pass
+ * to its children and rows; null without one. A decorator made by `observingActions` passes its action
+ * observer on, so children and rows report their actions too; only the bindings of a full
+ * [ViewModelObserver] report their own events.
  */
 public fun ViewModel<*>.viewModelObserver(): ViewModelObserver? =
-    (this as? ObservedViewModel<*>)?.basekitObserver?.takeIf { it.observesBindings }
+    (this as? ObservedViewModel<*>)?.basekitObserver
+
+/** The observer this view model's bindings report to: [viewModelObserver] unless it observes actions only. */
+internal fun ViewModel<*>.bindingObserver(): ViewModelObserver? =
+    viewModelObserver()?.takeIf { it.observesBindings }
 
 /**
  * The decorated form of a child property, for the generated decorators: [decorate] runs once per child

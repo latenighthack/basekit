@@ -22,7 +22,7 @@ final class MetricsTests: XCTestCase {
         let metrics = postHogMetrics(client: client, options: options)
         metrics.recordScreen(name: "HOME", properties: ["nested": ["number": 2, "flag": true, "array": [1, NSNull()]]])
         let raw = RealBindingProbeViewModel()
-        let observed = ObservingBindingProbeViewModel(delegate: raw, actionObserver: metrics)
+        let observed = raw.basekitObserving(observer: ViewModelObservers.shared.combined(observer: nil, actions: metrics))
         let model = ObservableBindingProbeViewModel(observed)
         try await model.setNote("edited")
         do { try await model.fail(); XCTFail("Expected original action error") } catch {}
@@ -53,7 +53,7 @@ final class MetricsTests: XCTestCase {
         router.didShow(root)
         router.didShow(root)
         // The view model reports its action, and its navigator the screen it opens; the router adds nothing.
-        guard case .home(let home) = basekitViewModel(for: root, host: router, factories: MetricsFactories()) else {
+        guard case .home(let home) = basekitViewModel(for: root, host: router, factories: DemoViewModelFactories(store: InMemoryDemoStore(), onHomeBuilt: {})) else {
             return XCTFail("Expected the home view model")
         }
         try await home.onOpenDetail()
@@ -84,10 +84,3 @@ final class MetricsTests: XCTestCase {
     }
 }
 
-/// Builds the demo's view models directly.
-private final class MetricsFactories: NSObject, GeneratedViewModelFactories {
-    private let store = InMemoryDemoStore()
-    var detailFactory: (DetailViewModelArgs) -> RealDetailViewModel { { [store] args in RealDetailViewModel(store: store, args: args) } }
-    var homeFactory: (any HomeNavigator) -> RealHomeViewModel { { [store] navigator in RealHomeViewModel(store: store, navigator: navigator) } }
-    var pickerFactory: (any NavigationResponder) -> RealPickerViewModel { { [store] responder in RealPickerViewModel(store: store, responder: responder) } }
-}

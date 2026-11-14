@@ -4,18 +4,23 @@ import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Dependencies
 
 /**
- * Emits, on each Apple pass, `{Vm}BoundLists.kt`: one Kotlin extension per `@ViewModelList` that returns
- * the list through `boundList`, so a throw from the list reaches the view model's failure handler instead
- * of aborting the process inside SKIE's collector. The generated Swift collects these (see
- * [appleBoundList]). They are emitted per view model because SKIE bridges a generic `boundList`
- * parameter as `SkieSwiftOptionalFlow<Any>`, which a typed list property does not convert to.
+ * Emits, on each Apple pass, `{Vm}BoundLists.kt` for each view model with a Swift wrapper:
+ *
+ * - `basekitObserving(observer)`, the view model decorated as `observing(observer)` does it. The Swift
+ *   wrappers decorate rows and hosts' view models through it, since `observing` and the decorators are
+ *   hidden from Objective-C.
+ * - One Kotlin extension per `@ViewModelList` that returns the list through `boundList`, so a throw from
+ *   the list reaches the view model's failure handler instead of aborting the process inside SKIE's
+ *   collector. The generated Swift collects these (see [appleBoundList]). They are emitted per view
+ *   model because SKIE bridges a generic `boundList` parameter as `SkieSwiftOptionalFlow<Any>`, which a
+ *   typed list property does not convert to.
  */
 internal class AppleBoundListsGenerator(
     private val codeGenerator: CodeGenerator,
     private val dependencies: Dependencies,
 ) {
     fun generate(viewModels: List<VmInfo>) {
-        for (vm in viewModels.filter { it.lists.isNotEmpty() }) {
+        for (vm in viewModels) {
             codeGenerator.createNewFile(dependencies, vm.packageName, "${vm.simpleName}BoundLists", "kt").use {
                 it.writeln(render(vm))
             }
@@ -25,7 +30,11 @@ internal class AppleBoundListsGenerator(
     internal fun render(vm: VmInfo): String = buildString {
         if (vm.packageName.isNotEmpty()) appendLine("package ${vm.packageName}")
         appendLine()
+        appendLine("import com.latenighthack.basekit.viewmodel.ViewModelObserver")
         appendLine("import com.latenighthack.basekit.viewmodel.boundList")
+        appendLine()
+        appendLine("/** This view model reporting to [observer], with its children and rows, as `observing(observer)` installs it. */")
+        appendLine("public fun ${vm.qualifiedName}.basekitObserving(observer: ViewModelObserver?): ${vm.qualifiedName} = observing(observer)")
         for (list in vm.lists) {
             val type = list.header?.let { "$SECTIONED_DELTA<${it.qualifiedName}, ${list.elementQualifiedName}>" }
                 ?: "$DELTA<${list.elementQualifiedName}>"

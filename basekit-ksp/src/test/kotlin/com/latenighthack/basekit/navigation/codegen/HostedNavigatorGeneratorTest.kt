@@ -83,6 +83,39 @@ class HostedNavigatorGeneratorTest {
         )
     }
 
+    // Every navigator reaching a target shares one source-to-edge mapping, beside NavigationEdge, rather
+    // than repeating the target's whole table in each navigator.
+    @Test
+    fun navigatorsShareOneEdgeMappingPerTarget() {
+        val output = RecordingCodeGenerator()
+        val rowEdge = NavEdge("room_item", "onItemTapped", "sample.RoomViewModel")
+        val destinations = listOf(
+            destination("HomeViewModel", "sample.HomeViewModel", "home", listOf(rowEdge)),
+            destination(
+                "ContactsViewModel",
+                "sample.ContactsViewModel",
+                "contacts",
+                listOf(rowEdge, NavEdge("contact_item", "onItemTapped", "sample.RoomViewModel")),
+            ),
+            destination("RoomViewModel", "sample.RoomViewModel", "room"),
+        )
+
+        HostedNavigatorGenerator(output, Dependencies(false), "sample")
+            .generate(destinations)
+
+        val source = output.source()
+        assertContains(
+            source,
+            "internal val RoomNavigationTarget.RoomSource.navigationEdge: NavigationEdge\n" +
+                "    get() = when (this) {\n" +
+                "        RoomNavigationTarget.RoomSource.ROOM_ITEM_ON_ITEM_TAPPED -> NavigationEdge.ROOM_ITEM_ON_ITEM_TAPPED\n" +
+                "        RoomNavigationTarget.RoomSource.CONTACT_ITEM_ON_ITEM_TAPPED -> NavigationEdge.CONTACT_ITEM_ON_ITEM_TAPPED\n" +
+                "    }",
+        )
+        assertEquals(1, Regex("RoomSource.ROOM_ITEM_ON_ITEM_TAPPED ->").findAll(source).count())
+        assertEquals(2, Regex("host.showRoom\\(ownerId, source.navigationEdge, context\\)").findAll(source).count())
+    }
+
     private fun destination(
         simpleName: String,
         qualifiedName: String,

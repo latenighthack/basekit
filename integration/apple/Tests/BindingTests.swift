@@ -144,7 +144,7 @@ final class BindingTests: XCTestCase {
     func testObservedActionsThroughSwiftWrappersPreserveCancellationAndExcludeMutators() async throws {
         let raw = RealBindingProbeViewModel()
         let observer = RecordingActionObserver()
-        let observed = ObservingBindingProbeViewModel(delegate: raw, actionObserver: observer)
+        let observed = raw.basekitObserving(observer: ViewModelObservers.shared.combined(observer: nil, actions: observer))
         let model = ObservableBindingProbeViewModel(observed)
         try await model.setNote("edited")
         do { try await model.fail(); XCTFail("Expected Kotlin error") } catch {}

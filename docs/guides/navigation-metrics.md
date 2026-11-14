@@ -50,9 +50,10 @@ therefore need no `recordScreen` call: keep `recordScreen` for screens outside B
 
 Navigators the app builds itself, such as a `@HostedComponent`'s, are not wrapped by the router: wrap
 them in their `Observing<X>Navigator` with `router.navigationObserver`, and their view models with
-`observingActions(router.actionObserver)`. Child and row view models a destination builds are not
-covered by an action observer's decorator; install decorators at their factories as below. A
-`ViewModelObserver` (`router.viewModelObserver`) does cover them; see [observation](observation.md).
+`observingActions(router.actionObserver)`. In Swift, where the decorators are hidden, use
+`BasekitAppleViewModels.shared.make{Component}(…)`, which does both. A destination's child and row
+view models report their actions to the same observer: the decorator passes it to its children, and
+the bindings to the rows they show.
 
 ## Install at factory boundaries
 
@@ -68,7 +69,7 @@ fun home(navigator: HomeNavigator): HomeViewModel =
 The ViewModel processor generates `Observing{Spec}` and a typed `observingActions` extension for
 every specification. Calling the extension again with the same observer returns the same wrapper.
 State streams, lists, child objects and explicit identity properties delegate to the implementation.
-Install decorators at child/row factories too: decorating a parent does not replace its child graph.
+Decorating a parent covers its children and the rows its bindings show.
 Keep factories returning public specification interfaces, rather than implementation classes.
 
 Actions are public zero-argument suspend methods, including inherited methods. They are captured

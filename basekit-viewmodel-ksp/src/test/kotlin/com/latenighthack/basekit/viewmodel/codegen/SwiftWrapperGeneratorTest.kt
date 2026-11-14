@@ -207,10 +207,89 @@ class SwiftWrapperGeneratorTest {
     }
 
     @Test
-    fun apple_bound_lists_are_skipped_without_lists() {
+    fun apple_bound_lists_carry_only_the_observing_entry_without_lists() {
         val out = RecordingCodeGenerator()
         AppleBoundListsGenerator(out, Dependencies(false)).generate(listOf(vm("EmptyViewModel")))
-        assertEquals(emptySet(), out.files.keys)
+        val source = out.text("EmptyViewModelBoundLists.kt")
+        assertContains(source, "public fun sample.EmptyViewModel.basekitObserving(observer: ViewModelObserver?): sample.EmptyViewModel = observing(observer)")
+        assertFalse("boundList(" in source)
+    }
+
+    @Test
+    fun apple_wrappers_decorate_through_the_kotlin_observing_entry() {
+        val (kvo, observable) = swift(vm("HostViewModel"))
+        for (source in listOf(kvo, observable)) {
+            assertContains(source, "public convenience init(_ viewModel: HostViewModel, observer: (any ViewModelObserver)?) {\n        self.init(viewModel.basekitObserving(observer: observer))\n    }")
+            assertFalse("ObservingHostViewModel" in source)
+        }
+    }
+
+    @Test
+    fun observing_decorators_are_hidden_from_objective_c() {
+        val source = ObservingViewModelGenerator(RecordingCodeGenerator(), Dependencies(false)).render(vm("HostViewModel"))
+        assertContains(source, "@file:OptIn(kotlin.experimental.ExperimentalObjCRefinement::class)")
+        assertContains(source, "@HiddenFromObjC\npublic class ObservingHostViewModel(")
+        assertContains(source, "@HiddenFromObjC\npublic fun sample.HostViewModel.observing(observer: ViewModelObserver?)")
+        assertContains(source, "@HiddenFromObjC\npublic fun sample.HostViewModel.observingActions(observer: ViewModelActionObserver)")
+        assertContains(source, "override val basekitDelegate: Any get() = delegate")
+    }
+
+    @Test
+    fun observing_decorators_leave_out_the_state_diff_and_failure_forwarding_when_switched_off() {
+        val options = GenerationOptions.parse(mapOf("basekit.viewmodel.stateDiff" to "false", "basekit.viewmodel.failureForwarding" to "false")) { error(it) }
+        val source = ObservingViewModelGenerator(RecordingCodeGenerator(), Dependencies(false), options)
+            .render(vm("HostViewModel", properties = listOf(string("title"))))
+        assertContains(source, ") : sample.HostViewModel by delegate, ObservedViewModel<sample.HostViewModel.State> {")
+        assertFalse("basekitChangedProperties" in source)
+        assertFalse("onStateFailed" in source)
+        assertFalse("onListFailed" in source)
+        assertContains(source, "override val basekitDelegate: Any get() = delegate")
+    }
+
+    @Test
+    fun generation_options_reject_values_other_than_true_and_false() {
+        val errors = mutableListOf<String>()
+        val options = GenerationOptions.parse(mapOf("basekit.viewmodel.kvo" to "no", "basekit.viewmodel.swiftui" to "false")) { errors += it }
+        assertEquals(listOf("basekit.viewmodel.kvo must be true or false, not \"no\""), errors)
+        assertEquals(setOf(GeneratedBinding.KVO, GeneratedBinding.ANDROID_VIEW, GeneratedBinding.REACT), options.bindings)
+        assertEquals(setOf(GeneratedBinding.SWIFTUI, GeneratedBinding.KVO, GeneratedBinding.ANDROID_VIEW, GeneratedBinding.REACT), GenerationOptions.DEFAULT.bindings)
+    }
+
+    @Test
+    fun an_included_binding_reaches_the_rows_and_children_of_the_spec_that_includes_it() {
+        val options = GenerationOptions.parse(mapOf("basekit.viewmodel.kvo" to "false")) { error(it) }
+        val leaf = vm("LeafViewModel")
+        val row = vm("RowViewModel").copy(children = listOf(VmChild("leaf", "LeafViewModel", "sample.LeafViewModel")))
+        val host = vm("HostViewModel", lists = listOf(VmList("rows", "RowViewModel", "sample.RowViewModel", null, null, listOf(row("RowViewModel")))))
+            .copy(includedBindings = setOf(GeneratedBinding.KVO))
+        val other = vm("OtherViewModel")
+        val all = listOf(host, row, leaf, other)
+        assertEquals(listOf("HostViewModel", "RowViewModel", "LeafViewModel"), bindingSpecs(GeneratedBinding.KVO, all, options).map { it.simpleName })
+        assertEquals(emptyList(), bindingSpecs(GeneratedBinding.COMPOSE, all, options))
+        assertEquals(all, bindingSpecs(GeneratedBinding.SWIFTUI, all, options))
+    }
+
+    @Test
+    fun apple_view_models_build_destinations_and_hosted_components_in_kotlin() {
+        val out = RecordingCodeGenerator()
+        val agent = ViewModelFactoryInfo("agentFactory", "sample.AgentViewModelImpl", listOf("sample.AgentViewModel.Args", "sample.nav.AgentNavigator"),
+            FactoryRoute("agent", "AgentViewModel", "HostAgentNavigator", hasArgs = true, responding = false, listOf(RouteParameter.ARGS, RouteParameter.NAVIGATOR), "sample.AgentViewModel"))
+        val confirm = ViewModelFactoryInfo("confirmFactory", "sample.ConfirmViewModelImpl", listOf("sample.nav.CloseNavigationTarget", "com.latenighthack.basekit.navigation.NavigationResponder<kotlin.Boolean>"),
+            FactoryRoute("confirm", "ConfirmViewModel", "HostConfirmNavigator", hasArgs = false, responding = true, listOf(RouteParameter.NAVIGATOR, RouteParameter.RESPONDER), "sample.ConfirmViewModel"))
+        val shell = ViewModelFactoryInfo("shellFactory", "sample.ShellViewModelImpl", listOf("sample.nav.ShellNavigator"),
+            specQualifiedName = "sample.ShellViewModel", hostedNavigator = "Shell")
+        AppleViewModelsGenerator(out, Dependencies(false), "sample.nav")
+            .generate(listOf(agent, confirm, shell), listOf(agent to agent.route!!, confirm to confirm.route!!))
+        val kotlin = out.text("BasekitAppleViewModels.kt")
+        assertContains(kotlin, "package sample.nav\n")
+        assertContains(kotlin, "import sample.observing\n")
+        assertContains(kotlin, "public object BasekitAppleViewModels {")
+        assertContains(kotlin, "    public fun makeAgent(\n        factories: sample.GeneratedViewModelFactories,\n        args: sample.AgentViewModel.Args,\n        ownerId: String,\n        host: BasekitNavigationHost,\n        navigationObserver: NavigationObserver,\n        viewModelObserver: ViewModelObserver?,\n    ): sample.AgentViewModel {")
+        assertContains(kotlin, "        val model: sample.AgentViewModel = factories.agentFactory(args, ObservingAgentNavigator(HostAgentNavigator(ownerId, host), navigationObserver))\n        return model.observing(viewModelObserver)")
+        assertContains(kotlin, "responder: com.latenighthack.basekit.navigation.NavigationResponder<kotlin.Boolean>,")
+        assertContains(kotlin, "factories.confirmFactory(ObservingConfirmNavigator(HostConfirmNavigator(ownerId, host), navigationObserver), responder)")
+        assertContains(kotlin, "    public fun makeShell(\n        factories: sample.GeneratedViewModelFactories,\n        ownerId: String,")
+        assertContains(kotlin, "factories.shellFactory(ObservingShellNavigator(HostShellNavigator(ownerId, host), navigationObserver))")
     }
 
     @Test
@@ -280,9 +359,10 @@ class SwiftWrapperGeneratorTest {
         assertContains(swift, "    let viewModelObserver = ViewModelObservers.shared.combined(observer: router?.viewModelObserver, actions: actionObserver)\n    switch entry.route {")
         // The router's observers wrap the navigator and, unless it is NoOp, the view model.
         assertContains(swift, "    let router = host as? BasekitNavigationRouter\n    let navigationObserver = router?.navigationObserver ?? NavigationObserverCompanion.shared.NoOp\n    let actionObserver = router?.actionObserver ?? ViewModelActionObserverCompanion.shared.NoOp\n    let viewModelObserver = ViewModelObservers.shared.combined(observer: router?.viewModelObserver, actions: actionObserver)\n")
-        assertContains(swift, "case .agent(let args, _):\n        let model: AgentViewModel = factories.agentFactory(args, ObservingAgentNavigator(delegate: HostAgentNavigator(ownerId: entry.ownerID, host: host), observer: navigationObserver))\n        return .agent(ObservableAgentViewModel(model, observer: viewModelObserver))")
-        // A leaf destination's close-only navigator gets its decorator too.
-        assertContains(swift, "let model: ConfirmViewModel = factories.confirmFactory(ObservingConfirmNavigator(delegate: HostConfirmNavigator(ownerId: entry.ownerID, host: host), observer: navigationObserver), responder)")
+        assertContains(swift, "case .agent(let args, _):\n        let model: AgentViewModel = BasekitAppleViewModels.shared.makeAgent(factories: factories, args: args, ownerId: entry.ownerID, host: host, navigationObserver: navigationObserver, viewModelObserver: viewModelObserver)\n        return .agent(ObservableAgentViewModel(model))")
+        // A leaf destination's close-only navigator gets its decorator too, in Kotlin.
+        assertContains(swift, "let model: ConfirmViewModel = BasekitAppleViewModels.shared.makeConfirm(factories: factories, responder: responder, ownerId: entry.ownerID, host: host, navigationObserver: navigationObserver, viewModelObserver: viewModelObserver)")
+        assertFalse("Observing" in swift.substringAfter("switch entry.route"))
         assertContains(swift, "case .confirm(_, let responder):\n        guard let responder else {\n            preconditionFailure(\"basekitViewModel: the confirm entry has no responder.")
         // Every destination has a factory (the processor fails the build otherwise): nothing throws.
         assertFalse("throw" in swift)

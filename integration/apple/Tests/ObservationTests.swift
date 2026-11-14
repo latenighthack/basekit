@@ -83,7 +83,7 @@ final class ObservationTests: XCTestCase {
         let router = BasekitNavigationRouter()
         router.viewModelObserver = recorder
         let root = router.root(.home(args: HomeViewModelArgs(), edge: nil))
-        guard case .home(let home) = basekitViewModel(for: root, host: router, factories: ObservationFactories()) else {
+        guard case .home(let home) = basekitViewModel(for: root, host: router, factories: DemoViewModelFactories(store: InMemoryDemoStore(), onHomeBuilt: {})) else {
             return XCTFail("Expected the home view model")
         }
         try await home.onRefresh()
@@ -128,7 +128,7 @@ private final class RecordingViewModelObserver: NSObject, ViewModelObserver {
         let operationKind = operation.components(separatedBy: "kind=").last?.prefix { $0 != ")" && $0 != "," } ?? ""
         lines.append("\(kind) \(operationKind) \(event.operation.name)")
         owners.insert(event.operation.owner)
-        if let state = event as? ViewModelEvent.StateChanged { changed.append(state.changedProperties) }
+        if let state = event as? ViewModelEvent.StateChanged { changed.append(state.changedProperties ?? []) }
     }
 }
 
@@ -145,9 +145,3 @@ private final class RecordingNavigation: NSObject, NavigationObserver, Navigatio
     }
 }
 
-private final class ObservationFactories: NSObject, GeneratedViewModelFactories {
-    private let store = InMemoryDemoStore()
-    var detailFactory: (DetailViewModelArgs) -> RealDetailViewModel { { [store] args in RealDetailViewModel(store: store, args: args) } }
-    var homeFactory: (any HomeNavigator) -> RealHomeViewModel { { [store] navigator in RealHomeViewModel(store: store, navigator: navigator) } }
-    var pickerFactory: (any NavigationResponder) -> RealPickerViewModel { { [store] responder in RealPickerViewModel(store: store, responder: responder) } }
-}

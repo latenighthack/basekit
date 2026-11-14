@@ -123,6 +123,8 @@ data class VmInfo(
     val identityProperty: String? = null,
     /** The name Kotlin/Native exports [identityProperty] under. */
     val identitySwiftName: String? = identityProperty?.let { swiftExportedPropertyName(it) },
+    /** The bindings `@ViewModelBindings` includes on this spec when the module's options leave them off. */
+    val includedBindings: Set<GeneratedBinding> = emptySet(),
 )
 
 /** Resolved type tree; platform mappings must not infer nullability or identity from each other. */

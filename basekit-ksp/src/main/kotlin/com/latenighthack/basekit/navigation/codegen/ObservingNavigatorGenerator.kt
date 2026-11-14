@@ -64,6 +64,7 @@ class ObservingNavigatorGenerator(
         val cap = destination.navName.toUpperCamelCase()
         writeFile("Observing${cap}Navigator") {
             """
+            |@HiddenFromObjC
             |public class Observing${cap}Navigator(
             |    private val delegate: CloseNavigationTarget,
             |    private val observer: NavigationObserver,
@@ -141,6 +142,7 @@ class ObservingNavigatorGenerator(
 
         writeFile("Observing${sourceCap}Navigator") {
             """
+            |@HiddenFromObjC
             |public class Observing${sourceCap}Navigator(
             |    private val delegate: ${sourceCap}Navigator,
             |    private val observer: NavigationObserver,
@@ -153,10 +155,15 @@ class ObservingNavigatorGenerator(
 
     private inline fun writeFile(fileName: String, body: () -> String) {
         codeGenerator.createNewFile(dependencies, navPackage, fileName, "kt").use { out ->
+            // Swift reaches these only through the Kotlin that builds destinations, so they add no
+            // Objective-C bridges.
+            out.writeln("@file:OptIn(kotlin.experimental.ExperimentalObjCRefinement::class)")
+            out.writeln()
             out.writeln("package $navPackage")
             out.writeln()
             out.writeln("import com.latenighthack.basekit.navigation.NavigationEvent")
             out.writeln("import com.latenighthack.basekit.navigation.NavigationObserver")
+            out.writeln("import kotlin.native.HiddenFromObjC")
             out.writeln()
             out.writeln(body())
         }

@@ -109,16 +109,22 @@ class ObservingViewModelEventsTest {
         )
     }
 
-    @Test fun legacyActionObserversKeepTheirBehaviour() = runTest {
+    @Test fun actionObserversReachChildrenAndRows() = runTest {
         val raw = RealBindingProbeViewModel()
         val actions = mutableListOf<String>()
-        val model = raw.observingActions { actions += it.actionName }
+        val model = raw.observingActions { actions += "${it.viewModelName.substringAfterLast('.')}.${it.actionName}" }
 
-        assertSame(raw.child, model.child)
-        assertNull(model.viewModelObserver())
+        // The action observer passes on to the child and to each row a binding decorates with it.
+        val observer = assertNotNull(model.viewModelObserver())
+        assertSame(observer, model.child.viewModelObserver())
         model.setNote("x")
         assertFailsWith<IllegalStateException> { model.fail() }
+        model.child.select()
+        raw.replaceStaticRows("fixed")
+        val row = raw.rows.first().items.softGet(0).let { (it as com.latenighthack.deltalist.SoftValue.Present).value }
+        val observedRow = row.observing(observer)
+        assertSame(observer, observedRow.viewModelObserver())
 
-        assertEquals(listOf("fail"), actions)
+        assertEquals(listOf("BindingProbeViewModel.fail", "BindingChildViewModel.select"), actions)
     }
 }

@@ -126,8 +126,11 @@ internal fun <T> ViewModel<*>.observedBoundList(
 private suspend fun bindingOperation(owner: String, name: String, kind: ViewModelOperationKind): ViewModelOperation =
     ViewModelObservation.nextOperation(currentCoroutineContext()[ViewModelObservation]?.operation?.id, owner, name, kind)
 
-/** The changed property names, or none when the generated comparison throws (from a user `equals`). */
-private fun <S> ObservedViewModel<S>.changedProperties(previous: S, next: S): List<String> =
+/**
+ * The changed property names, or none when the generated comparison throws (from a user `equals`);
+ * null when the decorator was generated without them.
+ */
+private fun <S> ObservedViewModel<S>.changedProperties(previous: S, next: S): List<String>? =
     try {
         basekitChangedProperties(previous, next)
     } catch (_: Throwable) {

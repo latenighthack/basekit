@@ -27,7 +27,8 @@ from it is discarded. A cancellation is still reported as `Cancelled` and still 
 | React | `viewModel.reactReference(observer)` |
 
 A `@HostedComponent`'s view model is built by the app, so pass the observer to one of these
-explicitly.
+explicitly. In Swift, `BasekitAppleViewModels.shared.make{Component}(factories:ownerId:host:navigationObserver:viewModelObserver:)`
+builds it with its navigator, both decorated.
 
 The decorated view model passes the observer on:
 
@@ -38,7 +39,8 @@ The decorated view model passes the observer on:
   mapped or read for this.
 
 `ViewModelActionObserver` and `observingActions` are unchanged. An action observer receives
-zero-argument actions only, and does not decorate children or rows. When a router has both,
+zero-argument actions only. It decorates children and rows too, so their actions are reported, but
+their bindings report nothing. When a router has both,
 `basekitViewModel` reports to both.
 
 ## Operations
@@ -68,7 +70,7 @@ changes are not reported.
 | `Cancelled(operation, duration)` | It was cancelled. |
 | `Attached(binding)` / `Detached(binding, duration)` | A platform binding started or stopped collecting. |
 | `FirstEmission(attempt, sinceStart)` | The attempt's first value. |
-| `StateChanged(operation, sequence, changedProperties, state)` | Sequence 0 is `initialState`, reported with the binding as it attaches. Later states carry their attempt. `changedProperties` names the generated State properties that differ from the previous state, by `equals`. |
+| `StateChanged(operation, sequence, changedProperties, state)` | Sequence 0 is `initialState`, reported with the binding as it attaches. Later states carry their attempt. `changedProperties` names the generated State properties that differ from the previous state, by `equals`; it is null when the module sets `basekit.viewmodel.stateDiff=false`. |
 | `ListDelta(attempt, sequence, change, size, applyDuration, failure)` | A flat list delta went to the platform. `change` is the delta's own `Change`. |
 | `SectionedListDelta(attempt, sequence, change, sectionCount, applyDuration, failure)` | The same for a sectioned list. |
 | `ListPaging(binding, event)` | A `paginatedDeltaList` collected by this list asked for a page (`Requested`), or a fetch started, completed, failed or was cancelled. |
