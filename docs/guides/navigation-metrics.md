@@ -135,7 +135,7 @@ independently compiled npm distributions.
 ## Swift / iOS
 
 Add this repository as a Swift Package and select the `BasekitNavigationPostHog` product. It
-includes `posthog-ios` 3.91.0. The package supports the existing iOS 18 / macOS 15 minimums.
+depends on `posthog-ios` 3.98.1 or any newer 3.x release. The package supports the existing iOS 18 / macOS 15 minimums.
 
 In the module generating navigation, opt in to the bridge and export the shared collector in your
 app's framework:

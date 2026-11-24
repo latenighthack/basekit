@@ -4,6 +4,11 @@ All notable changes to basekit are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor versions may break API).
 
+## [0.9.1] — 2026-11-24
+
+- Swift: `BasekitNavigationPostHog` depends on `posthog-ios` `from: "3.98.1"` (3.98.1 up to, not
+  including, 4.0.0) instead of exactly 3.91.0.
+
 ## [0.9.0] — 2026-11-14
 
 - Observation: an action observer (`observingActions`, or the router's `actionObserver` alone) now
